@@ -72,7 +72,7 @@ export default function ClaimsList() {
             {/* Header Section */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 bg-white/40 p-6 rounded-3xl border border-white/60 backdrop-blur-md shadow-sm">
                 <div className="space-y-2">
-                    <Link to="/" className="inline-flex items-center gap-2 group text-[10px] font-black uppercase text-gray-400 hover:text-secondary transition-all tracking-widest">
+                    <Link to=".." className="inline-flex items-center gap-2 group text-[10px] font-black uppercase text-gray-400 hover:text-secondary transition-all tracking-widest">
                         <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
                         Voltar ao Dashboard
                     </Link>
@@ -83,7 +83,7 @@ export default function ClaimsList() {
                         </span>
                     </h1>
                 </div>
-                <Link to="/sinistros/novo" className="w-full lg:w-auto bg-secondary text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-secondary-hover transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-2 group">
+                <Link to="novo" className="w-full lg:w-auto bg-secondary text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-secondary-hover transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-2 group">
                     <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" />
                     Novo Sinistro
                 </Link>
@@ -259,7 +259,7 @@ export default function ClaimsList() {
                                 filteredClaims.map((claim) => (
                                     <tr
                                         key={claim.id}
-                                        onClick={() => navigate(`/sinistros/${claim.id}`)}
+                                        onClick={() => navigate(`${claim.id}`)}
                                         className="hover:bg-secondary/[0.02] transition-all cursor-pointer group"
                                     >
                                         <td className="p-7">

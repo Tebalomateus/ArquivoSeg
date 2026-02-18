@@ -10,7 +10,12 @@ import PublicShare from './pages/PublicShare';
 import Login from './pages/Login';
 import { useClaims } from './context/ClaimsContext';
 
-function ProtectedRoute({ children }) {
+import AdminLayout from './components/layout/AdminLayout';
+
+/**
+ * Enhanced ProtectedRoute that supports role-based access control.
+ */
+function ProtectedRoute({ children, requiredRole }) {
     const { currentUser } = useClaims();
     const location = useLocation();
 
@@ -18,15 +23,40 @@ function ProtectedRoute({ children }) {
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
+    if (requiredRole && currentUser.role !== requiredRole && currentUser.role !== 'ADMIN') {
+        const redirectPath = currentUser.role === 'ADMIN' ? '/admin' : '/app';
+        return <Navigate to={redirectPath} replace />;
+    }
+
     return children;
 }
 
 function App() {
+    const { currentUser } = useClaims();
+
     return (
         <Routes>
             <Route path="/login" element={<Login />} />
+
+            {/* BACKOFFICE / ADMIN PORTAL */}
             <Route
-                path="/"
+                path="/admin"
+                element={
+                    <ProtectedRoute requiredRole="ADMIN">
+                        <AdminLayout />
+                    </ProtectedRoute>
+                }
+            >
+                <Route index element={<Dashboard />} />
+                <Route path="sinistros" element={<ClaimsList />} />
+                <Route path="usuarios" element={<UserManagement />} />
+                <Route path="configuracoes" element={<Settings />} />
+                <Route path="compliance" element={<div className="p-10 text-center font-bold text-slate-400">Compliance Center em breve...</div>} />
+            </Route>
+
+            {/* SAAS / CLIENT PORTAL */}
+            <Route
+                path="/app"
                 element={
                     <ProtectedRoute>
                         <Layout />
@@ -37,10 +67,19 @@ function App() {
                 <Route path="sinistros" element={<ClaimsList />} />
                 <Route path="sinistros/novo" element={<NewClaim />} />
                 <Route path="sinistros/:id" element={<ClaimDetails />} />
-                <Route path="usuarios" element={<UserManagement />} />
                 <Route path="configuracoes" element={<Settings />} />
             </Route>
+
+            {/* SHARED & REDIRECTS */}
             <Route path="portal/:token" element={<PublicShare />} />
+            <Route
+                path="/"
+                element={
+                    currentUser
+                        ? <Navigate to={currentUser.role === 'ADMIN' ? "/admin" : "/app"} replace />
+                        : <Navigate to="/login" replace />
+                }
+            />
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
     );

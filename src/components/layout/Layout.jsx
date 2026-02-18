@@ -84,10 +84,9 @@ export default function Layout() {
                 </div>
 
                 <nav className="flex-1 px-4 py-4 space-y-2">
-                    <SidebarItem to="/" icon={BarChart3} label="Dashboard" isOpen={isSidebarOpen} />
-                    <SidebarItem to="/sinistros" icon={FileText} label="Sinistros" isOpen={isSidebarOpen} />
-                    <SidebarItem to="/usuarios" icon={Users} label="Usuários" isOpen={isSidebarOpen} />
-                    <SidebarItem to="/configuracoes" icon={Settings} label="Configurações" isOpen={isSidebarOpen} />
+                    <SidebarItem to="/app" icon={BarChart3} label="Dashboard" isOpen={isSidebarOpen} />
+                    <SidebarItem to="/app/sinistros" icon={FileText} label="Meus Sinistros" isOpen={isSidebarOpen} />
+                    <SidebarItem to="/app/configuracoes" icon={Settings} label="Configurações" isOpen={isSidebarOpen} />
                 </nav>
 
                 <div className="p-6 border-t border-white/40">

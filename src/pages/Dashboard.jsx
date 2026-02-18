@@ -184,7 +184,7 @@ export default function Dashboard() {
                     icon={FileText}
                     color="bg-blue-600"
                     trend={5}
-                    onClick={() => navigate('/sinistros')}
+                    onClick={() => navigate('sinistros')}
                 />
                 <StatCard
                     title="Em Análise"
@@ -192,21 +192,21 @@ export default function Dashboard() {
                     icon={Clock}
                     color="bg-amber-500"
                     trend={-2}
-                    onClick={() => navigate('/sinistros?status=Em%20Análise')}
+                    onClick={() => navigate('sinistros?status=Em%20Análise')}
                 />
                 <StatCard
                     title="Concluídos"
                     value={comp}
                     icon={CheckCircle2}
                     color="bg-green-600"
-                    onClick={() => navigate('/sinistros?status=Concluído')}
+                    onClick={() => navigate('sinistros?status=Concluído')}
                 />
                 <StatCard
                     title="Prazos Críticos"
                     value={crit}
                     icon={AlertCircle}
                     color="bg-red-600"
-                    onClick={() => navigate('/sinistros?filter=critico')}
+                    onClick={() => navigate('sinistros?filter=critico')}
                 />
             </div>
 
@@ -216,7 +216,7 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-lg font-bold text-gray-800 font-display">Atividades Recentes do Time</h3>
                         <button
-                            onClick={() => navigate('/sinistros')}
+                            onClick={() => navigate('sinistros')}
                             className="text-sm text-blue-600 font-medium hover:underline"
                         >
                             Ver Audit Trail
@@ -227,7 +227,7 @@ export default function Dashboard() {
                             <div
                                 key={idx}
                                 className="flex gap-4 group cursor-pointer"
-                                onClick={() => navigate(`/sinistros/${safeClaims.find(c => c.number === activity.claimNumber)?.id}`)}
+                                onClick={() => navigate(`sinistros/${safeClaims.find(c => c.number === activity.claimNumber)?.id}`)}
                             >
                                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${activity.type === 'UPLOAD' ? 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white' :
                                     activity.type === 'SLA' ? 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white' :
