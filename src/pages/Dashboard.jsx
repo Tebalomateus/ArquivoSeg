@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { BarChart3, Clock, CheckCircle2, AlertCircle, FileText, TrendingUp, Shield, ArrowRight } from 'lucide-react';
+import { BarChart3, Clock, CheckCircle2, AlertCircle, FileText, TrendingUp, Shield, ArrowRight, Search } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -204,8 +204,8 @@ export default function Dashboard() {
                                 onClick={() => navigate(`/app/sinistros/${activity.claimId}`)}
                             >
                                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border-4 border-white shadow-sm transition-all duration-300 ${activity.type === 'UPLOAD' ? 'bg-blue-600 text-white' :
-                                        activity.type === 'VIEW' ? 'bg-indigo-600 text-white' :
-                                            'bg-slate-800 text-white'
+                                    activity.type === 'VIEW' ? 'bg-indigo-600 text-white' :
+                                        'bg-slate-800 text-white'
                                     }`}>
                                     <FileText size={18} />
                                 </div>

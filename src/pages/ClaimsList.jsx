@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Filter, Plus, FileText, ChevronRight, ChevronDown, X, Calendar, Building2, AlertCircle, Circle, ArrowLeft } from 'lucide-react';
+import { Search, Filter, Plus, FileText, ChevronRight, ChevronDown, X, Calendar, Building2, AlertCircle, Circle, ArrowLeft, Briefcase } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { STATUS_COLORS, INSURERS_CONFIG } from '../constants/config';
 import Badge from '../components/Badge';
