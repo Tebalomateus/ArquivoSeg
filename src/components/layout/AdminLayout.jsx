@@ -9,7 +9,8 @@ import {
     Bell,
     FileCheck2,
     Database,
-    Link as LinkIcon
+    Link as LinkIcon,
+    Building2
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 
