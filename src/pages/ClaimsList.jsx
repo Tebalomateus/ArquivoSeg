@@ -32,8 +32,10 @@ export default function ClaimsList() {
     const [activeTab, setActiveTab] = useState('ativos');
 
     const [filterInsurer, setFilterInsurer] = useState('');
+    const [filterBroker, setFilterBroker] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
     const [filterCritico, setFilterCritico] = useState(false);
+    const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
     // MEMOIZED: Filtered and Sorted Claims
     const filteredClaims = useMemo(() => {
@@ -47,12 +49,17 @@ export default function ClaimsList() {
                 c.insurer.toLowerCase().includes(searchTerm.toLowerCase());
 
             const matchesInsurer = !filterInsurer || c.insurer === filterInsurer;
+            const matchesBroker = !filterBroker || c.broker === filterBroker;
             const matchesStatus = !filterStatus || c.status === filterStatus;
+
+            const claimDate = parseDate(c.date).getTime();
+            const matchesDate = (!dateRange.start || claimDate >= new Date(dateRange.start).getTime()) &&
+                (!dateRange.end || claimDate <= new Date(dateRange.end).getTime());
 
             const isCritico = (c.deadline?.remainingDays || 30) < 5 && !c.deadline?.isSuspended && c.status !== 'Concluído';
             const matchesCritico = !filterCritico || isCritico;
 
-            return matchesSearch && matchesInsurer && matchesStatus && matchesCritico;
+            return matchesSearch && matchesInsurer && matchesBroker && matchesStatus && matchesCritico && matchesDate;
         });
 
         // Robust Sorting: Priority to most recent and critical
@@ -119,11 +126,11 @@ export default function ClaimsList() {
                     </div>
                     <button
                         onClick={() => setShowFilters(!showFilters)}
-                        className={`px-6 py-4 rounded-2xl border transition-all flex items-center gap-2 font-bold text-[10px] uppercase tracking-widest ${showFilters || filterInsurer || filterStatus || filterCritico ? 'bg-primary text-white border-primary shadow-xl shadow-primary/20' : 'bg-white border-gray-200 text-gray-600 hover:border-secondary hover:text-secondary hover:shadow-md'}`}
+                        className={`px-6 py-4 rounded-2xl border transition-all flex items-center gap-2 font-bold text-[10px] uppercase tracking-widest ${showFilters || filterInsurer || filterBroker || filterStatus || filterCritico || dateRange.start || dateRange.end ? 'bg-primary text-white border-primary shadow-xl shadow-primary/20' : 'bg-white border-gray-200 text-gray-600 hover:border-secondary hover:text-secondary hover:shadow-md'}`}
                     >
                         <Filter size={18} />
                         <span className="hidden sm:inline">Filtros</span>
-                        {(filterInsurer || filterStatus || filterCritico) && (
+                        {(filterInsurer || filterBroker || filterStatus || filterCritico || dateRange.start || dateRange.end) && (
                             <span className="ml-1 w-2 h-2 bg-secondary rounded-full border-2 border-white animate-pulse"></span>
                         )}
                     </button>
@@ -147,8 +154,10 @@ export default function ClaimsList() {
                         <button
                             onClick={() => {
                                 setFilterInsurer('');
+                                setFilterBroker('');
                                 setFilterStatus('');
                                 setFilterCritico(false);
+                                setDateRange({ start: '', end: '' });
                             }}
                             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[9px] font-black text-gray-400 hover:text-red-500 hover:bg-red-50 uppercase tracking-widest transition-all border border-transparent hover:border-red-100"
                         >
@@ -197,6 +206,45 @@ export default function ClaimsList() {
 
                         <div className="space-y-4">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                <Building2 size={12} className="text-secondary" /> Corretora
+                            </label>
+                            <div className="relative">
+                                <select
+                                    value={filterBroker}
+                                    onChange={(e) => setFilterBroker(e.target.value)}
+                                    className="w-full p-4 bg-gray-50/50 border border-gray-100 rounded-2xl text-xs font-bold outline-none focus:ring-4 focus:ring-secondary/10 focus:bg-white focus:border-secondary transition-all cursor-pointer appearance-none shadow-sm pr-10"
+                                >
+                                    <option value="">Todas as Corretoras</option>
+                                    <option value="Silva Seguros">Silva Seguros</option>
+                                    <option value="ABC Corretora">ABC Corretora</option>
+                                </select>
+                                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                <Calendar size={12} className="text-secondary" /> Período de Abertura
+                            </label>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="date"
+                                    value={dateRange.start}
+                                    onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                                    className="flex-1 p-3 bg-gray-50/50 border border-gray-100 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-secondary/10 focus:bg-white transition-all shadow-sm"
+                                />
+                                <span className="text-gray-300 font-bold">à</span>
+                                <input
+                                    type="date"
+                                    value={dateRange.end}
+                                    onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                                    className="flex-1 p-3 bg-gray-50/50 border border-gray-100 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-secondary/10 focus:bg-white transition-all shadow-sm"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
                                 <AlertCircle size={12} className="text-secondary" /> Nível de Atenção
                             </label>
                             <button
@@ -212,12 +260,20 @@ export default function ClaimsList() {
             )}
 
             {/* Filter Badges List */}
-            {(filterInsurer || filterStatus || filterCritico) && (
+            {(filterInsurer || filterBroker || filterStatus || filterCritico || dateRange.start || dateRange.end) && (
                 <div className="flex flex-wrap gap-2 animate-fade-in py-1">
                     {filterInsurer && (
                         <div className="flex items-center gap-2 px-4 py-2 bg-secondary/5 text-secondary border border-secondary/10 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm group/badge">
                             <Building2 size={12} /> {filterInsurer}
                             <button onClick={() => setFilterInsurer('')} className="hover:bg-red-500 hover:text-white rounded-lg p-0.5 transition-all">
+                                <X size={12} />
+                            </button>
+                        </div>
+                    )}
+                    {filterBroker && (
+                        <div className="flex items-center gap-2 px-4 py-2 bg-secondary/5 text-secondary border border-secondary/10 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm group/badge">
+                            <Briefcase size={12} /> {filterBroker}
+                            <button onClick={() => setFilterBroker('')} className="hover:bg-red-500 hover:text-white rounded-lg p-0.5 transition-all">
                                 <X size={12} />
                             </button>
                         </div>
@@ -234,6 +290,14 @@ export default function ClaimsList() {
                         <div className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm group/badge">
                             <AlertCircle size={12} /> Sinistros Críticos
                             <button onClick={() => setFilterCritico(false)} className="hover:bg-red-600 hover:text-white rounded-lg p-0.5 transition-all">
+                                <X size={12} />
+                            </button>
+                        </div>
+                    )}
+                    {(dateRange.start || dateRange.end) && (
+                        <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm group/badge">
+                            <Calendar size={12} /> {dateRange.start || '...'} à {dateRange.end || '...'}
+                            <button onClick={() => setDateRange({ start: '', end: '' })} className="hover:bg-red-600 hover:text-white rounded-lg p-0.5 transition-all">
                                 <X size={12} />
                             </button>
                         </div>

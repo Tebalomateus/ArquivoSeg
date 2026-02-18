@@ -58,9 +58,11 @@ export default function PublicShare() {
             setClaim(found);
             if (isGuestVerified(token)) {
                 setIsVerified(true);
+                // Log the initial view of the portal
+                logView(found.id, 'Portal de Compartilhamento', token);
             }
         }
-    }, [token, claims, isGuestVerified]);
+    }, [token, claims, isGuestVerified, logView]);
 
     if (!claim) {
         return (

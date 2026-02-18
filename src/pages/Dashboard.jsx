@@ -46,30 +46,34 @@ export default function Dashboard() {
     const { claims, currentUser } = useClaims();
     const navigate = useNavigate();
 
-    // MEMOIZED: Portfolio Calculations
-    // Using useMemo to prevent expensive re-calculations on every render
-    const portfolioStats = useMemo(() => {
-        const safeClaims = claims || [];
-        const total = safeClaims.length;
-        const inAnal = safeClaims.filter(c => c.status === 'Em Análise').length;
-        const comp = safeClaims.filter(c => c.status === 'Concluído').length;
-        const crit = safeClaims.filter(c => (c.deadline?.remainingDays || 30) < 5 && !c.deadline?.isSuspended && c.status !== 'Concluído').length;
-        const avg = total > 0 ? Math.round(safeClaims.reduce((acc, c) => acc + (c.progress || 0), 0) / total) : 0;
+    // MEMOIZED: Multi-Tenancy Filter (Simulado)
+    const myClaims = useMemo(() => {
+        if (!currentUser) return [];
+        if (currentUser.role === 'ADMIN') return claims;
+        return claims.filter(c => c.insurer === currentUser.company || c.broker === currentUser.company);
+    }, [claims, currentUser]);
 
-        return { total, inAnal, comp, crit, avg, safeClaims };
-    }, [claims]);
+    // MEMOIZED: Portfolio Calculations
+    const portfolioStats = useMemo(() => {
+        const total = myClaims.length;
+        const inAnal = myClaims.filter(c => c.status === 'Em Análise').length;
+        const comp = myClaims.filter(c => c.status === 'Concluído').length;
+        const crit = myClaims.filter(c => (c.deadline?.remainingDays || 30) < 5 && !c.deadline?.isSuspended && c.status !== 'Concluído').length;
+        const avg = total > 0 ? Math.round(myClaims.reduce((acc, c) => acc + (c.progress || 0), 0) / total) : 0;
+
+        return { total, inAnal, comp, crit, avg };
+    }, [myClaims]);
 
     // MEMOIZED: Activity Feed
     const allActivities = useMemo(() => {
-        return portfolioStats.safeClaims.flatMap(c =>
+        return myClaims.flatMap(c =>
             (c.activities || []).map(a => ({ ...a, claimNumber: c.number, claimTitle: c.title, claimId: c.id }))
         ).sort((a, b) => {
-            // Robust sorting handling potential invalid dates
             const dateA = new Date(a.date).getTime();
             const dateB = new Date(b.date).getTime();
             return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA);
         }).slice(0, 6);
-    }, [portfolioStats.safeClaims]);
+    }, [myClaims]);
 
     // MEMOIZED: Completion by folder
     const categoryStats = useMemo(() => {
@@ -82,96 +86,70 @@ export default function Dashboard() {
 
         return categories.map(cat => {
             const avg = portfolioStats.total > 0
-                ? Math.round(portfolioStats.safeClaims.reduce((acc, c) => acc + ((c.folders || []).find(f => f.category === cat.key)?.completion || 0), 0) / portfolioStats.total)
+                ? Math.round(myClaims.reduce((acc, c) => acc + ((c.folders || []).find(f => f.category === cat.key)?.completion || 0), 0) / portfolioStats.total)
                 : 0;
             return { ...cat, value: avg };
         });
-    }, [portfolioStats.safeClaims, portfolioStats.total]);
+    }, [myClaims, portfolioStats.total]);
 
-    const { total, inAnal, comp, crit, avg, safeClaims } = portfolioStats;
+    const { total, inAnal, comp, crit, avg } = portfolioStats;
 
     return (
         <div className="space-y-8 animate-fade-in relative z-10">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900 font-display">Dashboard Operacional</h1>
-                    <p className="text-gray-500">Olá, <span className="font-bold text-gray-700">{currentUser?.name}</span>. Resumo da carteira hoje ({new Date().toLocaleDateString('pt-BR')}).</p>
+                    <h1 className="text-3xl font-bold text-gray-900 font-display">Painel Operacional {currentUser?.role !== 'ADMIN' && `| ${currentUser?.company}`}</h1>
+                    <p className="text-gray-500">Olá, <span className="font-bold text-gray-700">{currentUser?.name}</span>. Resumo da sua carteira hoje.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => {
-                            if (confirm('Isso irá resetar todos os dados e limpar o cache. Continuar?')) {
-                                localStorage.clear();
-                                window.location.reload();
-                            }
-                        }}
-                        className="text-[10px] font-bold text-gray-400 hover:text-red-500 uppercase tracking-widest transition-colors mr-4"
-                    >
-                        Resetar Sistema
-                    </button>
-                    <div className="flex -space-x-2">
-                        {[1, 2, 3].map(i => (
-                            <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600">
-                                {String.fromCharCode(64 + i)}
-                            </div>
-                        ))}
-                        <div className="w-8 h-8 rounded-full border-2 border-white bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
-                            +5
-                        </div>
-                    </div>
-                    <div className="bg-green-50 px-4 py-2 rounded-xl border border-green-100 text-green-700 flex items-center gap-2">
+                    <div className="bg-blue-50 px-4 py-2 rounded-xl border border-blue-100 text-blue-700 flex items-center gap-2">
                         <Shield size={16} />
-                        <span className="text-xs font-bold uppercase tracking-wider">Conformidade Ativa</span>
+                        <span className="text-xs font-bold uppercase tracking-wider">Conformidade: {currentUser?.role}</span>
                     </div>
                 </div>
             </div>
 
             {/* Top Progress Card */}
-            <div className="!bg-gradient-to-r !from-blue-700 !to-indigo-800 p-8 rounded-[2rem] text-white border-0 shadow-2xl overflow-hidden relative group">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
-                <div className="relative z-10 flex flex-col md:flex-row items-center gap-8 py-4">
-                    <div className="w-32 h-32 relative shrink-0">
+            <div className="!bg-gradient-to-br !from-slate-900 !to-blue-900 p-8 rounded-[2.5rem] text-white border-0 shadow-2xl overflow-hidden relative group">
+                <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full -mr-40 -mt-40 blur-[80px] group-hover:bg-blue-500/20 transition-all duration-1000"></div>
+                <div className="relative z-10 flex flex-col md:flex-row items-center gap-10 py-4">
+                    <div className="w-40 h-40 relative shrink-0">
                         <svg className="w-full h-full transform -rotate-90">
+                            <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="16" fill="transparent" className="text-white/5" />
                             <circle
-                                cx="64"
-                                cy="64"
-                                r="58"
+                                cx="80"
+                                cy="80"
+                                r="70"
                                 stroke="currentColor"
-                                strokeWidth="12"
+                                strokeWidth="16"
                                 fill="transparent"
-                                className="text-white/10"
-                            />
-                            <circle
-                                cx="64"
-                                cy="64"
-                                r="58"
-                                stroke="currentColor"
-                                strokeWidth="12"
-                                fill="transparent"
-                                strokeDasharray={364}
-                                strokeDashoffset={isNaN(avg) ? 364 : 364 - (364 * avg) / 100}
+                                strokeDasharray={440}
+                                strokeDashoffset={isNaN(avg) ? 440 : 440 - (440 * avg) / 100}
                                 strokeLinecap="round"
-                                className="text-white transition-all duration-1000 ease-out"
+                                className="text-blue-400 transition-all duration-1000 ease-out shadow-[0_0_20px_rgba(96,165,250,0.5)]"
                             />
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="text-2xl font-black">{avg}%</span>
-                            <span className="text-[8px] uppercase font-bold opacity-60">Geral</span>
+                            <span className="text-4xl font-black">{avg}%</span>
+                            <span className="text-[10px] uppercase font-black opacity-40 tracking-widest mt-1">SLA Global</span>
                         </div>
                     </div>
                     <div className="flex-1 text-center md:text-left">
-                        <h2 className="text-2xl font-bold font-display mb-2">Saúde da Carteira</h2>
-                        <p className="text-blue-100 text-sm max-w-md leading-relaxed">
-                            A média de completude dos seus sinistros ativos está em <strong className="text-white">{avg}%</strong>.
-                            Você possui <strong className="text-white">{crit}</strong> casos em estado crítico que requerem atenção imediata.
+                        <h2 className="text-3xl font-black font-display mb-3 tracking-tight">Status de Performance</h2>
+                        <p className="text-blue-100/70 text-sm max-w-lg leading-relaxed font-medium">
+                            {currentUser?.role === 'CORRETOR'
+                                ? "Sua eficiência na entrega de documentos impacta diretamente na liquidação do seu cliente."
+                                : "Acompanhe o progresso médio dos seus processos e identifique gargalos operacionais."}
+                            <br /><br />
+                            Você possui <strong className="text-white bg-red-500 px-2 py-0.5 rounded ml-1">{crit} processos críticos</strong> em sua carteira.
                         </p>
                     </div>
                     <div className="flex gap-4">
                         <button
-                            onClick={() => navigate('/sinistros')}
-                            className="bg-white text-blue-700 px-6 py-3 rounded-xl font-bold text-sm hover:bg-blue-50 transition-all shadow-lg"
+                            onClick={() => navigate('/app/sinistros')}
+                            className="bg-blue-600 border border-blue-400 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-900/40"
                         >
-                            Gerenciar Carteira
+                            Ver Carteira Completa
                         </button>
                     </div>
                 </div>
@@ -179,103 +157,107 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
-                    title="Total de Sinistros"
+                    title="Processos Ativos"
                     value={total}
                     icon={FileText}
-                    color="bg-blue-600"
+                    color="bg-slate-800"
                     trend={5}
-                    onClick={() => navigate('sinistros')}
+                    onClick={() => navigate('/app/sinistros')}
                 />
                 <StatCard
                     title="Em Análise"
                     value={inAnal}
                     icon={Clock}
-                    color="bg-amber-500"
-                    trend={-2}
-                    onClick={() => navigate('sinistros?status=Em%20Análise')}
+                    color="bg-blue-600"
+                    onClick={() => navigate('/app/sinistros?status=Em%20Análise')}
                 />
                 <StatCard
-                    title="Concluídos"
+                    title="Liquidado / Concluído"
                     value={comp}
                     icon={CheckCircle2}
-                    color="bg-green-600"
-                    onClick={() => navigate('sinistros?status=Concluído')}
+                    color="bg-emerald-600"
+                    onClick={() => navigate('/app/sinistros?status=Concluído')}
                 />
                 <StatCard
-                    title="Prazos Críticos"
+                    title="Atenção Crítica"
                     value={crit}
                     icon={AlertCircle}
-                    color="bg-red-600"
-                    onClick={() => navigate('sinistros?filter=critico')}
+                    color="bg-red-500"
+                    onClick={() => navigate('/app/sinistros?filter=critico')}
                 />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Recent Activity */}
-                <div className="lg:col-span-2 card">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-lg font-bold text-gray-800 font-display">Atividades Recentes do Time</h3>
-                        <button
-                            onClick={() => navigate('sinistros')}
-                            className="text-sm text-blue-600 font-medium hover:underline"
-                        >
-                            Ver Audit Trail
-                        </button>
+                <div className="lg:col-span-2 bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-xl overflow-hidden relative">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-lg font-black text-slate-900 font-display uppercase tracking-tight">Timeline de Atualizações</h3>
+                            <p className="text-xs text-slate-400 font-medium tracking-tight">Últimas interações nos seus processos</p>
+                        </div>
                     </div>
-                    <div className="space-y-6">
+                    <div className="space-y-8 relative before:absolute before:left-[19px] before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-50">
                         {allActivities.length > 0 ? allActivities.map((activity, idx) => (
                             <div
                                 key={idx}
-                                className="flex gap-4 group cursor-pointer"
-                                onClick={() => navigate(`sinistros/${safeClaims.find(c => c.number === activity.claimNumber)?.id}`)}
+                                className="flex gap-6 group cursor-pointer relative z-10"
+                                onClick={() => navigate(`/app/sinistros/${activity.claimId}`)}
                             >
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${activity.type === 'UPLOAD' ? 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white' :
-                                    activity.type === 'SLA' ? 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white' :
-                                        activity.type === 'VIEW' ? 'bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white' :
-                                            'bg-gray-50 text-gray-600 group-hover:bg-gray-600 group-hover:text-white'
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border-4 border-white shadow-sm transition-all duration-300 ${activity.type === 'UPLOAD' ? 'bg-blue-600 text-white' :
+                                        activity.type === 'VIEW' ? 'bg-indigo-600 text-white' :
+                                            'bg-slate-800 text-white'
                                     }`}>
-                                    <FileText size={20} />
+                                    <FileText size={18} />
                                 </div>
-                                <div className="flex-1 border-b border-gray-100 pb-4">
-                                    <p className="text-sm font-medium text-gray-900 leading-tight">
-                                        <span className="font-bold">{activity.user}</span> {activity.action} em
-                                        <span className="text-blue-600 font-bold block mt-0.5">Sinistro #{activity.claimNumber}</span>
+                                <div className="flex-1 pb-2">
+                                    <p className="text-sm font-bold text-slate-800 leading-tight">
+                                        <span className="text-blue-600">{activity.user}</span> {activity.action}
                                     </p>
-                                    <p className="text-[10px] font-bold text-gray-400 mt-2 uppercase tracking-wider">{activity.date} • {activity.claimTitle}</p>
+                                    <div className="flex items-center gap-3 mt-2">
+                                        <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded-lg font-black uppercase tracking-widest">#{activity.claimNumber}</span>
+                                        <span className="text-[10px] text-slate-300 font-bold uppercase">{activity.date}</span>
+                                    </div>
+                                </div>
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <ArrowRight size={16} className="text-blue-400" />
                                 </div>
                             </div>
                         )) : (
-                            <p className="py-10 text-center text-gray-400 font-medium">Nenhuma atividade registrada hoje.</p>
+                            <div className="py-20 text-center flex flex-col items-center gap-4">
+                                <Search size={40} className="text-slate-100" />
+                                <p className="text-sm text-slate-400 font-bold uppercase tracking-widest">Sem movimentações recentes.</p>
+                            </div>
                         )}
                     </div>
                 </div>
 
-                {/* Completion Status */}
-                <div className="card">
-                    <h3 className="text-lg font-bold text-gray-800 mb-6 font-display">Saúde das Pastas (POC)</h3>
-                    <div className="space-y-7">
+                {/* Performance by Category */}
+                <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-xl">
+                    <h3 className="text-lg font-black text-slate-900 font-display uppercase tracking-tight mb-8">Evolução por Fase</h3>
+                    <div className="space-y-8">
                         {categoryStats.map((cat) => (
-                            <div key={cat.label} className="group cursor-default">
-                                <div className="flex justify-between text-[11px] mb-2 font-bold uppercase tracking-wider">
-                                    <span className="text-gray-500 group-hover:text-blue-600 transition-colors">{cat.label}</span>
-                                    <span className="text-gray-900">{cat.value}%</span>
+                            <div key={cat.label} className="group">
+                                <div className="flex justify-between items-end mb-3">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{cat.label}</span>
+                                    <span className="text-sm font-black text-slate-900">{cat.value}%</span>
                                 </div>
-                                <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden shadow-inner">
+                                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
                                     <div
-                                        className={`${cat.color} h-full rounded-full transition-all duration-1000 ease-in-out group-hover:brightness-110`}
+                                        className={`${cat.color} h-full rounded-full transition-all duration-1000 shadow-md`}
                                         style={{ width: `${cat.value}%` }}
                                     ></div>
                                 </div>
                             </div>
                         ))}
                     </div>
-                    <div className="mt-10 p-5 bg-slate-900 rounded-2xl border border-slate-800 shadow-xl shadow-slate-200">
-                        <div className="flex items-center gap-2 mb-3">
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                            <p className="text-[10px] font-extrabold text-white uppercase tracking-widest">Resiliência Operacional</p>
+
+                    <div className="mt-12 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+                        <div className="flex items-center gap-3 mb-4">
+                            <TrendingUp size={20} className="text-blue-500" />
+                            <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Meta de Performance</p>
                         </div>
-                        <p className="text-xs text-slate-300 leading-relaxed">
-                            Sistema operando sob <strong>Lei 15.040</strong>. Logs de visualização estão sendo gravados em tempo real na trilha de auditoria para conformidade Tokio Marine.
+                        <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                            A média do ecossistema para a fase de <strong>Causa</strong> é de 85%. Você está operando {portfolioStats.avg > 80 ? 'acima' : 'abaixo'} da média nacional.
                         </p>
                     </div>
                 </div>

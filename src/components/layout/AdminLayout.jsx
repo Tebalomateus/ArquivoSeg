@@ -8,7 +8,8 @@ import {
     Search,
     Bell,
     FileCheck2,
-    Database
+    Database,
+    Link as LinkIcon
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 
@@ -24,6 +25,8 @@ export default function AdminLayout() {
     const menuItems = [
         { icon: LayoutDashboard, label: 'Painel Global', path: '/admin' },
         { icon: FileCheck2, label: 'Auditoria de Sinistros', path: '/admin/sinistros' },
+        { icon: Building2, label: 'Gestão de Clientes', path: '/admin/clientes' },
+        { icon: LinkIcon, label: 'Rastreamento de Links', path: '/admin/links' },
         { icon: Users, label: 'Gestão de Usuários', path: '/admin/usuarios' },
         { icon: Database, label: 'Compliance Data Center', path: '/admin/compliance' },
         { icon: SettingsIcon, label: 'Configurações do Sistema', path: '/admin/configuracoes' },
@@ -56,8 +59,8 @@ export default function AdminLayout() {
                             key={item.path}
                             to={item.path}
                             className={`flex items-center gap-3 px-5 py-3.5 rounded-xl transition-all duration-300 group ${(item.path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(item.path))
-                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 translate-x-1'
-                                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 translate-x-1'
+                                : 'text-slate-400 hover:text-white hover:bg-slate-800'
                                 }`}
                         >
                             <item.icon size={20} className="group-hover:scale-110 transition-transform" />
