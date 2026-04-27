@@ -10,7 +10,8 @@ import {
     FileCheck2,
     Database,
     Link as LinkIcon,
-    Building2
+    Building2,
+    History
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 
@@ -29,6 +30,7 @@ export default function AdminLayout() {
         { icon: Building2, label: 'Gestão de Clientes', path: '/admin/clientes' },
         { icon: LinkIcon, label: 'Rastreamento de Links', path: '/admin/links' },
         { icon: Users, label: 'Gestão de Usuários', path: '/admin/usuarios' },
+        { icon: History, label: 'Auditoria Global', path: '/admin/audit' },
         { icon: Database, label: 'Compliance Data Center', path: '/admin/compliance' },
         { icon: SettingsIcon, label: 'Configurações do Sistema', path: '/admin/configuracoes' },
     ];
