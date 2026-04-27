@@ -31,8 +31,16 @@ import {
     Search,
     Filter
 } from 'lucide-react';
-import { useClaims } from '../context/ClaimsContext';
+import { useClaims, VALID_NEXT_STATUS } from '../context/ClaimsContext';
 import { actorLabelFromDbId } from '../api/auth';
+
+const STATUS_LABELS_PT = {
+    ready: 'Aberto',
+    ongoing: 'Em Análise',
+    review: 'Em Revisão',
+    done: 'Concluído',
+    archived: 'Arquivado',
+};
 
 /**
  * Modal component for secure file uploads.
@@ -173,6 +181,10 @@ export default function ClaimDetails() {
         listFileShares,
         createFileShare,
         revokeFileShare,
+        transitionStatus,
+        archiveClaim,
+        assignClaim,
+        backendUsers,
         fetchAudit,
         auditByClaim,
         resolveActorLabel,
@@ -260,6 +272,24 @@ export default function ClaimDetails() {
             await refreshShares();
         } catch (err) {
             alert(`Falha ao revogar: ${err?.message || err}`);
+        }
+    };
+
+    const canTransitionStatus = currentUser?.backRole === 'contributor' || currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
+    const canArchive = currentUser?.backRole === 'admin';
+    const nextStatuses = (claim?.backStatus && VALID_NEXT_STATUS[claim.backStatus]) || [];
+    const handleAssign = async (userId) => {
+        try { await assignClaim(claim.id, userId || null); }
+        catch (err) { /* error already alerted in context */ console.error(err); }
+    };
+
+    const handleTransition = async (next) => {
+        if (next === 'archived') {
+            if (!canArchive) return alert('Apenas admin pode arquivar.');
+            if (!confirm(`Arquivar sinistro #${claim.number}? Essa ação é definitiva.`)) return;
+            await archiveClaim(claim.id);
+        } else {
+            await transitionStatus(claim.id, next);
         }
     };
 
@@ -629,6 +659,79 @@ export default function ClaimDetails() {
                         </>
                     ) : (
                         <div className="space-y-6">
+                            {/* Management View: Workflow / Status */}
+                            <div className="card border-l-[6px] border-purple-600">
+                                <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
+                                    <Shield size={22} className="text-purple-600" /> Workflow do Sinistro
+                                </h3>
+                                <p className="text-xs text-gray-500 font-medium mb-6">Status atual: <span className="font-black text-gray-900">{STATUS_LABELS_PT[claim.backStatus] || claim.backStatus}</span>. Transições válidas: <span className="font-mono text-[10px]">ready→ongoing→review→done→archived</span>.</p>
+                                {canTransitionStatus ? (
+                                    nextStatuses.length === 0 ? (
+                                        <p className="text-xs text-amber-700 font-medium">Sinistro arquivado — nenhuma transição permitida.</p>
+                                    ) : (
+                                        <div className="flex flex-wrap gap-3">
+                                            {nextStatuses.map(next => {
+                                                const isArchive = next === 'archived';
+                                                const disabled = isArchive && !canArchive;
+                                                return (
+                                                    <button
+                                                        key={next}
+                                                        type="button"
+                                                        disabled={disabled}
+                                                        onClick={() => handleTransition(next)}
+                                                        className={`px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                                                            disabled
+                                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                                : isArchive
+                                                                    ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-100'
+                                                                    : 'bg-purple-600 text-white hover:bg-purple-700 shadow-lg shadow-purple-100'
+                                                        }`}
+                                                        title={disabled ? 'Apenas admin pode arquivar' : `Transitar para ${STATUS_LABELS_PT[next] || next}`}
+                                                    >
+                                                        {isArchive ? 'Arquivar' : `Avançar para ${STATUS_LABELS_PT[next] || next}`}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )
+                                ) : (
+                                    <p className="text-xs text-amber-700 font-medium">Apenas perfis contributor+ podem alterar status.</p>
+                                )}
+                            </div>
+
+                            {/* Management View: Assignment */}
+                            <div className="card border-l-[6px] border-indigo-600">
+                                <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
+                                    <UserPlus size={22} className="text-indigo-600" /> Responsável
+                                </h3>
+                                <p className="text-xs text-gray-500 font-medium mb-4">Define qual usuário do tenant é o ponto-focal deste sinistro.</p>
+                                {(backendUsers || []).length === 0 ? (
+                                    <p className="text-xs text-amber-700 font-medium">Lista de usuários indisponível para o seu papel — só manager+ enxerga `/users`.</p>
+                                ) : (
+                                    <div className="flex items-center gap-3">
+                                        <select
+                                            value={claim.assignedTo || ''}
+                                            onChange={(e) => handleAssign(e.target.value)}
+                                            className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                        >
+                                            <option value="">— Não atribuído —</option>
+                                            {backendUsers.map(u => (
+                                                <option key={u.id} value={u.id}>{u.email} ({u.role})</option>
+                                            ))}
+                                        </select>
+                                        {claim.assignedTo && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleAssign('')}
+                                                className="px-4 py-3 bg-gray-100 text-gray-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200"
+                                            >
+                                                Limpar
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
                             {/* Management View: External Sharing & Invite */}
                             <div className="card border-l-[6px] border-blue-600">
                                 <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">

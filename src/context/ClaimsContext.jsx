@@ -15,6 +15,16 @@ const STATUS_BACK_TO_UI = {
     archived: 'Arquivado',
 };
 
+// Mirrors backend's process.validTransitions — keeps the UI from offering
+// transitions that the server will reject with INVALID_STATUS_TRANSITION.
+export const VALID_NEXT_STATUS = {
+    ready: ['ongoing', 'archived'],
+    ongoing: ['review', 'archived'],
+    review: ['done', 'archived'],
+    done: ['archived'],
+    archived: [],
+};
+
 // Short random id for purely client-side keys (checklist items, share tokens, folder slots).
 const randId = () => (typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID().slice(0, 9)
@@ -84,6 +94,7 @@ const adaptProcessToClaim = (proc, cached) => {
         status: STATUS_BACK_TO_UI[proc.status] || proc.status,
         backCreatedAt: proc.created_at,
         backUpdatedAt: proc.updated_at,
+        assignedTo: proc.assigned_to || null,
         date: created.toLocaleDateString('pt-BR'),
         lastModified: updated.toLocaleDateString('pt-BR'),
 
@@ -314,6 +325,45 @@ export const ClaimsProvider = ({ children }) => {
         setClaims(prev => [localClaim, ...prev]);
         persistClaimMetadata(localClaim);
         return localClaim.id;
+    };
+
+    const transitionStatus = async (claimId, nextStatus) => {
+        if (isMockEnabled() || !getToken()) return;
+        try {
+            const proc = await claimsService.updateClaim(claimId, { status: nextStatus });
+            setClaims(prev => prev.map(c => c.id === claimId
+                ? { ...c, backStatus: proc.status, status: STATUS_BACK_TO_UI[proc.status] || proc.status, lastModified: new Date().toLocaleDateString('pt-BR') }
+                : c));
+        } catch (err) {
+            alert(`Falha ao alterar status: ${err?.message || err}`);
+            throw err;
+        }
+    };
+
+    const archiveClaim = async (claimId) => {
+        if (isMockEnabled() || !getToken()) return;
+        try {
+            await claimsService.archiveClaim(claimId);
+            setClaims(prev => prev.map(c => c.id === claimId
+                ? { ...c, backStatus: 'archived', status: STATUS_BACK_TO_UI.archived }
+                : c));
+        } catch (err) {
+            alert(`Falha ao arquivar: ${err?.message || err}`);
+            throw err;
+        }
+    };
+
+    const assignClaim = async (claimId, userId) => {
+        if (isMockEnabled() || !getToken()) return;
+        try {
+            const proc = await claimsService.updateClaim(claimId, { assigned_to: userId });
+            setClaims(prev => prev.map(c => c.id === claimId
+                ? { ...c, assignedTo: proc.assigned_to, lastModified: new Date().toLocaleDateString('pt-BR') }
+                : c));
+        } catch (err) {
+            alert(`Falha ao atribuir: ${err?.message || err}`);
+            throw err;
+        }
     };
 
     const updateClaimLocal = (claimId, updater, { syncToBack = true } = {}) => {
@@ -603,6 +653,7 @@ export const ClaimsProvider = ({ children }) => {
         <ClaimsContext.Provider value={{
             currentUser, setCurrentUser, logout,
             claims, addClaim, addDocument, updateChecklistStatus,
+            transitionStatus, archiveClaim, assignClaim,
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
             uploadFileToClaim, refreshClaimFiles, documentDownloadHref,
             listFileShares, createFileShare, revokeFileShare, countShareAccesses,

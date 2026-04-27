@@ -17,6 +17,9 @@ const realService = {
     updateClaim(processId, patch) {
         return processesApi.updateProcess(processId, patch);
     },
+    archiveClaim(processId) {
+        return processesApi.archiveProcess(processId);
+    },
     listFiles(processId) {
         return filesApi.listFiles(processId);
     },
@@ -79,6 +82,9 @@ const mockService = {
     async updateClaim(processId, patch) {
         console.log(`[MOCK] updateClaim process=${processId}`, patch);
         return { id: processId, ...patch };
+    },
+    async archiveClaim(processId) {
+        console.log(`[MOCK] archiveClaim process=${processId}`);
     },
     async listFiles() {
         return { data: [], total: 0 };
