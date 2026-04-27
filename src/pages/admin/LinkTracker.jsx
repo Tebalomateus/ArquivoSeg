@@ -13,6 +13,7 @@ import {
     Copy
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
+import { actorLabelFromDbId } from '../../api/auth';
 
 export default function LinkTracker() {
     const {
@@ -20,6 +21,7 @@ export default function LinkTracker() {
         listFileShares,
         revokeFileShare,
         countShareAccesses,
+        resolveActorLabel,
     } = useClaims();
 
     const [searchTerm, setSearchTerm] = useState('');
@@ -199,6 +201,9 @@ export default function LinkTracker() {
                                             </div>
                                             <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase mt-1">
                                                 <User size={12} /> criado em {created}
+                                                {s.created_by && (
+                                                    <span className="text-slate-500"> · por {(resolveActorLabel?.(s.created_by) || actorLabelFromDbId(s.created_by, '—'))}</span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="p-6">

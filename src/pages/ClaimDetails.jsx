@@ -188,6 +188,8 @@ export default function ClaimDetails() {
         transitionStatus,
         archiveClaim,
         assignClaim,
+        updateClaimFields,
+        fetchSingleClaim,
         backendUsers,
         fetchAudit,
         auditByClaim,
@@ -217,6 +219,14 @@ export default function ClaimDetails() {
         if (id && refreshClaimFiles) refreshClaimFiles(id);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
+
+    // Direct GET /processes/:id when the route is opened cold (refresh F5).
+    // Avoids the "Sinistro não encontrado" flicker before refreshClaims finishes.
+    const claimMissing = !claims.find(c => c.id === id);
+    useEffect(() => {
+        if (id && claimMissing && fetchSingleClaim) fetchSingleClaim(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id, claimMissing]);
 
     const canReadAudit = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
 
@@ -284,6 +294,24 @@ export default function ClaimDetails() {
     const nextStatuses = (claim?.backStatus && VALID_NEXT_STATUS[claim.backStatus]) || [];
     const canDeleteFile = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
     const canEditAnnotation = currentUser?.backRole === 'contributor' || currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
+    const canEditClaimMeta = canEditAnnotation; // contributor+
+
+    const [editClaimModal, setEditClaimModal] = useState({ open: false, title: '', description: '' });
+    const openEditClaim = () => setEditClaimModal({
+        open: true,
+        title: claim?.title || '',
+        description: claim?.description || '',
+    });
+    const handleSaveClaimEdit = async (e) => {
+        e.preventDefault();
+        try {
+            await updateClaimFields(claim.id, {
+                title: editClaimModal.title,
+                description: editClaimModal.description,
+            });
+            setEditClaimModal({ open: false, title: '', description: '' });
+        } catch (err) { console.error(err); }
+    };
     const [versionsModal, setVersionsModal] = useState({ open: false, file: null, versions: [] });
     const [editingComment, setEditingComment] = useState({ id: null, draft: '' });
 
@@ -439,7 +467,17 @@ export default function ClaimDetails() {
                             </span>
                         )}
                     </div>
-                    <p className="text-sm text-gray-500 font-bold uppercase tracking-tight">{claim.title} <span className="text-gray-300 mx-2">|</span> <span className="text-blue-600">{claim.insurer}</span></p>
+                    <p className="text-sm text-gray-500 font-bold uppercase tracking-tight">
+                        {claim.title} <span className="text-gray-300 mx-2">|</span> <span className="text-blue-600">{claim.insurer}</span>
+                        {canEditClaimMeta && (
+                            <button onClick={openEditClaim} className="ml-3 text-[10px] text-blue-600 hover:underline normal-case tracking-normal">editar</button>
+                        )}
+                    </p>
+                    {claim.backCreatedBy && (
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">
+                            Criado por {(resolveActorLabel?.(claim.backCreatedBy) || actorLabelFromDbId(claim.backCreatedBy, '—'))}
+                        </p>
+                    )}
                 </div>
 
                 <div className="flex flex-wrap gap-4 bg-white/50 p-2 rounded-2xl border border-white shadow-sm backdrop-blur-md">
@@ -947,13 +985,14 @@ export default function ClaimDetails() {
                                         {shares.map(s => {
                                             const url = `${window.location.origin}/portal/${s.token}`;
                                             const expires = s.expires_at ? new Date(s.expires_at).toLocaleDateString('pt-BR') : 'sem expiração';
+                                            const creatorLabel = s.created_by ? (resolveActorLabel?.(s.created_by) || actorLabelFromDbId(s.created_by, '—')) : '—';
                                             return (
                                                 <div key={s.id} className={`flex flex-col gap-2 p-4 rounded-2xl border mb-3 ${s.revoked ? 'bg-red-50/40 border-red-100' : 'bg-white border-gray-100'}`}>
                                                     <div className="flex items-center justify-between gap-3">
                                                         <div className="flex-1 min-w-0">
                                                             <p className="text-xs font-black text-gray-900 truncate">{s._file?.name || s.file_ver_id}</p>
                                                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-                                                                {s.label || 'sem rótulo'} · expira {expires} · {s.revoked ? 'REVOGADO' : 'ATIVO'}
+                                                                {s.label || 'sem rótulo'} · expira {expires} · criado por {creatorLabel} · {s.revoked ? 'REVOGADO' : 'ATIVO'}
                                                             </p>
                                                         </div>
                                                         {!s.revoked && (
@@ -1104,6 +1143,43 @@ export default function ClaimDetails() {
                 onUpload={handleUpload}
                 folderName={currentFolder.name}
             />
+
+            {editClaimModal.open && (
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setEditClaimModal({ open: false, title: '', description: '' })}>
+                    <form className="bg-white rounded-2xl shadow-2xl w-full max-w-xl p-8 space-y-4" onClick={e => e.stopPropagation()} onSubmit={handleSaveClaimEdit}>
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                            <h3 className="text-xl font-black text-gray-900 font-display">Editar Sinistro</h3>
+                            <button type="button" onClick={() => setEditClaimModal({ open: false, title: '', description: '' })} className="p-2 text-gray-400 hover:bg-gray-100 rounded-xl">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Título *</label>
+                            <input
+                                type="text"
+                                required
+                                value={editClaimModal.title}
+                                onChange={(e) => setEditClaimModal({ ...editClaimModal, title: e.target.value })}
+                                className="w-full mt-1 px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Descrição</label>
+                            <textarea
+                                value={editClaimModal.description}
+                                onChange={(e) => setEditClaimModal({ ...editClaimModal, description: e.target.value.slice(0, 2000) })}
+                                rows={5}
+                                className="w-full mt-1 px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                            />
+                            <p className="text-[10px] text-gray-400 text-right mt-1">{editClaimModal.description.length}/2000</p>
+                        </div>
+                        <div className="flex gap-2 pt-2">
+                            <button type="button" onClick={() => setEditClaimModal({ open: false, title: '', description: '' })} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold">Cancelar</button>
+                            <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold">Salvar</button>
+                        </div>
+                    </form>
+                </div>
+            )}
 
             {versionsModal.open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setVersionsModal({ open: false, file: null, versions: [] })}>

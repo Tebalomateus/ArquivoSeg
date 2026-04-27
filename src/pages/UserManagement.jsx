@@ -19,6 +19,7 @@ const adaptBackendUser = (u) => ({
     role: BACK_TO_UI_ROLE[u.role] || u.role.toUpperCase(),
     status: 'Ativo',
     backRole: u.role,
+    createdAt: u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : null,
 });
 
 export default function UserManagement() {
@@ -153,6 +154,11 @@ export default function UserManagement() {
                                             <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
                                             <span className="text-[9px] font-black uppercase tracking-widest">{user.status}</span>
                                         </div>
+                                        {user.createdAt && (
+                                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-1">
+                                                desde {user.createdAt}
+                                            </p>
+                                        )}
                                     </td>
                                     <td className="py-5 text-right pr-2">
                                         <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-100 shadow-sm">

@@ -11,6 +11,9 @@ const realService = {
     fetchAllClaims(opts) {
         return processesApi.listProcesses(opts);
     },
+    getClaim(processId) {
+        return processesApi.getProcess(processId);
+    },
     createClaim({ title, description, metadata }) {
         return processesApi.createProcess({ title, description, metadata });
     },
@@ -94,6 +97,9 @@ const mockService = {
     async updateClaim(processId, patch) {
         console.log(`[MOCK] updateClaim process=${processId}`, patch);
         return { id: processId, ...patch };
+    },
+    async getClaim(processId) {
+        return { id: processId };
     },
     async archiveClaim(processId) {
         console.log(`[MOCK] archiveClaim process=${processId}`);

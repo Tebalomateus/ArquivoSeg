@@ -95,6 +95,7 @@ const adaptProcessToClaim = (proc, cached) => {
         backCreatedAt: proc.created_at,
         backUpdatedAt: proc.updated_at,
         assignedTo: proc.assigned_to || null,
+        backCreatedBy: proc.created_by || null,
         date: created.toLocaleDateString('pt-BR'),
         lastModified: updated.toLocaleDateString('pt-BR'),
 
@@ -356,6 +357,47 @@ export const ClaimsProvider = ({ children }) => {
             throw err;
         }
     };
+
+    const updateClaimFields = async (claimId, patch) => {
+        // Used to PATCH plain fields (title, description) directly on the
+        // process row — bypasses the metadata jsonb path because these are
+        // first-class columns the backend already validates.
+        if (isMockEnabled() || !getToken()) return;
+        try {
+            const proc = await claimsService.updateClaim(claimId, patch);
+            setClaims(prev => prev.map(c => c.id === claimId
+                ? {
+                    ...c,
+                    title: proc.title ?? c.title,
+                    description: proc.description ?? c.description,
+                    lastModified: new Date().toLocaleDateString('pt-BR'),
+                }
+                : c));
+        } catch (err) {
+            alert(`Falha ao atualizar sinistro: ${err?.message || err}`);
+            throw err;
+        }
+    };
+
+    // Fallback fetch: when ClaimDetails is opened directly via URL the global
+    // refreshClaims may not have finished yet (or this id isn't on the current
+    // page of results). Pulls a single process and merges it into state so the
+    // detail page never has to render "Sinistro não encontrado".
+    const fetchSingleClaim = useCallback(async (claimId) => {
+        if (isMockEnabled() || !getToken() || !claimId) return null;
+        try {
+            const proc = await claimsService.getClaim(claimId);
+            const adapted = adaptProcessToClaim(proc, claimsCache[proc.id]);
+            setClaims(prev => prev.some(c => c.id === proc.id)
+                ? prev.map(c => c.id === proc.id ? adapted : c)
+                : [adapted, ...prev]);
+            return adapted;
+        } catch (err) {
+            console.error('[ClaimsContext] failed to fetch single process', claimId, err);
+            return null;
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const assignClaim = async (claimId, userId) => {
         if (isMockEnabled() || !getToken()) return;
@@ -696,7 +738,7 @@ export const ClaimsProvider = ({ children }) => {
         <ClaimsContext.Provider value={{
             currentUser, setCurrentUser, logout,
             claims, addClaim, updateChecklistStatus,
-            transitionStatus, archiveClaim, assignClaim,
+            transitionStatus, archiveClaim, assignClaim, updateClaimFields, fetchSingleClaim,
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
             uploadFileToClaim, refreshClaimFiles, documentDownloadHref,
             deleteDocument, listFileVersions,
