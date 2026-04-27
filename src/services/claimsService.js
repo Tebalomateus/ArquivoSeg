@@ -8,8 +8,8 @@ import * as clientsApi from '../api/clients';
 import * as usersApi from '../api/users';
 
 const realService = {
-    fetchAllClaims() {
-        return processesApi.listProcesses();
+    fetchAllClaims(opts) {
+        return processesApi.listProcesses(opts);
     },
     createClaim({ title, description, metadata }) {
         return processesApi.createProcess({ title, description, metadata });

@@ -218,13 +218,21 @@ export const ClaimsProvider = ({ children }) => {
         }
     }, [currentUser]);
 
-    // Fetch processes from backend whenever the user changes (login).
-    const refreshClaims = useCallback(async () => {
+    // Last filter passed to refreshClaims, so the auto-refetch on currentUser
+    // change re-applies the user's selection (Status / Atribuído a mim).
+    const [claimsFilter, setClaimsFilter] = useState({});
+
+    // Fetch processes from backend whenever the user changes (login) OR the
+    // current filter changes. Filters are pushed server-side via /processes
+    // query params (status, assigned_to, page, limit).
+    const refreshClaims = useCallback(async (filterOverride) => {
         if (isMockEnabled() || !currentUser || !getToken()) return;
+        const opts = filterOverride !== undefined ? filterOverride : claimsFilter;
+        if (filterOverride !== undefined) setClaimsFilter(filterOverride);
         setClaimsLoading(true);
         setClaimsError(null);
         try {
-            const res = await claimsService.fetchAllClaims();
+            const res = await claimsService.fetchAllClaims(opts);
             const procs = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
             const merged = procs.map(p => adaptProcessToClaim(p, claimsCache[p.id]));
             setClaims(merged);
@@ -234,7 +242,7 @@ export const ClaimsProvider = ({ children }) => {
         } finally {
             setClaimsLoading(false);
         }
-        // We intentionally do NOT depend on claimsCache to avoid refetch loops; cache merges reuse latest snapshot.
+        // Intentionally not depending on claimsCache or claimsFilter to avoid loops.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser]);
 
@@ -658,7 +666,7 @@ export const ClaimsProvider = ({ children }) => {
             uploadFileToClaim, refreshClaimFiles, documentDownloadHref,
             listFileShares, createFileShare, revokeFileShare, countShareAccesses,
             fetchAudit, auditByClaim,
-            claimsLoading, claimsError, refreshClaims,
+            claimsLoading, claimsError, refreshClaims, claimsFilter,
             users, addUser,
             backendUsers, usersLoading, refreshUsers, resolveActorLabel,
             clients, clientsLoading, addClientEntity, updateClientEntity, deleteClientEntity, refreshClients,

@@ -31,6 +31,15 @@ export default function ClaimsList() {
     const [showFilters, setShowFilters] = useState(false);
     const [activeTab, setActiveTab] = useState('ativos');
 
+    // Map UI tab → backend status filter and refetch server-side.
+    // "Ativos" pulls everything; the in-memory filter below removes the
+    // already-completed records so the user only sees in-flight work.
+    useEffect(() => {
+        if (!refreshClaims) return;
+        refreshClaims(activeTab === 'concluidos' ? { status: 'done' } : {});
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
+
     const [filterInsurer, setFilterInsurer] = useState('');
     const [filterBroker, setFilterBroker] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
