@@ -385,13 +385,18 @@ export const ClaimsProvider = ({ children }) => {
             id: fv.id,
             backFileVerId: fv.id,
             backVersion: fv.version,
+            backUploadedBy: fv.uploaded_by,
             name,
             mime_type: fv.mime_type,
             size_bytes: fv.size_bytes,
             date: created.toLocaleDateString('pt-BR'),
+            createdAt: fv.created_at,
             user: comment?.user || '-',
             annotation: comment?.body || '',
             commentId: comment?.id || null,
+            commentAuthorId: comment?.author_id || null,
+            commentCreatedAt: comment?.created_at || null,
+            commentUpdatedAt: comment?.updated_at || null,
             confidentiality: comment?.confidentiality || 'Geral',
         };
     };

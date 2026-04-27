@@ -16,6 +16,28 @@ export async function uploadFile(processId, file, folderCategory) {
     return api.postMultipart(`/api/v1/processes/${processId}/files`, fd);
 }
 
+// Pretty-print file size (back returns int64 size_bytes).
+export function formatBytes(bytes) {
+    if (bytes == null || isNaN(bytes)) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+// Short label from a MIME type (e.g. "application/pdf" → "PDF").
+export function mimeShortLabel(mime) {
+    if (!mime) return '';
+    const m = String(mime).toLowerCase();
+    if (m.includes('pdf')) return 'PDF';
+    if (m.startsWith('image/')) return 'Imagem';
+    if (m.includes('spreadsheet') || m.includes('excel') || m.endsWith('csv')) return 'Planilha';
+    if (m.includes('word') || m.includes('document')) return 'Documento';
+    if (m.startsWith('text/')) return 'Texto';
+    if (m.includes('zip') || m.includes('compressed')) return 'Compactado';
+    return m.split('/')[1]?.toUpperCase() || 'Arquivo';
+}
+
 export function parseFolderFromFileName(fileName, knownCategories = ['causa', 'prejuizo', 'liquidacao', 'gerencial']) {
     if (!fileName) return { category: null, name: '' };
     const idx = fileName.indexOf(FOLDER_SEP);

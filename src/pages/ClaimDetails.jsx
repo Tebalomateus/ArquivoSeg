@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useClaims, VALID_NEXT_STATUS } from '../context/ClaimsContext';
 import { actorLabelFromDbId } from '../api/auth';
+import { formatBytes, mimeShortLabel } from '../api/files';
 
 const STATUS_LABELS_PT = {
     ready: 'Aberto',
@@ -640,8 +641,13 @@ export default function ClaimDetails() {
                                                         <FileText size={24} />
                                                     </div>
                                                     <div className="flex-1">
-                                                        <div className="flex items-center gap-3 mb-2">
+                                                        <div className="flex items-center gap-3 mb-2 flex-wrap">
                                                             <h4 className="font-bold text-gray-900 uppercase text-xs tracking-tight">{doc.name}</h4>
+                                                            {doc.backVersion > 1 && (
+                                                                <span className="text-[9px] font-black px-2 py-0.5 rounded bg-purple-50 border border-purple-200 text-purple-700 tracking-widest" title="Versão atual deste arquivo">
+                                                                    v{doc.backVersion}
+                                                                </span>
+                                                            )}
                                                             <span className={`text-[9px] font-black px-2 py-0.5 rounded border tracking-widest transition-all ${doc.confidentiality === 'Altamente Confidencial' ? 'bg-red-50 border-red-200 text-red-600' :
                                                                 doc.confidentiality === 'Confidencial' ? 'bg-amber-50 border-amber-200 text-amber-600' :
                                                                     doc.confidentiality === 'Público' ? 'bg-green-50 border-green-200 text-green-600' :
@@ -650,9 +656,22 @@ export default function ClaimDetails() {
                                                                 {doc.confidentiality || 'Geral'}
                                                             </span>
                                                         </div>
-                                                        <div className="flex items-center gap-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">
+                                                        <div className="flex items-center gap-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex-wrap">
                                                             <span className="flex items-center gap-1"><Calendar size={12} className="text-gray-300" /> {doc.date}</span>
-                                                            <span className="flex items-center gap-1"><User size={12} className="text-gray-300" /> {doc.user}</span>
+                                                            <span className="flex items-center gap-1">
+                                                                <User size={12} className="text-gray-300" />
+                                                                {doc.backUploadedBy
+                                                                    ? (resolveActorLabel?.(doc.backUploadedBy) || actorLabelFromDbId(doc.backUploadedBy, '—'))
+                                                                    : (doc.user || '—')}
+                                                            </span>
+                                                            {doc.mime_type && (
+                                                                <span className="flex items-center gap-1 text-gray-500" title={doc.mime_type}>
+                                                                    <FileText size={12} className="text-gray-300" /> {mimeShortLabel(doc.mime_type)}
+                                                                </span>
+                                                            )}
+                                                            {doc.size_bytes != null && (
+                                                                <span className="text-gray-500">{formatBytes(doc.size_bytes)}</span>
+                                                            )}
                                                         </div>
                                                         <div className="p-4 bg-gray-50/80 rounded-2xl border border-dashed border-gray-200 text-[11px] font-medium text-gray-600 relative group-hover:bg-white group-hover:border-blue-100 transition-all">
                                                             <MessageSquare className="absolute -top-1.5 -left-1.5 w-6 h-6 text-blue-100 group-hover:text-blue-200" />
