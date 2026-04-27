@@ -8,8 +8,11 @@ const realService = {
     fetchAllClaims() {
         return processesApi.listProcesses();
     },
-    createClaim({ title, description }) {
-        return processesApi.createProcess({ title, description });
+    createClaim({ title, description, metadata }) {
+        return processesApi.createProcess({ title, description, metadata });
+    },
+    updateClaim(processId, patch) {
+        return processesApi.updateProcess(processId, patch);
     },
     listFiles(processId) {
         return filesApi.listFiles(processId);
@@ -42,6 +45,10 @@ const mockService = {
     async createClaim(claimData) {
         console.log('[MOCK] createClaim', claimData);
         return { id: Date.now().toString(), ...claimData };
+    },
+    async updateClaim(processId, patch) {
+        console.log(`[MOCK] updateClaim process=${processId}`, patch);
+        return { id: processId, ...patch };
     },
     async listFiles() {
         return { data: [], total: 0 };

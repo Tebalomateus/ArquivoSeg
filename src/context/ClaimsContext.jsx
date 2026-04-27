@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { INITIAL_CLAIMS, INITIAL_USERS, INITIAL_CLIENTS, INITIAL_LINKS } from '../constants/initialData';
 import { claimsService } from '../services/claimsService';
 import { loginWithUiRole, logoutSession } from '../api/auth';
@@ -42,18 +42,44 @@ const computeDeadline = (createdAtISO, isComplex) => {
     };
 };
 
-// Merges a backend process with cached front-only metadata (insurer, folders, checklist, etc.).
+// Front-only fields that we serialize into process.metadata for cross-device persistence.
+// Documents are excluded — they come from /processes/:id/files. Backend-owned fields
+// (id, title, description, status, created_at, updated_at) are also excluded.
+const METADATA_KEYS = [
+    'number', 'insurer', 'insuredName', 'policyNumber', 'policyStartDate', 'policyEndDate',
+    'retroactiveDate', 'modality', 'brokerName', 'brokerClaimId', 'adjusterName', 'adjusterClaimId',
+    'occurrenceDate', 'occurrenceLocation', 'observations', 'isComplex', 'progress',
+    'deadline', 'shareToken', 'activities',
+];
+
+const extractMetadata = (claim) => {
+    const meta = {};
+    for (const k of METADATA_KEYS) {
+        if (claim[k] !== undefined) meta[k] = claim[k];
+    }
+    // folders without documents — checklist + completion only
+    if (Array.isArray(claim.folders)) {
+        meta.folders = claim.folders.map(({ documents, ...rest }) => rest);
+    }
+    return meta;
+};
+
+// Merges a backend process with its persisted metadata; cached localStorage entry serves as
+// fallback for processes created before migration 004 (back returned no metadata).
 const adaptProcessToClaim = (proc, cached) => {
     const created = proc.created_at ? new Date(proc.created_at) : new Date();
     const updated = proc.updated_at ? new Date(proc.updated_at) : created;
-    const baseFolders = cached?.folders || buildFolders([]);
-    const isComplex = cached?.isComplex || false;
+    const meta = (proc.metadata && Object.keys(proc.metadata).length > 0) ? proc.metadata : (cached || {});
+    const isComplex = !!meta.isComplex;
+    const baseFolders = Array.isArray(meta.folders) && meta.folders.length > 0
+        ? meta.folders.map(f => ({ documents: [], ...f }))
+        : buildFolders([]);
 
     return {
         // Backend-owned
         id: proc.id,
         title: proc.title,
-        description: proc.description || cached?.description || '',
+        description: proc.description || meta.description || '',
         backStatus: proc.status,
         status: STATUS_BACK_TO_UI[proc.status] || proc.status,
         backCreatedAt: proc.created_at,
@@ -61,28 +87,28 @@ const adaptProcessToClaim = (proc, cached) => {
         date: created.toLocaleDateString('pt-BR'),
         lastModified: updated.toLocaleDateString('pt-BR'),
 
-        // Front-only metadata (cached or defaulted)
-        number: cached?.number || proc.title || proc.id.slice(0, 8),
-        insurer: cached?.insurer || '',
-        insuredName: cached?.insuredName || '',
-        policyNumber: cached?.policyNumber || '',
-        policyStartDate: cached?.policyStartDate || '',
-        policyEndDate: cached?.policyEndDate || '',
-        retroactiveDate: cached?.retroactiveDate || '',
-        modality: cached?.modality || '',
-        brokerName: cached?.brokerName || cached?.broker || '',
-        brokerClaimId: cached?.brokerClaimId || '',
-        adjusterName: cached?.adjusterName || '',
-        adjusterClaimId: cached?.adjusterClaimId || '',
-        occurrenceDate: cached?.occurrenceDate || '',
-        occurrenceLocation: cached?.occurrenceLocation || '',
-        observations: cached?.observations || '',
-        progress: cached?.progress ?? 0,
+        // From metadata (or cached fallback or defaults)
+        number: meta.number || proc.title || proc.id.slice(0, 8),
+        insurer: meta.insurer || '',
+        insuredName: meta.insuredName || '',
+        policyNumber: meta.policyNumber || '',
+        policyStartDate: meta.policyStartDate || '',
+        policyEndDate: meta.policyEndDate || '',
+        retroactiveDate: meta.retroactiveDate || '',
+        modality: meta.modality || '',
+        brokerName: meta.brokerName || meta.broker || '',
+        brokerClaimId: meta.brokerClaimId || '',
+        adjusterName: meta.adjusterName || '',
+        adjusterClaimId: meta.adjusterClaimId || '',
+        occurrenceDate: meta.occurrenceDate || '',
+        occurrenceLocation: meta.occurrenceLocation || '',
+        observations: meta.observations || '',
+        progress: meta.progress ?? 0,
         isComplex,
-        deadline: cached?.deadline || computeDeadline(proc.created_at, isComplex),
-        activities: cached?.activities || [],
+        deadline: meta.deadline || computeDeadline(proc.created_at, isComplex),
+        activities: Array.isArray(meta.activities) ? meta.activities : [],
         folders: baseFolders,
-        shareToken: cached?.shareToken || randId(),
+        shareToken: meta.shareToken || randId(),
     };
 };
 
@@ -205,37 +231,37 @@ export const ClaimsProvider = ({ children }) => {
         setClaimsCache(prev => ({ ...prev, [claim.id]: claim }));
     };
 
+    // Debounced background sync of process metadata to the backend (PATCH /processes/:id).
+    // We coalesce rapid updates (e.g. checklist clicks) into a single request per ~800ms.
+    const syncTimers = useRef({});
+    const scheduleMetadataSync = useCallback((claimId, claim) => {
+        if (isMockEnabled() || !getToken()) return;
+        if (!claimId || !claim) return;
+        if (syncTimers.current[claimId]) clearTimeout(syncTimers.current[claimId]);
+        syncTimers.current[claimId] = setTimeout(async () => {
+            try {
+                await claimsService.updateClaim(claimId, { metadata: extractMetadata(claim) });
+            } catch (err) {
+                console.error('[ClaimsContext] failed to sync metadata for', claimId, err);
+            } finally {
+                delete syncTimers.current[claimId];
+            }
+        }, 800);
+    }, []);
+
     const addClaim = async (newClaim) => {
         const now = new Date();
         const title = newClaim.title || `Sinistro ${newClaim.number || ''}`.trim() || 'Novo sinistro';
         const description = newClaim.description || '';
 
-        let processId;
-        let backCreatedAt = now.toISOString();
-        let backStatus = 'ready';
-
-        if (!isMockEnabled()) {
-            const proc = await claimsService.createClaim({ title, description });
-            processId = proc.id;
-            backCreatedAt = proc.created_at || backCreatedAt;
-            backStatus = proc.status || backStatus;
-        } else {
-            processId = Date.now().toString();
-        }
-
-        const localClaim = {
+        // Build the local claim shape first so we can derive the metadata payload.
+        const draftClaim = {
             ...newClaim,
-            id: processId,
             title,
             description,
-            backStatus,
-            status: STATUS_BACK_TO_UI[backStatus] || backStatus,
-            backCreatedAt,
-            date: now.toLocaleDateString('pt-BR'),
-            lastModified: now.toLocaleDateString('pt-BR'),
             progress: 0,
             isComplex: false,
-            deadline: computeDeadline(backCreatedAt, false),
+            deadline: computeDeadline(now.toISOString(), false),
             activities: [{
                 id: 'a-' + Date.now(),
                 user: currentUser?.name || 'Sistema',
@@ -247,27 +273,45 @@ export const ClaimsProvider = ({ children }) => {
             shareToken: randId(),
         };
 
-        const newLink = {
-            id: 'l-' + Date.now(),
-            token: localClaim.shareToken,
-            claimNumber: localClaim.number,
-            createdBy: currentUser?.name || 'Sistema',
-            createdAt: now.toLocaleDateString('pt-BR'),
-            views: 0,
-            status: 'Ativo',
+        let processId;
+        let backCreatedAt = now.toISOString();
+        let backStatus = 'ready';
+
+        if (!isMockEnabled()) {
+            const proc = await claimsService.createClaim({
+                title,
+                description,
+                metadata: extractMetadata(draftClaim),
+            });
+            processId = proc.id;
+            backCreatedAt = proc.created_at || backCreatedAt;
+            backStatus = proc.status || backStatus;
+        } else {
+            processId = Date.now().toString();
+        }
+
+        const localClaim = {
+            ...draftClaim,
+            id: processId,
+            backStatus,
+            status: STATUS_BACK_TO_UI[backStatus] || backStatus,
+            backCreatedAt,
+            date: now.toLocaleDateString('pt-BR'),
+            lastModified: now.toLocaleDateString('pt-BR'),
+            deadline: computeDeadline(backCreatedAt, false),
         };
 
-        setLinks(prev => [newLink, ...prev]);
         setClaims(prev => [localClaim, ...prev]);
         persistClaimMetadata(localClaim);
         return localClaim.id;
     };
 
-    const updateClaimLocal = (claimId, updater) => {
+    const updateClaimLocal = (claimId, updater, { syncToBack = true } = {}) => {
         setClaims(prev => prev.map(c => {
             if (c.id !== claimId) return c;
             const updated = updater(c);
             persistClaimMetadata(updated);
+            if (syncToBack) scheduleMetadataSync(claimId, updated);
             return updated;
         }));
     };
@@ -321,7 +365,11 @@ export const ClaimsProvider = ({ children }) => {
                 }
             }
 
-            updateClaimLocal(claimId, c => ({ ...c, folders: groupFilesIntoFolders(c.folders, files, commentByFileVerId) }));
+            updateClaimLocal(
+                claimId,
+                c => ({ ...c, folders: groupFilesIntoFolders(c.folders, files, commentByFileVerId) }),
+                { syncToBack: false } // documents aren't part of metadata; nothing to PATCH
+            );
         } catch (err) {
             console.error('[ClaimsContext] failed to fetch files for', claimId, err);
         }

@@ -10,8 +10,10 @@ export function getProcess(id) {
     return api.get(`/api/v1/processes/${id}`);
 }
 
-export function createProcess({ title, description }) {
-    return api.post('/api/v1/processes', { title, description });
+export function createProcess({ title, description, metadata }) {
+    const body = { title, description };
+    if (metadata !== undefined) body.metadata = metadata;
+    return api.post('/api/v1/processes', body);
 }
 
 export function updateProcess(id, patch) {
