@@ -391,12 +391,14 @@ export const ClaimsProvider = ({ children }) => {
         return {
             id: fv.id,
             backFileVerId: fv.id,
+            backVersion: fv.version,
             name,
             mime_type: fv.mime_type,
             size_bytes: fv.size_bytes,
             date: created.toLocaleDateString('pt-BR'),
             user: comment?.user || '-',
             annotation: comment?.body || '',
+            commentId: comment?.id || null,
             confidentiality: comment?.confidentiality || 'Geral',
         };
     };
@@ -486,6 +488,28 @@ export const ClaimsProvider = ({ children }) => {
     };
 
     const documentDownloadHref = (fileId) => claimsService.downloadHref(fileId);
+
+    const updateAnnotation = async (claimId, commentId, body) => {
+        if (isMockEnabled() || !getToken() || !commentId) return;
+        try {
+            await claimsService.updateComment(commentId, body);
+            await refreshClaimFiles(claimId);
+        } catch (err) {
+            alert(`Falha ao editar anotação: ${err?.message || err}`);
+            throw err;
+        }
+    };
+
+    const deleteAnnotation = async (claimId, commentId) => {
+        if (isMockEnabled() || !getToken() || !commentId) return;
+        try {
+            await claimsService.deleteComment(commentId);
+            await refreshClaimFiles(claimId);
+        } catch (err) {
+            alert(`Falha ao remover anotação: ${err?.message || err}`);
+            throw err;
+        }
+    };
 
     const deleteDocument = async (claimId, fileVerId) => {
         if (isMockEnabled() || !getToken()) return;
@@ -687,6 +711,7 @@ export const ClaimsProvider = ({ children }) => {
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
             uploadFileToClaim, refreshClaimFiles, documentDownloadHref,
             deleteDocument, listFileVersions,
+            updateAnnotation, deleteAnnotation,
             listFileShares, createFileShare, revokeFileShare, countShareAccesses,
             fetchAudit, auditByClaim,
             claimsLoading, claimsError, refreshClaims, claimsFilter,

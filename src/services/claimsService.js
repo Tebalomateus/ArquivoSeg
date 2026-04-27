@@ -35,6 +35,12 @@ const realService = {
     addComment(processId, body, fileVerId) {
         return commentsApi.createComment(processId, body, fileVerId);
     },
+    updateComment(commentId, body) {
+        return commentsApi.updateComment(commentId, body);
+    },
+    deleteComment(commentId) {
+        return commentsApi.deleteComment(commentId);
+    },
     listComments(processId) {
         return commentsApi.listComments(processId);
     },
@@ -108,6 +114,13 @@ const mockService = {
     async addComment(processId, body, fileVerId) {
         console.log(`[MOCK] addComment process=${processId} fileVer=${fileVerId}`, body);
         return { id: Date.now().toString(), body, file_ver_id: fileVerId };
+    },
+    async updateComment(commentId, body) {
+        console.log(`[MOCK] updateComment ${commentId}`, body);
+        return { id: commentId, body };
+    },
+    async deleteComment(commentId) {
+        console.log(`[MOCK] deleteComment ${commentId}`);
     },
     async listComments() {
         return { data: [], total: 0 };

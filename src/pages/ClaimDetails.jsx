@@ -183,6 +183,8 @@ export default function ClaimDetails() {
         revokeFileShare,
         deleteDocument,
         listFileVersions,
+        updateAnnotation,
+        deleteAnnotation,
         transitionStatus,
         archiveClaim,
         assignClaim,
@@ -281,7 +283,30 @@ export default function ClaimDetails() {
     const canArchive = currentUser?.backRole === 'admin';
     const nextStatuses = (claim?.backStatus && VALID_NEXT_STATUS[claim.backStatus]) || [];
     const canDeleteFile = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
+    const canEditAnnotation = currentUser?.backRole === 'contributor' || currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
     const [versionsModal, setVersionsModal] = useState({ open: false, file: null, versions: [] });
+    const [editingComment, setEditingComment] = useState({ id: null, draft: '' });
+
+    const handleStartEditAnnotation = (doc) => {
+        if (!doc.commentId) return alert('Esta anotação ainda não foi sincronizada com o servidor.');
+        setEditingComment({ id: doc.commentId, draft: doc.annotation || '' });
+    };
+
+    const handleSaveAnnotation = async () => {
+        const wordCount = editingComment.draft.trim().split(/\s+/).filter(w => w.length > 0).length;
+        if (wordCount < 5) return alert('A anotação deve ter no mínimo 5 palavras.');
+        try {
+            await updateAnnotation(claim.id, editingComment.id, editingComment.draft);
+            setEditingComment({ id: null, draft: '' });
+        } catch (err) { console.error(err); }
+    };
+
+    const handleDeleteAnnotation = async (doc) => {
+        if (!doc.commentId) return;
+        if (!confirm('Remover esta anotação? O arquivo continua, mas a contextualização será apagada.')) return;
+        try { await deleteAnnotation(claim.id, doc.commentId); }
+        catch (err) { console.error(err); }
+    };
 
     const handleDeleteFile = async (doc) => {
         if (!doc?.backFileVerId) return;
@@ -631,7 +656,30 @@ export default function ClaimDetails() {
                                                         </div>
                                                         <div className="p-4 bg-gray-50/80 rounded-2xl border border-dashed border-gray-200 text-[11px] font-medium text-gray-600 relative group-hover:bg-white group-hover:border-blue-100 transition-all">
                                                             <MessageSquare className="absolute -top-1.5 -left-1.5 w-6 h-6 text-blue-100 group-hover:text-blue-200" />
-                                                            <p className="leading-relaxed opacity-80 italic">"{doc.annotation}"</p>
+                                                            {editingComment.id && editingComment.id === doc.commentId ? (
+                                                                <div className="space-y-2">
+                                                                    <textarea
+                                                                        value={editingComment.draft}
+                                                                        onChange={(e) => setEditingComment({ ...editingComment, draft: e.target.value })}
+                                                                        className="w-full p-2 bg-white border border-gray-200 rounded-lg text-[11px] outline-none focus:ring-2 focus:ring-blue-500"
+                                                                        rows={3}
+                                                                    />
+                                                                    <div className="flex gap-2 justify-end">
+                                                                        <button type="button" onClick={() => setEditingComment({ id: null, draft: '' })} className="px-3 py-1 bg-gray-100 text-gray-600 rounded-md text-[10px] font-black uppercase tracking-widest">Cancelar</button>
+                                                                        <button type="button" onClick={handleSaveAnnotation} className="px-3 py-1 bg-blue-600 text-white rounded-md text-[10px] font-black uppercase tracking-widest">Salvar</button>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-start gap-3">
+                                                                    <p className="leading-relaxed opacity-80 italic flex-1">"{doc.annotation || '(sem anotação)'}"</p>
+                                                                    {doc.commentId && canEditAnnotation && (
+                                                                        <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                            <button type="button" onClick={() => handleStartEditAnnotation(doc)} className="text-[10px] font-black text-blue-600 hover:underline uppercase tracking-widest">Editar</button>
+                                                                            <button type="button" onClick={() => handleDeleteAnnotation(doc)} className="text-[10px] font-black text-red-500 hover:underline uppercase tracking-widest">Remover</button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
