@@ -37,16 +37,38 @@ const BIStatCard = ({ title, value, detail, icon: Icon, color, trend }) => (
 );
 
 export default function AdminDashboard() {
-    const { claims, users, clients, links } = useClaims();
+    const { claims, claimsLoading, backendUsers, clients } = useClaims();
 
     const stats = useMemo(() => {
         const totalClaims = claims.length;
-        const totalUsers = users.length;
-        const totalLinks = links.length;
-        const totalViews = links.reduce((acc, l) => acc + l.views, 0);
+        const totalUsers = backendUsers.length;
+        const totalClients = clients.length;
+        const byStatus = claims.reduce((acc, c) => {
+            const k = c.backStatus || 'ready';
+            acc[k] = (acc[k] || 0) + 1;
+            return acc;
+        }, {});
+        const completed = byStatus.done || 0;
+        const archived = byStatus.archived || 0;
+        const inFlight = totalClaims - completed - archived;
 
-        return { totalClaims, totalUsers, totalLinks, totalViews };
-    }, [claims, users, links]);
+        return { totalClaims, totalUsers, totalClients, byStatus, completed, archived, inFlight };
+    }, [claims, backendUsers, clients]);
+
+    const STATUS_LABELS = {
+        ready: 'Aberto',
+        ongoing: 'Em Análise',
+        review: 'Em Revisão',
+        done: 'Concluído',
+        archived: 'Arquivado',
+    };
+    const STATUS_COLORS = {
+        ready: 'bg-blue-500',
+        ongoing: 'bg-amber-500',
+        review: 'bg-purple-500',
+        done: 'bg-green-500',
+        archived: 'bg-slate-400',
+    };
 
     return (
         <div className="space-y-10 animate-fade-in relative z-10">
@@ -67,36 +89,31 @@ export default function AdminDashboard() {
             {/* Top Metrics Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                 <BIStatCard
-                    title="Volume Total"
-                    value={stats.totalClaims}
-                    detail="Sinistros gerenciados no ecossistema"
+                    title="Sinistros (total)"
+                    value={claimsLoading ? '…' : stats.totalClaims}
+                    detail={`${stats.inFlight} em andamento · ${stats.completed} concluídos · ${stats.archived} arquivados`}
                     icon={FileText}
                     color="bg-blue-600"
-                    trend={12}
                 />
                 <BIStatCard
-                    title="Links & Tráfego"
-                    value={stats.totalViews}
-                    detail={`${stats.totalLinks} links ativos emitidos`}
+                    title="Clientes B2B"
+                    value={stats.totalClients}
+                    detail={`${clients.filter(c => c.type === 'SEGURADORA').length} seguradoras · ${clients.filter(c => c.type === 'CORRETORA').length} corretoras`}
                     icon={LinkIcon}
                     color="bg-purple-600"
-                    trend={45}
                 />
                 <BIStatCard
-                    title="Base de Usuários"
-                    value={stats.totalUsers}
-                    detail="Colaboradores e parceiros ativos"
+                    title="Usuários do tenant"
+                    value={stats.totalUsers || '—'}
+                    detail="Conforme tabela `users` (Zitadel sync)"
                     icon={Users}
                     color="bg-indigo-600"
-                    trend={5}
                 />
                 <BIStatCard
                     title="Volume Financeiro"
                     value="R$ 145k"
-                    detail="Faturamento bruto mensal (Projeção)"
+                    detail="Faturamento bruto mensal (placeholder)"
                     icon={Wallet}
-                    color="bg-emerald-600"
-                    trend={8}
                 />
             </div>
 
@@ -116,10 +133,34 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="space-y-6 relative z-10">
-                            {/* Placeholder for a chart/visual element */}
-                            <div className="h-64 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 gap-4">
-                                <BarChart3 size={48} className="opacity-20 translate-y-2 animate-pulse" />
-                                <p className="text-[10px] font-black uppercase tracking-widest">Visualização Gráfica de Tráfego (Em Breve)</p>
+                            {/* Sinistros por status (do backend) */}
+                            <div className="bg-slate-50 rounded-[2rem] border border-slate-100 p-8 space-y-5">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                                        <BarChart3 size={14} /> Sinistros por Status
+                                    </p>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stats.totalClaims} total</span>
+                                </div>
+                                {stats.totalClaims === 0 ? (
+                                    <p className="text-xs text-slate-400 font-medium text-center py-8">Nenhum sinistro carregado.</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {Object.entries(stats.byStatus).map(([status, count]) => {
+                                            const pct = Math.round((count / stats.totalClaims) * 100);
+                                            return (
+                                                <div key={status} className="space-y-1.5">
+                                                    <div className="flex justify-between text-xs">
+                                                        <span className="font-bold text-slate-700">{STATUS_LABELS[status] || status}</span>
+                                                        <span className="font-black text-slate-900">{count} <span className="text-slate-400 font-bold">({pct}%)</span></span>
+                                                    </div>
+                                                    <div className="w-full h-2.5 bg-white rounded-full overflow-hidden border border-slate-100">
+                                                        <div className={`h-full ${STATUS_COLORS[status] || 'bg-slate-400'} transition-all duration-700`} style={{ width: `${pct}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-6">
