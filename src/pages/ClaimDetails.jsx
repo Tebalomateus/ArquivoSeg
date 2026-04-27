@@ -175,6 +175,7 @@ export default function ClaimDetails() {
         revokeFileShare,
         fetchAudit,
         auditByClaim,
+        resolveActorLabel,
         updateChecklistStatus,
         toggleDeadline,
         logView,
@@ -264,9 +265,15 @@ export default function ClaimDetails() {
 
     const formatAuditEntry = (entry) => {
         const ts = entry.timestamp ? new Date(entry.timestamp) : null;
+        // Prefer the dynamic mapping from /api/v1/users (manager+); fall back to
+        // the static VITE_USER_DBID_* env when /users isn't available or stale.
+        const fromBackend = resolveActorLabel ? resolveActorLabel(entry.actor_user_id) : null;
+        const user = entry.actor_user_id
+            ? (fromBackend || actorLabelFromDbId(entry.actor_user_id))
+            : 'Sistema';
         return {
             id: entry.id,
-            user: entry.actor_user_id ? actorLabelFromDbId(entry.actor_user_id) : 'Sistema',
+            user,
             action: entry.action || entry.resource_type,
             date: ts ? ts.toLocaleString('pt-BR') : '',
         };

@@ -135,12 +135,18 @@ export const ClaimsProvider = ({ children }) => {
     const [claimsError, setClaimsError] = useState(null);
     const [auditByClaim, setAuditByClaim] = useState({});
 
+    // INITIAL_USERS is the *front-only* roster used by the Login screen to map
+    // an email to a PAT in dev. It does not necessarily match the backend `users`
+    // table (which holds the real seeded bots). When a manager+ logs in, we
+    // overlay the real users on top so audit/UserManagement see ground truth.
     const [users, setUsers] = useState(() => {
         try {
             const saved = localStorage.getItem('arquivoseg_users');
             return saved ? JSON.parse(saved) : INITIAL_USERS;
         } catch { return INITIAL_USERS; }
     });
+    const [usersLoading, setUsersLoading] = useState(false);
+    const [backendUsers, setBackendUsers] = useState([]);
 
     const [clients, setClients] = useState(() => {
         if (isMockEnabled()) {
@@ -513,6 +519,35 @@ export const ClaimsProvider = ({ children }) => {
 
     const addUser = (userData) => setUsers(prev => [{ id: Date.now(), status: 'Ativo', ...userData }, ...prev]);
 
+    const refreshUsers = useCallback(async () => {
+        if (isMockEnabled() || !getToken()) return;
+        // GET /users requires manager+; gracefully degrade for viewer/contributor.
+        if (currentUser?.backRole !== 'manager' && currentUser?.backRole !== 'admin') return;
+        setUsersLoading(true);
+        try {
+            const res = await claimsService.listUsers();
+            const data = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+            setBackendUsers(data);
+        } catch (err) {
+            if (err?.status !== 403) console.error('[ClaimsContext] failed to fetch users:', err);
+        } finally {
+            setUsersLoading(false);
+        }
+    }, [currentUser]);
+
+    useEffect(() => {
+        if (currentUser) refreshUsers();
+    }, [currentUser, refreshUsers]);
+
+    // UUID → friendly label (used by audit panel). Prefers the live `users` list
+    // (manager+ only) and falls back to the static .env.local mapping.
+    const resolveActorLabel = useCallback((dbId) => {
+        if (!dbId) return null;
+        const hit = backendUsers.find(u => u.id === dbId);
+        if (hit) return hit.email || hit.role.toUpperCase();
+        return null;
+    }, [backendUsers]);
+
     const refreshClients = useCallback(async () => {
         if (isMockEnabled() || !getToken()) return;
         setClientsLoading(true);
@@ -574,6 +609,7 @@ export const ClaimsProvider = ({ children }) => {
             fetchAudit, auditByClaim,
             claimsLoading, claimsError, refreshClaims,
             users, addUser,
+            backendUsers, usersLoading, refreshUsers, resolveActorLabel,
             clients, clientsLoading, addClientEntity, updateClientEntity, deleteClientEntity, refreshClients,
             links, setLinks,
             settings, updateSettings,

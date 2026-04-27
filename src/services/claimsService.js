@@ -5,6 +5,7 @@ import * as commentsApi from '../api/comments';
 import * as auditApi from '../api/audit';
 import * as sharesApi from '../api/shares';
 import * as clientsApi from '../api/clients';
+import * as usersApi from '../api/users';
 
 const realService = {
     fetchAllClaims() {
@@ -54,6 +55,9 @@ const realService = {
     },
     deleteClient(id) {
         return clientsApi.deleteClient(id);
+    },
+    listUsers() {
+        return usersApi.listUsers();
     },
     downloadHref(fileId) {
         return filesApi.downloadHref(fileId);
@@ -119,6 +123,11 @@ const mockService = {
     },
     async deleteClient() {
         return null;
+    },
+    async listUsers() {
+        const saved = localStorage.getItem('arquivoseg_users');
+        const users = saved ? JSON.parse(saved) : [];
+        return { data: users, total: users.length };
     },
     downloadHref(fileId) {
         return `#mock-download-${fileId}`;

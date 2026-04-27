@@ -94,12 +94,34 @@ const InviteModal = ({ isOpen, onClose, onInvite }) => {
     );
 };
 
+// Maps backend role (viewer/contributor/manager/admin) to the PT-BR label used in the UI.
+const BACK_TO_UI_ROLE = {
+    admin: 'ADMIN',
+    manager: 'CORRETOR',
+    contributor: 'PERITO',
+    viewer: 'ANALISTA',
+};
+
+const adaptBackendUser = (u) => ({
+    id: u.id,
+    name: u.email?.split('@')[0] || 'Usuário',
+    email: u.email,
+    company: u.email?.split('@')[1] || '-',
+    role: BACK_TO_UI_ROLE[u.role] || u.role.toUpperCase(),
+    status: 'Ativo',
+    backRole: u.role,
+});
+
 export default function UserManagement() {
-    const { users, addUser } = useClaims();
+    const { backendUsers, usersLoading, refreshUsers } = useClaims();
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    const filteredUsers = users.filter(u =>
+    // Source of truth is the backend listing for managers+; if it's empty
+    // (e.g. lower-privilege session) the table shows nothing real.
+    const displayUsers = (backendUsers || []).map(adaptBackendUser);
+
+    const filteredUsers = displayUsers.filter(u =>
         u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         u.company.toLowerCase().includes(searchTerm.toLowerCase())
@@ -124,13 +146,30 @@ export default function UserManagement() {
                     <h1 className="text-3xl font-bold text-gray-900 font-display">Gestão de Usuários</h1>
                     <p className="text-gray-500 font-medium">Controle permissões e acessos por papel (RBAC).</p>
                 </div>
-                <button
-                    className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center gap-2 group"
-                    onClick={() => setIsModalOpen(true)}
-                >
-                    <UserPlus size={20} className="group-hover:scale-110 transition-transform" />
-                    Convidar Usuário
-                </button>
+                <div className="flex items-center gap-3">
+                    {usersLoading && <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Carregando...</span>}
+                    <button onClick={() => refreshUsers?.()} className="bg-white text-gray-600 px-4 py-2 rounded-xl border border-gray-200 text-xs font-bold uppercase tracking-wider hover:bg-gray-50">
+                        Atualizar
+                    </button>
+                    <button
+                        disabled
+                        title="Convites devem ser feitos no console do Zitadel (http://localhost:8081)"
+                        className="bg-gray-200 text-gray-400 px-6 py-3 rounded-xl font-bold cursor-not-allowed flex items-center gap-2"
+                    >
+                        <UserPlus size={20} />
+                        Convidar Usuário
+                    </button>
+                </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex items-start gap-3">
+                <Lock size={18} className="text-amber-600 mt-0.5 shrink-0" />
+                <div>
+                    <p className="text-sm font-bold text-amber-800">Lista vinda do backend (Zitadel + tabela `users`)</p>
+                    <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                        Esta tela é <strong>somente leitura</strong>. Convites e mudanças de papel exigem o console do Zitadel em <code>http://localhost:8081</code>, porque a permissão real é definida pela claim do JWT — alterar a coluna <code>users.role</code> no banco não muda o acesso.
+                    </p>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
