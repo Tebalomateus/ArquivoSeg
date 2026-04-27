@@ -144,6 +144,7 @@ export const ClaimsProvider = ({ children }) => {
 
     const [claimsLoading, setClaimsLoading] = useState(false);
     const [claimsError, setClaimsError] = useState(null);
+    const [claimsTotal, setClaimsTotal] = useState(0);
     const [auditByClaim, setAuditByClaim] = useState({});
 
     // INITIAL_USERS is the *front-only* roster used by the Login screen to map
@@ -227,8 +228,10 @@ export const ClaimsProvider = ({ children }) => {
         try {
             const res = await claimsService.fetchAllClaims(opts);
             const procs = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+            const total = typeof res?.total === 'number' ? res.total : procs.length;
             const merged = procs.map(p => adaptProcessToClaim(p, claimsCache[p.id]));
             setClaims(merged);
+            setClaimsTotal(total);
         } catch (err) {
             console.error('[ClaimsContext] failed to fetch processes:', err);
             setClaimsError(err.message || 'Erro ao carregar sinistros do servidor.');
@@ -700,7 +703,7 @@ export const ClaimsProvider = ({ children }) => {
             updateAnnotation, deleteAnnotation,
             listFileShares, createFileShare, revokeFileShare, countShareAccesses,
             fetchAudit, auditByClaim,
-            claimsLoading, claimsError, refreshClaims, claimsFilter,
+            claimsLoading, claimsError, claimsTotal, refreshClaims, claimsFilter,
             users,
             backendUsers, usersLoading, refreshUsers, resolveActorLabel,
             clients, clientsLoading, addClientEntity, updateClientEntity, deleteClientEntity, refreshClients,

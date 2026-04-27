@@ -23,22 +23,42 @@ const parseDate = (dateStr) => {
  * centralized work queue with advanced filtering and robust sorting.
  */
 export default function ClaimsList() {
-    const { claims, claimsLoading, claimsError, refreshClaims } = useClaims();
+    const { claims, claimsLoading, claimsError, claimsTotal, refreshClaims, currentUser, backendUsers } = useClaims();
     const location = useLocation();
     const navigate = useNavigate();
 
     const [searchTerm, setSearchTerm] = useState('');
     const [showFilters, setShowFilters] = useState(false);
     const [activeTab, setActiveTab] = useState('ativos');
+    const [onlyMine, setOnlyMine] = useState(false);
+    const [page, setPage] = useState(1);
+    const PAGE_SIZE = 20;
 
-    // Map UI tab → backend status filter and refetch server-side.
-    // "Ativos" pulls everything; the in-memory filter below removes the
-    // already-completed records so the user only sees in-flight work.
+    // Resolve "current user db UUID" by matching the front-only INITIAL_USERS
+    // email against the real backend list (manager+ only). Viewer/contributor
+    // can't fetch /users so the toggle is hidden for them.
+    const myDbId = (() => {
+        if (!currentUser?.email || !Array.isArray(backendUsers) || backendUsers.length === 0) return null;
+        const hit = backendUsers.find(u => (u.email || '').toLowerCase() === currentUser.email.toLowerCase());
+        return hit?.id || null;
+    })();
+
+    // Push tab + assignment filter to backend query.
     useEffect(() => {
         if (!refreshClaims) return;
-        refreshClaims(activeTab === 'concluidos' ? { status: 'done' } : {});
+        const opts = {
+            page,
+            limit: PAGE_SIZE,
+            ...(activeTab === 'concluidos' ? { status: 'done' } : {}),
+            ...(onlyMine && myDbId ? { assignedTo: myDbId } : {}),
+        };
+        refreshClaims(opts);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeTab]);
+    }, [activeTab, onlyMine, page, myDbId]);
+
+    // Reset to page 1 whenever filters change (the dependency below keeps
+    // page=1 stable on first mount).
+    useEffect(() => { setPage(1); }, [activeTab, onlyMine]);
 
     const [filterInsurer, setFilterInsurer] = useState('');
     const [filterBroker, setFilterBroker] = useState('');
@@ -137,6 +157,15 @@ export default function ClaimsList() {
                     >
                         Concluídos
                     </button>
+                    {myDbId && (
+                        <button
+                            onClick={() => setOnlyMine(!onlyMine)}
+                            className={`ml-1 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${onlyMine ? 'bg-indigo-600 shadow-lg text-white scale-[1.02]' : 'text-gray-500 hover:text-gray-700'}`}
+                            title="Filtrar sinistros atribuídos a você (server-side via /processes?assigned_to=)"
+                        >
+                            Atribuídos a mim
+                        </button>
+                    )}
                 </div>
 
                 <div className="flex flex-1 items-center gap-3">
@@ -427,6 +456,33 @@ export default function ClaimsList() {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination — driven by backend total. Hidden when result fits a single page. */}
+                {claimsTotal > PAGE_SIZE && (
+                    <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                            Página {page} de {Math.max(1, Math.ceil(claimsTotal / PAGE_SIZE))} · {claimsTotal} sinistros no total
+                        </p>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                disabled={page <= 1 || claimsLoading}
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                Anterior
+                            </button>
+                            <button
+                                type="button"
+                                disabled={page >= Math.ceil(claimsTotal / PAGE_SIZE) || claimsLoading}
+                                onClick={() => setPage(p => p + 1)}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                Próxima
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

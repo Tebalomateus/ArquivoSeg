@@ -1,8 +1,9 @@
 import { api } from './client';
 
-export function listProcesses({ page = 1, limit = 50, status } = {}) {
+export function listProcesses({ page = 1, limit = 50, status, assignedTo } = {}) {
     const params = new URLSearchParams({ page, limit });
     if (status) params.set('status', status);
+    if (assignedTo) params.set('assigned_to', assignedTo);
     return api.get(`/api/v1/processes?${params}`);
 }
 
