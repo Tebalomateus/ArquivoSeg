@@ -59,20 +59,24 @@ const UploadModal = ({ isOpen, onClose, onUpload, folderName }) => {
 
     const wordCount = annotation.trim().split(/\s+/).filter(w => w.length > 0).length;
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!file) return alert('Selecione um arquivo!');
         if (wordCount < 5) return alert('A anotação contextual deve ter no mínimo 5 palavras!');
 
-        onUpload({
-            name: file.name,
-            annotation: annotation,
-            user: 'Admin ArquivoSeg',
-            confidentiality
-        });
-        setFile(null);
-        setAnnotation('');
-        onClose();
+        try {
+            await onUpload({
+                file,
+                name: file.name,
+                annotation,
+                confidentiality,
+            });
+            setFile(null);
+            setAnnotation('');
+            onClose();
+        } catch (err) {
+            alert(`Falha no upload: ${err?.message || err}`);
+        }
     };
 
     return (
@@ -162,6 +166,9 @@ export default function ClaimDetails() {
         currentUser,
         claims,
         addDocument,
+        uploadFileToClaim,
+        refreshClaimFiles,
+        documentDownloadHref,
         updateChecklistStatus,
         toggleDeadline,
         logView,
@@ -179,6 +186,11 @@ export default function ClaimDetails() {
     useEffect(() => {
         if (claim) setLocalObs(claim.observations || '');
     }, [claim]);
+
+    useEffect(() => {
+        if (id && refreshClaimFiles) refreshClaimFiles(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id]);
 
     if (!claim) return <div className="p-20 text-center font-bold text-gray-500 h-full flex items-center justify-center">Sinistro não encontrado.</div>;
 
@@ -202,8 +214,15 @@ export default function ClaimDetails() {
     // Se ainda não houver pasta (falha catastrófica de dados), mostra fallback
     if (!currentFolder) return <div className="p-20 text-center">Erro ao carregar pastas do sinistro.</div>;
 
-    const handleUpload = (docData) => {
-        addDocument(claim.id, currentFolderId, { ...docData, user: currentUser.name });
+    const handleUpload = async (payload) => {
+        if (payload.file) {
+            await uploadFileToClaim(claim.id, currentFolder.category, payload.file, {
+                annotation: payload.annotation,
+                confidentiality: payload.confidentiality,
+            });
+        } else {
+            addDocument(claim.id, currentFolderId, { ...payload, user: currentUser.name });
+        }
     };
 
     const handleViewDoc = (doc) => {
@@ -480,9 +499,21 @@ export default function ClaimDetails() {
                                                     >
                                                         <Eye size={18} />
                                                     </button>
-                                                    <button className="w-10 h-10 flex items-center justify-center bg-white shadow-lg border border-gray-100 rounded-xl text-gray-600 hover:bg-blue-600 hover:text-white transition-all border border-gray-100">
-                                                        <Download size={18} />
-                                                    </button>
+                                                    {doc.backFileVerId ? (
+                                                        <a
+                                                            href={documentDownloadHref(doc.backFileVerId)}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="w-10 h-10 flex items-center justify-center bg-white shadow-lg border border-gray-100 rounded-xl text-gray-600 hover:bg-blue-600 hover:text-white transition-all"
+                                                            title="Baixar documento"
+                                                        >
+                                                            <Download size={18} />
+                                                        </a>
+                                                    ) : (
+                                                        <button className="w-10 h-10 flex items-center justify-center bg-white shadow-lg border border-gray-100 rounded-xl text-gray-300 cursor-not-allowed" title="Disponível após upload sincronizado">
+                                                            <Download size={18} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

@@ -3,6 +3,7 @@ import { INITIAL_CLAIMS, INITIAL_USERS, INITIAL_CLIENTS, INITIAL_LINKS } from '.
 import { claimsService } from '../services/claimsService';
 import { loginWithUiRole, logoutSession } from '../api/auth';
 import { getToken, isMockEnabled } from '../api/client';
+import { parseFolderFromFileName } from '../api/files';
 
 const ClaimsContext = createContext();
 
@@ -265,6 +266,80 @@ export const ClaimsProvider = ({ children }) => {
         }));
     };
 
+    // Build a UI document record from a backend file_version, optionally enriched with comment metadata.
+    const fileVerToDoc = (fv, comment) => {
+        const { name } = parseFolderFromFileName(fv.file_name);
+        const created = fv.created_at ? new Date(fv.created_at) : new Date();
+        return {
+            id: fv.id,
+            backFileVerId: fv.id,
+            name,
+            mime_type: fv.mime_type,
+            size_bytes: fv.size_bytes,
+            date: created.toLocaleDateString('pt-BR'),
+            user: comment?.user || '-',
+            annotation: comment?.body || '',
+            confidentiality: comment?.confidentiality || 'Geral',
+        };
+    };
+
+    // Group backend files into the local folder structure by file_name prefix (causa__, prejuizo__, ...).
+    // Files without a recognized prefix fall into "gerencial" (private folder).
+    const groupFilesIntoFolders = (folders, files) => {
+        const byCategory = { causa: [], prejuizo: [], liquidacao: [], gerencial: [] };
+        for (const fv of files) {
+            const { category } = parseFolderFromFileName(fv.file_name);
+            const target = category && byCategory[category] !== undefined ? category : 'gerencial';
+            byCategory[target].push(fileVerToDoc(fv));
+        }
+        return folders.map(f => ({ ...f, documents: byCategory[f.category] || f.documents }));
+    };
+
+    const refreshClaimFiles = useCallback(async (claimId) => {
+        if (isMockEnabled() || !getToken()) return;
+        try {
+            const res = await claimsService.listFiles(claimId);
+            const files = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+            updateClaimLocal(claimId, c => ({ ...c, folders: groupFilesIntoFolders(c.folders, files) }));
+        } catch (err) {
+            console.error('[ClaimsContext] failed to fetch files for', claimId, err);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const uploadFileToClaim = async (claimId, folderCategory, file, meta = {}) => {
+        if (!file) return null;
+
+        if (isMockEnabled()) {
+            const docData = { name: file.name, annotation: meta.annotation || '', confidentiality: meta.confidentiality || 'Geral', user: currentUser?.name || 'Sistema' };
+            updateClaimLocal(claimId, c => {
+                const folder = c.folders.find(f => f.category === folderCategory) || c.folders[0];
+                const folders = c.folders.map(f => f.id === folder.id ? { ...f, documents: [{ id: Date.now().toString(), ...docData, date: new Date().toLocaleDateString('pt-BR') }, ...f.documents] } : f);
+                const activity = { id: Date.now().toString(), user: docData.user, action: `enviou o documento "${docData.name}"`, date: new Date().toLocaleString('pt-BR'), type: 'UPLOAD' };
+                return { ...c, folders, activities: [activity, ...c.activities], lastModified: new Date().toLocaleDateString('pt-BR') };
+            });
+            return { id: Date.now().toString(), file_name: `${folderCategory}/${file.name}` };
+        }
+
+        const fileVer = await claimsService.uploadDocument(claimId, folderCategory, file);
+        if (meta.annotation && fileVer?.id) {
+            try {
+                await claimsService.addComment(claimId, meta.annotation, fileVer.id);
+            } catch (err) {
+                console.error('[ClaimsContext] failed to attach comment after upload:', err);
+            }
+        }
+        await refreshClaimFiles(claimId);
+        updateClaimLocal(claimId, c => ({
+            ...c,
+            activities: [{ id: Date.now().toString(), user: currentUser?.name || 'Sistema', action: `enviou o documento "${file.name}"`, date: new Date().toLocaleString('pt-BR'), type: 'UPLOAD' }, ...c.activities],
+            lastModified: new Date().toLocaleDateString('pt-BR'),
+        }));
+        return fileVer;
+    };
+
+    // Backwards-compatible: addDocument is now a thin wrapper that ClaimDetails can keep using
+    // for purely-local document additions. For real uploads, prefer uploadFileToClaim.
     const addDocument = (claimId, folderId, docData) => {
         updateClaimLocal(claimId, c => {
             const folders = c.folders.map(f => f.id === folderId ? { ...f, documents: [{ id: Date.now().toString(), ...docData, date: new Date().toLocaleDateString('pt-BR') }, ...f.documents] } : f);
@@ -272,6 +347,8 @@ export const ClaimsProvider = ({ children }) => {
             return { ...c, folders, activities: [activity, ...c.activities], lastModified: new Date().toLocaleDateString('pt-BR') };
         });
     };
+
+    const documentDownloadHref = (fileId) => claimsService.downloadHref(fileId);
 
     const updateChecklistStatus = (claimId, folderId, itemId, received) => {
         updateClaimLocal(claimId, c => {
@@ -320,6 +397,7 @@ export const ClaimsProvider = ({ children }) => {
             currentUser, setCurrentUser, logout,
             claims, addClaim, addDocument, updateChecklistStatus,
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
+            uploadFileToClaim, refreshClaimFiles, documentDownloadHref,
             claimsLoading, claimsError, refreshClaims,
             users, addUser,
             clients, addClientEntity,
