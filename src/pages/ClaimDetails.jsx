@@ -349,8 +349,16 @@ export default function ClaimDetails() {
             user,
             action: entry.action || entry.resource_type,
             date: ts ? ts.toLocaleString('pt-BR') : '',
+            ip_address: entry.ip_address,
+            user_agent: entry.user_agent,
+            metadata: entry.metadata,
+            resource_type: entry.resource_type,
+            resource_id: entry.resource_id,
+            isBackend: true,
         };
     };
+
+    const [expandedAuditId, setExpandedAuditId] = useState(null);
 
     if (!claim) return <div className="p-20 text-center font-bold text-gray-500 h-full flex items-center justify-center">Sinistro não encontrado.</div>;
 
@@ -565,19 +573,49 @@ export default function ClaimDetails() {
                             {(canReadAudit && Array.isArray(auditEntries) && auditEntries.length > 0
                                 ? auditEntries.slice(0, 6).map(formatAuditEntry)
                                 : (claim.activities || []).slice(0, 4)
-                            ).map((activity) => (
-                                <div key={activity.id} className="relative pl-8">
-                                    <div className="absolute left-0 top-1 w-6 h-6 bg-white rounded-full border-2 border-gray-100 flex items-center justify-center z-10 shadow-sm">
-                                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            ).map((activity) => {
+                                const isExpanded = expandedAuditId === activity.id;
+                                const expandable = activity.isBackend && (activity.ip_address || activity.user_agent || (activity.metadata && Object.keys(activity.metadata).length > 0));
+                                return (
+                                    <div key={activity.id} className="relative pl-8">
+                                        <div className="absolute left-0 top-1 w-6 h-6 bg-white rounded-full border-2 border-gray-100 flex items-center justify-center z-10 shadow-sm">
+                                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-gray-600 leading-tight font-bold">
+                                                <span className="text-gray-900">{activity.user}</span> {activity.action}
+                                            </p>
+                                            <p className="text-[9px] text-gray-400 font-bold mt-1 uppercase tracking-tighter">
+                                                {activity.date}
+                                                {expandable && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setExpandedAuditId(isExpanded ? null : activity.id)}
+                                                        className="ml-2 text-blue-600 hover:underline"
+                                                    >
+                                                        {isExpanded ? 'ocultar' : 'detalhes'}
+                                                    </button>
+                                                )}
+                                            </p>
+                                            {expandable && isExpanded && (
+                                                <div className="mt-2 p-3 bg-white border border-gray-100 rounded-lg space-y-1 text-[9px] font-mono break-all">
+                                                    {activity.ip_address && (<div><span className="text-gray-400">ip: </span><span className="text-gray-700">{activity.ip_address}</span></div>)}
+                                                    {activity.user_agent && (<div><span className="text-gray-400">user-agent: </span><span className="text-gray-700">{activity.user_agent}</span></div>)}
+                                                    {activity.resource_type && (<div><span className="text-gray-400">resource: </span><span className="text-gray-700">{activity.resource_type}{activity.resource_id ? ` ${String(activity.resource_id).slice(0, 8)}` : ''}</span></div>)}
+                                                    {activity.metadata && Object.keys(activity.metadata).length > 0 && (
+                                                        <div>
+                                                            <p className="text-gray-400 mb-1">metadata:</p>
+                                                            {Object.entries(activity.metadata).map(([k, v]) => (
+                                                                <div key={k} className="pl-2"><span className="text-gray-500">{k}: </span><span className="text-gray-700">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span></div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-[10px] text-gray-600 leading-tight font-bold">
-                                            <span className="text-gray-900">{activity.user}</span> {activity.action}
-                                        </p>
-                                        <p className="text-[9px] text-gray-400 font-bold mt-1 uppercase tracking-tighter">{activity.date}</p>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -689,13 +727,26 @@ export default function ClaimDetails() {
                                                                     </div>
                                                                 </div>
                                                             ) : (
-                                                                <div className="flex items-start gap-3">
-                                                                    <p className="leading-relaxed opacity-80 italic flex-1">"{doc.annotation || '(sem anotação)'}"</p>
-                                                                    {doc.commentId && canEditAnnotation && (
-                                                                        <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                            <button type="button" onClick={() => handleStartEditAnnotation(doc)} className="text-[10px] font-black text-blue-600 hover:underline uppercase tracking-widest">Editar</button>
-                                                                            <button type="button" onClick={() => handleDeleteAnnotation(doc)} className="text-[10px] font-black text-red-500 hover:underline uppercase tracking-widest">Remover</button>
-                                                                        </div>
+                                                                <div className="space-y-2">
+                                                                    <div className="flex items-start gap-3">
+                                                                        <p className="leading-relaxed opacity-80 italic flex-1">"{doc.annotation || '(sem anotação)'}"</p>
+                                                                        {doc.commentId && canEditAnnotation && (
+                                                                            <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                                <button type="button" onClick={() => handleStartEditAnnotation(doc)} className="text-[10px] font-black text-blue-600 hover:underline uppercase tracking-widest">Editar</button>
+                                                                                <button type="button" onClick={() => handleDeleteAnnotation(doc)} className="text-[10px] font-black text-red-500 hover:underline uppercase tracking-widest">Remover</button>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    {doc.commentId && (
+                                                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                                                            por {(resolveActorLabel?.(doc.commentAuthorId) || actorLabelFromDbId(doc.commentAuthorId, '—'))}
+                                                                            {doc.commentCreatedAt && (
+                                                                                <span> · {new Date(doc.commentCreatedAt).toLocaleString('pt-BR')}</span>
+                                                                            )}
+                                                                            {doc.commentUpdatedAt && doc.commentUpdatedAt !== doc.commentCreatedAt && (
+                                                                                <span className="text-amber-600"> · editado em {new Date(doc.commentUpdatedAt).toLocaleString('pt-BR')}</span>
+                                                                            )}
+                                                                        </p>
                                                                     )}
                                                                 </div>
                                                             )}
