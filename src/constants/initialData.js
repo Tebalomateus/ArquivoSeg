@@ -34,6 +34,7 @@ export const INITIAL_USERS = [
     { id: 1, name: 'Carlos Sato', email: 'sato@arquivoseg.com.br', role: 'ADMIN', status: 'Ativo', company: 'ArquivoSeg' },
     { id: 2, name: 'Ricardo Silva', email: 'ricardo@corretora.com', role: 'CORRETOR', status: 'Ativo', company: 'Silva Seguros' },
     { id: 3, name: 'Ana Souza', email: 'ana.souza@allianz.com', role: 'PERITO', status: 'Ativo', company: 'Allianz' },
+    { id: 4, name: 'Maria Costa', email: 'analista@arquivoseg.com.br', role: 'ANALISTA', status: 'Ativo', company: 'ArquivoSeg' },
 ];
 
 export const INITIAL_CLIENTS = [

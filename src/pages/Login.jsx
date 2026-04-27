@@ -3,34 +3,43 @@ import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Mail, Lock, ArrowRight, Github } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { INITIAL_USERS } from '../constants/initialData';
+import { loginWithUiRole } from '../api/auth';
+import { isMockEnabled } from '../api/client';
 
 export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
     const navigate = useNavigate();
     const { setCurrentUser } = useClaims();
 
     const handleLogin = (e) => {
         e.preventDefault();
+        setError('');
         setIsLoading(true);
 
-        // Simulating login delay
         setTimeout(() => {
-            // Robust Mock validation using initialData
             const user = INITIAL_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
 
-            if (user) {
-                setCurrentUser(user);
-            } else {
-                // Fallback for demo if email not in list
-                setCurrentUser({ name: 'Visitante Demo', role: 'CORRETOR', email: email });
+            if (!user) {
+                setError('Email não cadastrado. Use um dos perfis de INITIAL_USERS.');
+                setIsLoading(false);
+                return;
             }
 
+            const { backRole, token } = loginWithUiRole(user.role);
+            if (!isMockEnabled() && !token) {
+                setError(`PAT não configurado para o papel ${user.role}. Verifique .env.local.`);
+                setIsLoading(false);
+                return;
+            }
+
+            setCurrentUser({ ...user, backRole });
             localStorage.setItem('arquivoseg_authenticated', 'true');
             navigate('/');
             setIsLoading(false);
-        }, 1500);
+        }, 600);
     };
 
     return (
@@ -82,6 +91,12 @@ export default function Login() {
                         <h2 className="text-3xl font-bold text-gray-900 font-display">Bem-vindo de volta</h2>
                         <p className="text-gray-500 mt-2 font-medium">Acesse sua conta para gerenciar sinistros.</p>
                     </div>
+
+                    {error && (
+                        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-sm font-medium text-red-700">
+                            {error}
+                        </div>
+                    )}
 
                     <form onSubmit={handleLogin} className="space-y-6">
                         <div className="space-y-4">
@@ -147,8 +162,15 @@ export default function Login() {
                         </button>
                     </form>
 
-                    <footer className="pt-8 text-center border-t border-gray-100">
+                    <footer className="pt-8 text-center border-t border-gray-100 space-y-3">
                         <p className="text-sm text-gray-400 font-medium">Não tem acesso? Fale com nosso suporte.</p>
+                        <div className="text-[10px] text-gray-400 font-mono leading-relaxed">
+                            <p className="font-bold mb-1 text-gray-500 uppercase tracking-widest">Perfis de teste (dev)</p>
+                            <p>sato@arquivoseg.com.br · admin</p>
+                            <p>ricardo@corretora.com · corretor (manager)</p>
+                            <p>ana.souza@allianz.com · perito (contributor)</p>
+                            <p>analista@arquivoseg.com.br · analista (viewer)</p>
+                        </div>
                     </footer>
                 </div>
             </div>

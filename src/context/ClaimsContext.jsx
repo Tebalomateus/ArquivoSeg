@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { INITIAL_CLAIMS, INITIAL_USERS, INITIAL_CLIENTS, INITIAL_LINKS } from '../constants/initialData';
 import { claimsService } from '../services/claimsService';
+import { loginWithUiRole, logoutSession } from '../api/auth';
+import { getToken } from '../api/client';
 
 const ClaimsContext = createContext();
 
@@ -82,7 +84,17 @@ export const ClaimsProvider = ({ children }) => {
         }
     }, [claims, users, clients, links, settings, currentUser]);
 
-    const logout = () => setCurrentUser(null);
+    // Re-establish API token on reload when session is still active
+    useEffect(() => {
+        if (currentUser && !getToken()) {
+            loginWithUiRole(currentUser.role);
+        }
+    }, [currentUser]);
+
+    const logout = () => {
+        logoutSession();
+        setCurrentUser(null);
+    };
 
     const addClaim = async (newClaim) => {
         const now = new Date();
