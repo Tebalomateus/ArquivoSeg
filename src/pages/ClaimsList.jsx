@@ -23,7 +23,7 @@ const parseDate = (dateStr) => {
  * centralized work queue with advanced filtering and robust sorting.
  */
 export default function ClaimsList() {
-    const { claims } = useClaims();
+    const { claims, claimsLoading, claimsError, refreshClaims } = useClaims();
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -76,6 +76,23 @@ export default function ClaimsList() {
 
     return (
         <div className="space-y-8 relative z-10 animate-fade-in pb-20">
+            {claimsError && (
+                <div className="flex items-start gap-4 p-5 bg-red-50 border border-red-200 rounded-2xl shadow-sm">
+                    <AlertCircle size={20} className="text-red-600 mt-0.5 shrink-0" />
+                    <div className="flex-1 space-y-1">
+                        <p className="text-sm font-bold text-red-800">Falha ao carregar sinistros do servidor</p>
+                        <p className="text-xs text-red-700 font-medium">{claimsError}</p>
+                    </div>
+                    <button
+                        onClick={() => refreshClaims?.()}
+                        disabled={claimsLoading}
+                        className="px-4 py-2 bg-white border border-red-200 text-red-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all disabled:opacity-50"
+                    >
+                        {claimsLoading ? 'Recarregando...' : 'Tentar novamente'}
+                    </button>
+                </div>
+            )}
+
             {/* Header Section */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 bg-white/40 p-6 rounded-3xl border border-white/60 backdrop-blur-md shadow-sm">
                 <div className="space-y-2">
