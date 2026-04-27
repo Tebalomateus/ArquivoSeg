@@ -32,6 +32,7 @@ import {
     Filter
 } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
+import { actorLabelFromDbId } from '../api/auth';
 
 /**
  * Modal component for secure file uploads.
@@ -207,7 +208,7 @@ export default function ClaimDetails() {
         const ts = entry.timestamp ? new Date(entry.timestamp) : null;
         return {
             id: entry.id,
-            user: entry.actor_user_id ? `User ${String(entry.actor_user_id).slice(0, 8)}` : 'Sistema',
+            user: entry.actor_user_id ? actorLabelFromDbId(entry.actor_user_id) : 'Sistema',
             action: entry.action || entry.resource_type,
             date: ts ? ts.toLocaleString('pt-BR') : '',
         };

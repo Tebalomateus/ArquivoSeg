@@ -34,3 +34,22 @@ export function loginWithUiRole(uiRole) {
 export function logoutSession() {
     setToken(null);
 }
+
+const DBID_TO_ROLE = (() => {
+    const map = {};
+    const pairs = [
+        ['ADMIN', import.meta.env.VITE_USER_DBID_ADMIN],
+        ['CORRETOR', import.meta.env.VITE_USER_DBID_MANAGER],
+        ['PERITO', import.meta.env.VITE_USER_DBID_CONTRIBUTOR],
+        ['ANALISTA', import.meta.env.VITE_USER_DBID_VIEWER],
+    ];
+    for (const [role, dbId] of pairs) {
+        if (dbId) map[dbId] = role;
+    }
+    return map;
+})();
+
+export function actorLabelFromDbId(dbId, fallback = '—') {
+    if (!dbId) return fallback;
+    return DBID_TO_ROLE[dbId] || `Usuário ${String(dbId).slice(0, 8)}`;
+}
