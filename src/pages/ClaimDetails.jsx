@@ -169,6 +169,8 @@ export default function ClaimDetails() {
         uploadFileToClaim,
         refreshClaimFiles,
         documentDownloadHref,
+        fetchAudit,
+        auditByClaim,
         updateChecklistStatus,
         toggleDeadline,
         logView,
@@ -191,6 +193,25 @@ export default function ClaimDetails() {
         if (id && refreshClaimFiles) refreshClaimFiles(id);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
+
+    const canReadAudit = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
+
+    useEffect(() => {
+        if (id && fetchAudit && canReadAudit) fetchAudit(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id, canReadAudit]);
+
+    const auditEntries = auditByClaim?.[id];
+
+    const formatAuditEntry = (entry) => {
+        const ts = entry.timestamp ? new Date(entry.timestamp) : null;
+        return {
+            id: entry.id,
+            user: entry.actor_user_id ? `User ${String(entry.actor_user_id).slice(0, 8)}` : 'Sistema',
+            action: entry.action || entry.resource_type,
+            date: ts ? ts.toLocaleString('pt-BR') : '',
+        };
+    };
 
     if (!claim) return <div className="p-20 text-center font-bold text-gray-500 h-full flex items-center justify-center">Sinistro não encontrado.</div>;
 
@@ -393,9 +414,18 @@ export default function ClaimDetails() {
                     <div className="card py-5 border-gray-100 bg-gray-50/50">
                         <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 mb-6">
                             <History size={14} /> Audit Trail Recente
+                            {canReadAudit && Array.isArray(auditEntries) && (
+                                <span className="ml-auto text-[9px] font-black bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100">BACKEND</span>
+                            )}
                         </h3>
+                        {canReadAudit && auditEntries === null && (
+                            <p className="text-[10px] text-amber-600 font-medium">Sem permissão para ler audit logs.</p>
+                        )}
                         <div className="space-y-6 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-gray-200">
-                            {claim.activities?.slice(0, 4).map((activity) => (
+                            {(canReadAudit && Array.isArray(auditEntries) && auditEntries.length > 0
+                                ? auditEntries.slice(0, 6).map(formatAuditEntry)
+                                : (claim.activities || []).slice(0, 4)
+                            ).map((activity) => (
                                 <div key={activity.id} className="relative pl-8">
                                     <div className="absolute left-0 top-1 w-6 h-6 bg-white rounded-full border-2 border-gray-100 flex items-center justify-center z-10 shadow-sm">
                                         <div className="w-2 h-2 bg-blue-500 rounded-full"></div>

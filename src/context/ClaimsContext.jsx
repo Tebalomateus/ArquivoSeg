@@ -102,6 +102,7 @@ export const ClaimsProvider = ({ children }) => {
 
     const [claimsLoading, setClaimsLoading] = useState(false);
     const [claimsError, setClaimsError] = useState(null);
+    const [auditByClaim, setAuditByClaim] = useState({});
 
     const [users, setUsers] = useState(() => {
         try {
@@ -350,6 +351,25 @@ export const ClaimsProvider = ({ children }) => {
 
     const documentDownloadHref = (fileId) => claimsService.downloadHref(fileId);
 
+    const fetchAudit = useCallback(async (claimId) => {
+        if (!claimId) return [];
+        if (isMockEnabled() || !getToken()) return [];
+        try {
+            const res = await claimsService.listAudit(claimId);
+            const entries = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+            setAuditByClaim(prev => ({ ...prev, [claimId]: entries }));
+            return entries;
+        } catch (err) {
+            // 403 is expected for viewer/contributor — surface empty list.
+            if (err?.status === 403) {
+                setAuditByClaim(prev => ({ ...prev, [claimId]: null }));
+                return null;
+            }
+            console.error('[ClaimsContext] failed to fetch audit for', claimId, err);
+            return [];
+        }
+    }, []);
+
     const updateChecklistStatus = (claimId, folderId, itemId, received) => {
         updateClaimLocal(claimId, c => {
             const folders = c.folders.map(f => {
@@ -398,6 +418,7 @@ export const ClaimsProvider = ({ children }) => {
             claims, addClaim, addDocument, updateChecklistStatus,
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
             uploadFileToClaim, refreshClaimFiles, documentDownloadHref,
+            fetchAudit, auditByClaim,
             claimsLoading, claimsError, refreshClaims,
             users, addUser,
             clients, addClientEntity,
