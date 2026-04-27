@@ -4,6 +4,7 @@ import * as filesApi from '../api/files';
 import * as commentsApi from '../api/comments';
 import * as auditApi from '../api/audit';
 import * as sharesApi from '../api/shares';
+import * as clientsApi from '../api/clients';
 
 const realService = {
     fetchAllClaims() {
@@ -41,6 +42,18 @@ const realService = {
     },
     revokeShare(tokenId) {
         return sharesApi.revokeShare(tokenId);
+    },
+    listClients(opts) {
+        return clientsApi.listClients(opts);
+    },
+    createClient(payload) {
+        return clientsApi.createClient(payload);
+    },
+    updateClient(id, patch) {
+        return clientsApi.updateClient(id, patch);
+    },
+    deleteClient(id) {
+        return clientsApi.deleteClient(id);
     },
     downloadHref(fileId) {
         return filesApi.downloadHref(fileId);
@@ -92,6 +105,20 @@ const mockService = {
     },
     async revokeShare(tokenId) {
         console.log(`[MOCK] revokeShare ${tokenId}`);
+    },
+    async listClients() {
+        const saved = localStorage.getItem('arquivoseg_clients');
+        const clients = saved ? JSON.parse(saved) : [];
+        return { data: clients, total: clients.length };
+    },
+    async createClient(payload) {
+        return { id: 'c-' + Date.now(), ...payload };
+    },
+    async updateClient(id, patch) {
+        return { id, ...patch };
+    },
+    async deleteClient() {
+        return null;
     },
     downloadHref(fileId) {
         return `#mock-download-${fileId}`;

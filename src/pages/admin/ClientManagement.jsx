@@ -15,9 +15,34 @@ import {
 import { useClaims } from '../../context/ClaimsContext';
 
 export default function ClientManagement() {
-    const { clients, addClientEntity } = useClaims();
+    const { clients, clientsLoading, addClientEntity, deleteClientEntity, refreshClients } = useClaims();
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [form, setForm] = useState({ name: '', type: 'SEGURADORA', contact: '', billing_method: '' });
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        if (!form.name) { setError('Nome obrigatório.'); return; }
+        setSubmitting(true);
+        try {
+            await addClientEntity(form);
+            setForm({ name: '', type: 'SEGURADORA', contact: '', billing_method: '' });
+            setIsModalOpen(false);
+        } catch (err) {
+            setError(err?.message || 'Falha ao criar cliente.');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Excluir este cliente?')) return;
+        try { await deleteClientEntity(id); }
+        catch (err) { alert(err?.message || 'Falha ao excluir.'); }
+    };
 
     const filteredClients = useMemo(() => {
         return clients.filter(c =>
@@ -35,7 +60,11 @@ export default function ClientManagement() {
                         <ArrowLeft size={16} />
                         Voltar ao Painel
                     </Link>
-                    <h1 className="text-3xl font-bold text-slate-900 font-display">Gestão de Clientes</h1>
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-3xl font-bold text-slate-900 font-display">Gestão de Clientes</h1>
+                        {clientsLoading && <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Carregando...</span>}
+                        <button onClick={() => refreshClients?.()} className="text-[10px] font-black text-blue-600 hover:underline uppercase tracking-widest">Atualizar</button>
+                    </div>
                     <p className="text-slate-500 font-medium">Administre seguradoras, corretoras e níveis de faturamento.</p>
                 </div>
                 <button
@@ -123,14 +152,17 @@ export default function ClientManagement() {
                                     </td>
                                     <td className="p-7">
                                         <div className="flex items-center gap-2 text-xs font-bold text-slate-600 bg-slate-50 w-fit px-3 py-1.5 rounded-lg border border-slate-100">
-                                            <Wallet size={14} className="text-emerald-500" /> {client.billingMethod}
+                                            <Wallet size={14} className="text-emerald-500" /> {client.billing_method || client.billingMethod || '-'}
                                         </div>
                                     </td>
                                     <td className="p-7">
-                                        <span className={`text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest ${client.status === 'Adimplente' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                                        <span className={`text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest ${client.status === 'Ativo' || client.status === 'Adimplente' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
                                             }`}>
                                             {client.status}
                                         </span>
+                                    </td>
+                                    <td className="p-7 text-right">
+                                        <button onClick={() => handleDelete(client.id)} className="text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-700">Excluir</button>
                                     </td>
                                     <td className="p-7 text-right">
                                         <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-xl transition-all border border-transparent hover:border-slate-100 shadow-sm">
@@ -143,6 +175,41 @@ export default function ClientManagement() {
                     </table>
                 </div>
             </div>
+
+            {isModalOpen && (
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setIsModalOpen(false)}>
+                    <div className="bg-white rounded-2xl p-8 w-full max-w-lg shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-xl font-black text-gray-900 font-display">Novo Cliente B2B</h3>
+                        {error && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{error}</div>}
+                        <form onSubmit={handleSubmit} className="space-y-3">
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Nome *</label>
+                                <input type="text" required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 mt-1" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tipo *</label>
+                                <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 mt-1 bg-white">
+                                    <option value="SEGURADORA">Seguradora</option>
+                                    <option value="CORRETORA">Corretora</option>
+                                    <option value="AUDITORIA">Auditoria</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Contato</label>
+                                <input type="text" value={form.contact} onChange={e => setForm({ ...form, contact: e.target.value })} placeholder="email, telefone ou nome" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 mt-1" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Método de cobrança</label>
+                                <input type="text" value={form.billing_method} onChange={e => setForm({ ...form, billing_method: e.target.value })} placeholder="Boleto, PIX, Cartão..." className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 mt-1" />
+                            </div>
+                            <div className="flex gap-2 pt-2">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold">Cancelar</button>
+                                <button type="submit" disabled={submitting} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold disabled:opacity-50">{submitting ? 'Salvando...' : 'Criar'}</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

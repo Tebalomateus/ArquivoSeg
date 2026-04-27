@@ -105,7 +105,20 @@ const INSURERS_CONFIG = {
 
 export default function NewClaim() {
     const navigate = useNavigate();
-    const { addClaim } = useClaims();
+    const { addClaim, clients } = useClaims();
+
+    // Combine hardcoded config (which provides modality templates) with the
+    // tenant's registered insurers/brokers from the backend clients API.
+    const apiInsurerNames = (clients || [])
+        .filter(c => c.type === 'SEGURADORA')
+        .map(c => c.name);
+    const apiBrokerNames = (clients || [])
+        .filter(c => c.type === 'CORRETORA')
+        .map(c => c.name);
+    const insurerOptions = Array.from(new Set([
+        ...Object.keys(INSURERS_CONFIG),
+        ...apiInsurerNames,
+    ])).sort((a, b) => a.localeCompare(b));
 
     // Informações da Apólice
     const [claimNumber, setClaimNumber] = useState('');
@@ -253,7 +266,7 @@ export default function NewClaim() {
                             className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white"
                         >
                             <option value="">Selecione...</option>
-                            {Object.keys(INSURERS_CONFIG).map(ins => (
+                            {insurerOptions.map(ins => (
                                 <option key={ins} value={ins}>{ins}</option>
                             ))}
                         </select>

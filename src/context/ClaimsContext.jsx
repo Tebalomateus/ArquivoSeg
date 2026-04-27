@@ -143,11 +143,15 @@ export const ClaimsProvider = ({ children }) => {
     });
 
     const [clients, setClients] = useState(() => {
-        try {
-            const saved = localStorage.getItem('arquivoseg_clients');
-            return saved ? JSON.parse(saved) : INITIAL_CLIENTS;
-        } catch { return INITIAL_CLIENTS; }
+        if (isMockEnabled()) {
+            try {
+                const saved = localStorage.getItem('arquivoseg_clients');
+                return saved ? JSON.parse(saved) : INITIAL_CLIENTS;
+            } catch { return INITIAL_CLIENTS; }
+        }
+        return [];
     });
+    const [clientsLoading, setClientsLoading] = useState(false);
 
     const [links, setLinks] = useState(() => {
         try {
@@ -175,9 +179,9 @@ export const ClaimsProvider = ({ children }) => {
     useEffect(() => {
         if (isMockEnabled()) {
             localStorage.setItem('arquivoseg_claims', JSON.stringify(claims));
+            localStorage.setItem('arquivoseg_clients', JSON.stringify(clients));
         }
         localStorage.setItem('arquivoseg_users', JSON.stringify(users));
-        localStorage.setItem('arquivoseg_clients', JSON.stringify(clients));
         localStorage.setItem('arquivoseg_links', JSON.stringify(links));
         localStorage.setItem('arquivoseg_settings', JSON.stringify(settings));
         localStorage.setItem('arquivoseg_claims_cache', JSON.stringify(claimsCache));
@@ -508,7 +512,54 @@ export const ClaimsProvider = ({ children }) => {
     const updateClaimObservations = (id, observations) => updateClaimLocal(id, c => ({ ...c, observations }));
 
     const addUser = (userData) => setUsers(prev => [{ id: Date.now(), status: 'Ativo', ...userData }, ...prev]);
-    const addClientEntity = (clientData) => setClients(prev => [{ id: 'c-' + Date.now(), ...clientData }, ...prev]);
+
+    const refreshClients = useCallback(async () => {
+        if (isMockEnabled() || !getToken()) return;
+        setClientsLoading(true);
+        try {
+            const res = await claimsService.listClients();
+            const data = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+            setClients(data);
+        } catch (err) {
+            console.error('[ClaimsContext] failed to fetch clients:', err);
+        } finally {
+            setClientsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (currentUser) refreshClients();
+    }, [currentUser, refreshClients]);
+
+    const addClientEntity = async (clientData) => {
+        if (isMockEnabled()) {
+            const newClient = { id: 'c-' + Date.now(), ...clientData };
+            setClients(prev => [newClient, ...prev]);
+            return newClient;
+        }
+        const created = await claimsService.createClient(clientData);
+        setClients(prev => [created, ...prev]);
+        return created;
+    };
+
+    const updateClientEntity = async (id, patch) => {
+        if (isMockEnabled()) {
+            setClients(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c));
+            return;
+        }
+        const updated = await claimsService.updateClient(id, patch);
+        setClients(prev => prev.map(c => c.id === id ? updated : c));
+    };
+
+    const deleteClientEntity = async (id) => {
+        if (isMockEnabled()) {
+            setClients(prev => prev.filter(c => c.id !== id));
+            return;
+        }
+        await claimsService.deleteClient(id);
+        setClients(prev => prev.filter(c => c.id !== id));
+    };
+
     const updateSettings = (newSettings) => setSettings(newSettings);
 
     const isGuestVerified = (token) => sessionStorage.getItem(`verified_guest_${token}`) === 'true';
@@ -523,7 +574,7 @@ export const ClaimsProvider = ({ children }) => {
             fetchAudit, auditByClaim,
             claimsLoading, claimsError, refreshClaims,
             users, addUser,
-            clients, addClientEntity,
+            clients, clientsLoading, addClientEntity, updateClientEntity, deleteClientEntity, refreshClients,
             links, setLinks,
             settings, updateSettings,
             isGuestVerified,
