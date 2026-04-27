@@ -487,6 +487,28 @@ export const ClaimsProvider = ({ children }) => {
 
     const documentDownloadHref = (fileId) => claimsService.downloadHref(fileId);
 
+    const deleteDocument = async (claimId, fileVerId) => {
+        if (isMockEnabled() || !getToken()) return;
+        try {
+            await claimsService.deleteDocument(fileVerId);
+            await refreshClaimFiles(claimId);
+        } catch (err) {
+            alert(`Falha ao excluir documento: ${err?.message || err}`);
+            throw err;
+        }
+    };
+
+    const listFileVersions = useCallback(async (fileVerId) => {
+        if (isMockEnabled() || !getToken() || !fileVerId) return [];
+        try {
+            const res = await claimsService.listFileVersions(fileVerId);
+            return Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+        } catch (err) {
+            console.error('[ClaimsContext] failed to list versions for', fileVerId, err);
+            return [];
+        }
+    }, []);
+
     const listFileShares = useCallback(async (fileVerId) => {
         if (isMockEnabled() || !getToken() || !fileVerId) return [];
         try {
@@ -664,6 +686,7 @@ export const ClaimsProvider = ({ children }) => {
             transitionStatus, archiveClaim, assignClaim,
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
             uploadFileToClaim, refreshClaimFiles, documentDownloadHref,
+            deleteDocument, listFileVersions,
             listFileShares, createFileShare, revokeFileShare, countShareAccesses,
             fetchAudit, auditByClaim,
             claimsLoading, claimsError, refreshClaims, claimsFilter,

@@ -26,6 +26,12 @@ const realService = {
     uploadDocument(processId, folderCategory, file) {
         return filesApi.uploadFile(processId, file, folderCategory);
     },
+    deleteDocument(fileVerId) {
+        return filesApi.deleteFile(fileVerId);
+    },
+    listFileVersions(fileVerId) {
+        return filesApi.listVersions(fileVerId);
+    },
     addComment(processId, body, fileVerId) {
         return commentsApi.createComment(processId, body, fileVerId);
     },
@@ -92,6 +98,12 @@ const mockService = {
     async uploadDocument(claimId, folderCategory, file) {
         console.log(`[MOCK] uploadDocument claim=${claimId} folder=${folderCategory}`, file?.name);
         return { id: Date.now().toString(), file_name: `${folderCategory || ''}/${file?.name || ''}`, created_at: new Date().toISOString() };
+    },
+    async deleteDocument(fileVerId) {
+        console.log(`[MOCK] deleteDocument ${fileVerId}`);
+    },
+    async listFileVersions() {
+        return { data: [], total: 0 };
     },
     async addComment(processId, body, fileVerId) {
         console.log(`[MOCK] addComment process=${processId} fileVer=${fileVerId}`, body);

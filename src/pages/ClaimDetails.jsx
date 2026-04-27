@@ -181,6 +181,8 @@ export default function ClaimDetails() {
         listFileShares,
         createFileShare,
         revokeFileShare,
+        deleteDocument,
+        listFileVersions,
         transitionStatus,
         archiveClaim,
         assignClaim,
@@ -278,6 +280,22 @@ export default function ClaimDetails() {
     const canTransitionStatus = currentUser?.backRole === 'contributor' || currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
     const canArchive = currentUser?.backRole === 'admin';
     const nextStatuses = (claim?.backStatus && VALID_NEXT_STATUS[claim.backStatus]) || [];
+    const canDeleteFile = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
+    const [versionsModal, setVersionsModal] = useState({ open: false, file: null, versions: [] });
+
+    const handleDeleteFile = async (doc) => {
+        if (!doc?.backFileVerId) return;
+        if (!confirm(`Excluir o documento "${doc.name}"? Essa ação é definitiva.`)) return;
+        try { await deleteDocument(claim.id, doc.backFileVerId); }
+        catch (err) { console.error(err); }
+    };
+
+    const openVersions = async (doc) => {
+        if (!doc?.backFileVerId) return;
+        const versions = await listFileVersions(doc.backFileVerId);
+        setVersionsModal({ open: true, file: doc, versions });
+    };
+
     const handleAssign = async (userId) => {
         try { await assignClaim(claim.id, userId || null); }
         catch (err) { /* error already alerted in context */ console.error(err); }
@@ -626,15 +644,35 @@ export default function ClaimDetails() {
                                                         <Eye size={18} />
                                                     </button>
                                                     {doc.backFileVerId ? (
-                                                        <a
-                                                            href={documentDownloadHref(doc.backFileVerId)}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="w-10 h-10 flex items-center justify-center bg-white shadow-lg border border-gray-100 rounded-xl text-gray-600 hover:bg-blue-600 hover:text-white transition-all"
-                                                            title="Baixar documento"
-                                                        >
-                                                            <Download size={18} />
-                                                        </a>
+                                                        <>
+                                                            <a
+                                                                href={documentDownloadHref(doc.backFileVerId)}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="w-10 h-10 flex items-center justify-center bg-white shadow-lg border border-gray-100 rounded-xl text-gray-600 hover:bg-blue-600 hover:text-white transition-all"
+                                                                title="Baixar documento"
+                                                            >
+                                                                <Download size={18} />
+                                                            </a>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openVersions(doc)}
+                                                                className="w-10 h-10 flex items-center justify-center bg-white shadow-lg border border-gray-100 rounded-xl text-gray-600 hover:bg-purple-600 hover:text-white transition-all"
+                                                                title="Histórico de versões"
+                                                            >
+                                                                <History size={18} />
+                                                            </button>
+                                                            {canDeleteFile && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleDeleteFile(doc)}
+                                                                    className="w-10 h-10 flex items-center justify-center bg-white shadow-lg border border-gray-100 rounded-xl text-gray-600 hover:bg-red-600 hover:text-white transition-all"
+                                                                    title="Excluir documento"
+                                                                >
+                                                                    <X size={18} />
+                                                                </button>
+                                                            )}
+                                                        </>
                                                     ) : (
                                                         <button className="w-10 h-10 flex items-center justify-center bg-white shadow-lg border border-gray-100 rounded-xl text-gray-300 cursor-not-allowed" title="Disponível após upload sincronizado">
                                                             <Download size={18} />
@@ -948,6 +986,48 @@ export default function ClaimDetails() {
                 onUpload={handleUpload}
                 folderName={currentFolder.name}
             />
+
+            {versionsModal.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setVersionsModal({ open: false, file: null, versions: [] })}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-8 space-y-4" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+                            <div>
+                                <h3 className="text-xl font-black text-gray-900 font-display uppercase tracking-tight">Histórico de Versões</h3>
+                                <p className="text-xs text-gray-500 font-medium mt-1">{versionsModal.file?.name}</p>
+                            </div>
+                            <button onClick={() => setVersionsModal({ open: false, file: null, versions: [] })} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        {versionsModal.versions.length === 0 ? (
+                            <p className="text-sm text-gray-500 text-center py-8">Sem histórico de versões para este arquivo.</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {versionsModal.versions.map(v => {
+                                    const created = v.created_at ? new Date(v.created_at).toLocaleString('pt-BR') : '-';
+                                    return (
+                                        <div key={v.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                            <div>
+                                                <p className="text-sm font-bold text-gray-900">v{v.version}</p>
+                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{v.size_bytes} bytes · {v.mime_type}</p>
+                                                <p className="text-[10px] text-gray-400 font-bold mt-1">enviado em {created}</p>
+                                            </div>
+                                            <a
+                                                href={documentDownloadHref(v.id)}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-700"
+                                            >
+                                                Baixar
+                                            </a>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
