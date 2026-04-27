@@ -15,10 +15,15 @@ const STATUS_BACK_TO_UI = {
     archived: 'Arquivado',
 };
 
+// Short random id for purely client-side keys (checklist items, share tokens, folder slots).
+const randId = () => (typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID().slice(0, 9)
+    : Math.random().toString(36).slice(2, 11));
+
 const buildFolders = (initialChecklist) => [
-    { id: 'f1-' + Date.now(), name: 'Causa', category: 'causa', completion: 0, documents: [], checklist: (initialChecklist || []).filter(i => i.folder === 'Causa').map(i => ({ ...i, id: Math.random().toString(36).substr(2, 9), received: false })) },
-    { id: 'f2-' + Date.now(), name: 'Prejuízo', category: 'prejuizo', completion: 0, documents: [], checklist: (initialChecklist || []).filter(i => i.folder === 'Prejuízo').map(i => ({ ...i, id: Math.random().toString(36).substr(2, 9), received: false })) },
-    { id: 'f3-' + Date.now(), name: 'Liquidação', category: 'liquidacao', completion: 0, documents: [], checklist: (initialChecklist || []).filter(i => i.folder === 'Liquidação').map(i => ({ ...i, id: Math.random().toString(36).substr(2, 9), received: false })) },
+    { id: 'f1-' + Date.now(), name: 'Causa', category: 'causa', completion: 0, documents: [], checklist: (initialChecklist || []).filter(i => i.folder === 'Causa').map(i => ({ ...i, id: randId(), received: false })) },
+    { id: 'f2-' + Date.now(), name: 'Prejuízo', category: 'prejuizo', completion: 0, documents: [], checklist: (initialChecklist || []).filter(i => i.folder === 'Prejuízo').map(i => ({ ...i, id: randId(), received: false })) },
+    { id: 'f3-' + Date.now(), name: 'Liquidação', category: 'liquidacao', completion: 0, documents: [], checklist: (initialChecklist || []).filter(i => i.folder === 'Liquidação').map(i => ({ ...i, id: randId(), received: false })) },
     { id: 'f4-' + Date.now(), name: 'Gerencial', category: 'gerencial', completion: 0, private: true, documents: [], checklist: [] },
 ];
 
@@ -77,7 +82,7 @@ const adaptProcessToClaim = (proc, cached) => {
         deadline: cached?.deadline || computeDeadline(proc.created_at, isComplex),
         activities: cached?.activities || [],
         folders: baseFolders,
-        shareToken: cached?.shareToken || Math.random().toString(36).substr(2, 9),
+        shareToken: cached?.shareToken || randId(),
     };
 };
 
@@ -239,7 +244,7 @@ export const ClaimsProvider = ({ children }) => {
                 type: 'CREATE',
             }],
             folders: buildFolders(newClaim.initialChecklist),
-            shareToken: Math.random().toString(36).substr(2, 9),
+            shareToken: randId(),
         };
 
         const newLink = {
