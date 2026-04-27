@@ -3,6 +3,7 @@ import * as processesApi from '../api/processes';
 import * as filesApi from '../api/files';
 import * as commentsApi from '../api/comments';
 import * as auditApi from '../api/audit';
+import * as sharesApi from '../api/shares';
 
 const realService = {
     fetchAllClaims() {
@@ -28,6 +29,18 @@ const realService = {
     },
     listAudit(processId) {
         return auditApi.listAudit({ resourceType: 'process', resourceId: processId, limit: 50 });
+    },
+    listAuditByShareToken(tokenId) {
+        return auditApi.listAudit({ resourceType: 'share_token', resourceId: tokenId, limit: 200 });
+    },
+    listShares(fileVerId) {
+        return sharesApi.listShares(fileVerId);
+    },
+    createShare(fileVerId, opts) {
+        return sharesApi.createShare(fileVerId, opts);
+    },
+    revokeShare(tokenId) {
+        return sharesApi.revokeShare(tokenId);
     },
     downloadHref(fileId) {
         return filesApi.downloadHref(fileId);
@@ -66,6 +79,19 @@ const mockService = {
     },
     async listAudit() {
         return { data: [], total: 0 };
+    },
+    async listAuditByShareToken() {
+        return { data: [], total: 0 };
+    },
+    async listShares() {
+        return { data: [], total: 0 };
+    },
+    async createShare(fileVerId, opts) {
+        console.log(`[MOCK] createShare file=${fileVerId}`, opts);
+        return { id: Date.now().toString(), token: 'mock-' + Date.now() };
+    },
+    async revokeShare(tokenId) {
+        console.log(`[MOCK] revokeShare ${tokenId}`);
     },
     downloadHref(fileId) {
         return `#mock-download-${fileId}`;

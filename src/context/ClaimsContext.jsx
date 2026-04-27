@@ -419,6 +419,39 @@ export const ClaimsProvider = ({ children }) => {
 
     const documentDownloadHref = (fileId) => claimsService.downloadHref(fileId);
 
+    const listFileShares = useCallback(async (fileVerId) => {
+        if (isMockEnabled() || !getToken() || !fileVerId) return [];
+        try {
+            const res = await claimsService.listShares(fileVerId);
+            return Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+        } catch (err) {
+            if (err?.status === 403) return [];
+            console.error('[ClaimsContext] failed to list shares for', fileVerId, err);
+            return [];
+        }
+    }, []);
+
+    const createFileShare = useCallback(async (fileVerId, opts) => {
+        if (isMockEnabled() || !getToken()) return null;
+        return claimsService.createShare(fileVerId, opts);
+    }, []);
+
+    const revokeFileShare = useCallback(async (tokenId) => {
+        if (isMockEnabled() || !getToken()) return null;
+        return claimsService.revokeShare(tokenId);
+    }, []);
+
+    const countShareAccesses = useCallback(async (tokenId) => {
+        if (isMockEnabled() || !getToken() || !tokenId) return 0;
+        try {
+            const res = await claimsService.listAuditByShareToken(tokenId);
+            const entries = Array.isArray(res?.data) ? res.data : [];
+            return entries.filter(e => e.action === 'share.accessed').length;
+        } catch {
+            return 0;
+        }
+    }, []);
+
     const fetchAudit = useCallback(async (claimId) => {
         if (!claimId) return [];
         if (isMockEnabled() || !getToken()) return [];
@@ -486,6 +519,7 @@ export const ClaimsProvider = ({ children }) => {
             claims, addClaim, addDocument, updateChecklistStatus,
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
             uploadFileToClaim, refreshClaimFiles, documentDownloadHref,
+            listFileShares, createFileShare, revokeFileShare, countShareAccesses,
             fetchAudit, auditByClaim,
             claimsLoading, claimsError, refreshClaims,
             users, addUser,

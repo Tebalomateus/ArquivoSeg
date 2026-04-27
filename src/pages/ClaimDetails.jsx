@@ -170,6 +170,9 @@ export default function ClaimDetails() {
         uploadFileToClaim,
         refreshClaimFiles,
         documentDownloadHref,
+        listFileShares,
+        createFileShare,
+        revokeFileShare,
         fetchAudit,
         auditByClaim,
         updateChecklistStatus,
@@ -183,6 +186,9 @@ export default function ClaimDetails() {
     const [isUploadModalOpen, setUploadModalOpen] = useState(false);
     const [viewMode, setViewMode] = useState('interaction');
     const [localObs, setLocalObs] = useState('');
+    const [shares, setShares] = useState([]);
+    const [sharesLoading, setSharesLoading] = useState(false);
+    const [shareForm, setShareForm] = useState({ fileVerId: '', label: '', expiresInDays: '30' });
 
     const claim = claims.find(c => c.id === id);
 
@@ -203,6 +209,58 @@ export default function ClaimDetails() {
     }, [id, canReadAudit]);
 
     const auditEntries = auditByClaim?.[id];
+
+    const canManageShares = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
+    const allFiles = (claim?.folders || []).flatMap(f => f.documents || []).filter(d => d.backFileVerId);
+
+    const refreshShares = async () => {
+        if (!canManageShares || !listFileShares || allFiles.length === 0) {
+            setShares([]);
+            return;
+        }
+        setSharesLoading(true);
+        try {
+            const lists = await Promise.all(allFiles.map(async (doc) => {
+                const items = await listFileShares(doc.backFileVerId);
+                return items.map(s => ({ ...s, _file: doc }));
+            }));
+            setShares(lists.flat());
+        } finally {
+            setSharesLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (viewMode === 'management') refreshShares();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [viewMode, claim?.folders?.length, allFiles.length]);
+
+    const handleCreateShare = async (e) => {
+        e.preventDefault();
+        if (!shareForm.fileVerId) return alert('Selecione um arquivo!');
+        const days = parseInt(shareForm.expiresInDays, 10);
+        let expiresAt = null;
+        if (days && days > 0) {
+            expiresAt = new Date(Date.now() + days * 86_400_000).toISOString();
+        }
+        try {
+            await createFileShare(shareForm.fileVerId, { label: shareForm.label || null, expiresAt });
+            setShareForm({ fileVerId: '', label: '', expiresInDays: '30' });
+            await refreshShares();
+        } catch (err) {
+            alert(`Falha ao criar share: ${err?.message || err}`);
+        }
+    };
+
+    const handleRevokeShare = async (tokenId) => {
+        if (!confirm('Revogar este link? O acesso público será imediatamente bloqueado.')) return;
+        try {
+            await revokeFileShare(tokenId);
+            await refreshShares();
+        } catch (err) {
+            alert(`Falha ao revogar: ${err?.message || err}`);
+        }
+    };
 
     const formatAuditEntry = (entry) => {
         const ts = entry.timestamp ? new Date(entry.timestamp) : null;
@@ -565,35 +623,101 @@ export default function ClaimDetails() {
                     ) : (
                         <div className="space-y-6">
                             {/* Management View: External Sharing & Invite */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="card bg-blue-600 border-0 text-white shadow-2xl shadow-blue-200 relative overflow-hidden group">
-                                    <Globe className="absolute top-0 right-0 w-32 h-32 text-white/10 -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700" />
-                                    <div className="relative z-10">
-                                        <h3 className="text-xl font-black mb-2 font-display uppercase tracking-tight flex items-center gap-3">
-                                            <Share2 size={24} /> Portal do Cliente
-                                        </h3>
-                                        <p className="text-blue-100 text-xs font-bold uppercase tracking-widest mb-6 border-b border-blue-400 pb-4">Acesso Externo Seguro via Token</p>
+                            <div className="card border-l-[6px] border-blue-600">
+                                <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
+                                    <Share2 size={22} className="text-blue-600" /> Links Públicos por Documento
+                                </h3>
+                                <p className="text-xs text-gray-500 font-medium mb-6">Cada link aponta para um arquivo específico do sinistro. O destinatário não precisa de login; cada acesso é registrado na auditoria.</p>
 
-                                        <div className="flex gap-2">
+                                {!canManageShares && (
+                                    <p className="text-xs text-amber-700 font-medium">Apenas perfis manager+ podem gerenciar links.</p>
+                                )}
+
+                                {canManageShares && (
+                                    <>
+                                        <form onSubmit={handleCreateShare} className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                            <select
+                                                value={shareForm.fileVerId}
+                                                onChange={(e) => setShareForm({ ...shareForm, fileVerId: e.target.value })}
+                                                className="md:col-span-5 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                            >
+                                                <option value="">Selecione um arquivo...</option>
+                                                {allFiles.map(f => (
+                                                    <option key={f.backFileVerId} value={f.backFileVerId}>{f.name}</option>
+                                                ))}
+                                            </select>
                                             <input
                                                 type="text"
-                                                readOnly
-                                                value={`${window.location.origin}/portal/${claim.shareToken}`}
-                                                className="flex-1 bg-blue-700/50 border border-blue-400 rounded-xl px-4 py-3 text-[10px] font-bold text-white outline-none font-mono"
+                                                value={shareForm.label}
+                                                onChange={(e) => setShareForm({ ...shareForm, label: e.target.value })}
+                                                placeholder="Rótulo (opcional)"
+                                                className="md:col-span-3 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
                                             />
-                                            <button
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(`${window.location.origin}/portal/${claim.shareToken}`);
-                                                    alert('Link do portal copiado!');
-                                                }}
-                                                className="bg-white text-blue-600 px-5 py-3 rounded-xl text-xs font-black shadow-lg hover:bg-blue-50 transition-all uppercase tracking-widest"
+                                            <select
+                                                value={shareForm.expiresInDays}
+                                                onChange={(e) => setShareForm({ ...shareForm, expiresInDays: e.target.value })}
+                                                className="md:col-span-2 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
                                             >
-                                                Copiar
+                                                <option value="7">7 dias</option>
+                                                <option value="30">30 dias</option>
+                                                <option value="90">90 dias</option>
+                                                <option value="0">Sem expiração</option>
+                                            </select>
+                                            <button
+                                                type="submit"
+                                                disabled={!shareForm.fileVerId}
+                                                className={`md:col-span-2 px-4 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 ${shareForm.fileVerId ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                                            >
+                                                Gerar Link
                                             </button>
-                                        </div>
-                                        <p className="mt-4 text-[10px] text-blue-200 font-medium">Links compartilhados via este portal são rastreados pela Auditoria.</p>
-                                    </div>
-                                </div>
+                                        </form>
+
+                                        {sharesLoading && <p className="text-xs text-gray-400">Carregando links...</p>}
+
+                                        {!sharesLoading && shares.length === 0 && (
+                                            <p className="text-xs text-gray-500 text-center py-6">Nenhum link público criado ainda. Use o formulário acima.</p>
+                                        )}
+
+                                        {shares.map(s => {
+                                            const url = `${window.location.origin}/portal/${s.token}`;
+                                            const expires = s.expires_at ? new Date(s.expires_at).toLocaleDateString('pt-BR') : 'sem expiração';
+                                            return (
+                                                <div key={s.id} className={`flex flex-col gap-2 p-4 rounded-2xl border mb-3 ${s.revoked ? 'bg-red-50/40 border-red-100' : 'bg-white border-gray-100'}`}>
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-xs font-black text-gray-900 truncate">{s._file?.name || s.file_ver_id}</p>
+                                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                                                                {s.label || 'sem rótulo'} · expira {expires} · {s.revoked ? 'REVOGADO' : 'ATIVO'}
+                                                            </p>
+                                                        </div>
+                                                        {!s.revoked && (
+                                                            <>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => { navigator.clipboard.writeText(url); alert('Link copiado!'); }}
+                                                                    className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-100"
+                                                                >
+                                                                    Copiar
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleRevokeShare(s.id)}
+                                                                    className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-100"
+                                                                >
+                                                                    Revogar
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    <input readOnly value={url} className="w-full bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-[11px] font-mono text-gray-600" />
+                                                </div>
+                                            );
+                                        })}
+                                    </>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                                 <div className="card border-2 border-gray-100 bg-gray-50/30 flex flex-col justify-between">
                                     <div>
