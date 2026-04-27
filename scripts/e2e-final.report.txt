@@ -1,0 +1,138 @@
+
+▶ 0. Liveness
+  ✓ viewer can reach /api/v1/processes via vite proxy            [200]
+  ✓ backend /health/live                                         [200]
+
+▶ 1. RBAC across PATs (read endpoints)
+  ✓ VIEWER lists processes                                       [200]
+  ✓ CONTRIBUTOR lists processes                                  [200]
+  ✓ MANAGER lists processes                                      [200]
+  ✓ ADMIN lists processes                                        [200]
+  ✓ VIEWER listing users -> 403                                  [403]
+  ✓ CONTRIBUTOR listing users -> 403                             [403]
+  ✓ MANAGER listing users -> 200                                 [200]
+  ✓ ADMIN listing users -> 200                                   [200]
+
+▶ 2. Processes — create with metadata
+  ✓ MANAGER creates process                                      [201]
+  ✓ process payload has metadata.insurer                         [contains Tokio Marine]
+  ✓ process payload has created_by                               [contains created_by]
+  ✓ GET single process                                           [200]
+  ✓ GET payload preserves metadata.insurer                       [contains Tokio Marine]
+  ✓ GET payload preserves checklistByFolder                      [contains checklistByFolder]
+
+▶ 3. Processes — update title/description (PATCH)
+  ✓ PATCH process title/description                              [200]
+  ✓ title persisted                                              [contains renamed]
+  ✓ description persisted                                        [contains desc atualizada]
+
+▶ 4. Processes — metadata merge (debounced front sync)
+  ✓ PATCH metadata                                               [200]
+  ✓ metadata.isComplex persisted                                 [contains "isComplex":true]
+  ✓ metadata.observations persisted                              [contains observacao via patch]
+  ✓ checklistByFolder updated                                    [contains item2]
+  ✓ deadlineSuspensions persisted                                [contains aguardando documento]
+
+▶ 5. Processes — status transitions (state machine)
+  ✓ transition -> ongoing                                        [200]
+  ✓ transition -> review                                         [200]
+  ✓ transition -> done                                           [200]
+  ✓ invalid transition done->ongoing is rejected (4xx)           [bad]
+
+▶ 6. Processes — assign_to (manager picks contributor)
+  ✓ PATCH assigned_to                                            [200]
+  ✓ assigned_to persisted                                        [contains 9427e2d9-c4b4-4498-8ec9-3165c80f230b]
+  ✓ list filtered by assigned_to includes our process            [contains 40e24138-1828-4e49-85c3-20f65828ebaf]
+
+▶ 7. Processes — list filters & pagination
+  ✓ filter status=done includes our process                      [contains 40e24138-1828-4e49-85c3-20f65828ebaf]
+  ✓ filter status=ready excludes done process                    [yes]
+  ✓ pagination response has total                                [contains total]
+
+▶ 8. Files — upload, list, versions, download, delete
+  ✓ upload v1 (folder=causa)                                     [201]
+  ✓ upload returns uploaded_by                                   [contains uploaded_by]
+  ✓ upload v2 same name                                          [201]
+  ✓ list files                                                   [200]
+  ✓ list contains v2 file id                                     [contains 8d72c2d5-3691-46b2-a56a-aa8c02e0cc90]
+  ✓ list file versions                                           [200]
+  ✓ versions contain both ids                                    [contains 4dd7e758-b31e-4bad-93bf-2061f534db8a]
+  ✓ download endpoint returns redirect/200                       [yes]
+  ✓ download redirects to MinIO                                  [contains 3900]
+  ✓ delete v1                                                    [204]
+  ✓ v1 hidden after soft-delete                                  [yes]
+
+▶ 9. Comments — create/update/delete tied to a file version
+  ✓ CONTRIBUTOR creates comment                                  [201]
+  ✓ comment payload has author_id                                [contains author_id]
+  ✓ CONTRIBUTOR edits own comment                                [200]
+  ✓ comment body persisted                                       [contains editada cinco]
+  ✓ comment has updated_at                                       [contains updated_at]
+  ✓ list comments includes ours                                  [contains 5beb66bb-74f6-4cbb-a851-aa6ae963ed7d]
+  ✓ CONTRIBUTOR deletes own comment                              [204]
+  ✓ deleted comment not listed                                   [yes]
+
+▶ 10. Shares — create, public access via /s/:token, revoke
+  ✓ MANAGER creates share                                        [201]
+  ✓ share payload has created_by                                 [contains created_by]
+  ✓ share has token                                              [contains token]
+  ✓ public /s/:token redirects                                   [yes]
+  ✓ list shares for file                                         [200]
+  ✓ list contains our share id                                   [contains 28bb50da-2807-4847-8f1d-abd491578efe]
+  ✓ revoke share                                                 [204]
+  ✓ public /s/:token after revoke is blocked (got 404)           [yes]
+
+▶ 11. Audit — per-process, per-file, per-share, global
+  ✓ audit (process) has process.created                          [contains process.created]
+  ✓ audit (process) has process.updated                          [contains process.updated]
+  ✓ audit (process) has process.status_changed                   [contains process.status_changed]
+  ✓ audit entries include actor_user_id                          [contains actor_user_id]
+  ✓ audit entries include ip_address                             [contains ip_address]
+  ✓ audit entries include user_agent                             [contains user_agent]
+  ✓ audit (file_version) has file.uploaded                       [contains file.uploaded]
+  ✓ audit (file_version) has file.downloaded                     [contains file.downloaded]
+  ✓ audit (file_version v1) has file.deleted                     [contains file.deleted]
+  ✓ audit (comment) has comment.created                          [contains comment.created]
+  ✓ audit (comment) has comment.updated                          [contains comment.updated]
+  ✓ audit (comment) has comment.deleted                          [contains comment.deleted]
+  ✓ share audit includes share.created                           [contains share.created]
+  ✓ share audit includes share.accessed                          [contains share.accessed]
+  ✓ share audit includes share.revoked                           [contains share.revoked]
+  ✓ global audit (admin) returns data                            [contains data]
+  ✓ global audit filtered by actor                               [contains 850a154f-a065-4cfc-aa9b-e7bc0f76d4ac]
+
+▶ 12. Clients — CRUD
+  ✓ MANAGER creates client                                       [201]
+  ✓ client payload has type=SEGURADORA                           [contains SEGURADORA]
+  ✓ VIEWER lists clients                                         [200]
+  ✓ list includes our client                                     [contains 280a6765-0856-4d92-92df-03e81b7644ae]
+  ✓ MANAGER updates client                                       [200]
+  ✓ client rename persisted                                      [contains renamed]
+  ✓ list filtered by type includes ours                          [contains 280a6765-0856-4d92-92df-03e81b7644ae]
+  ✓ VIEWER cannot delete client (403)                            [403]
+  ✓ MANAGER cannot delete client (403)                           [403]
+  ✓ ADMIN deletes client                                         [204]
+  ✓ deleted client GET -> 404                                    [404]
+
+▶ 13. Users — read-only listing
+  ✓ users list has email                                         [contains email]
+  ✓ users list has role                                          [contains role]
+  ✓ users list has created_at                                    [contains created_at]
+
+▶ 14. RBAC — write protection on processes/files/comments
+  ✓ VIEWER cannot create process (403)                           [403]
+  ✓ CONTRIBUTOR can create process (201, by design)              [201]
+  ✓ VIEWER cannot upload file (403)                              [403]
+  ✓ VIEWER cannot create comment (403)                           [403]
+  ✓ VIEWER cannot delete file (403)                              [403]
+  ✓ CONTRIBUTOR cannot delete file (403)                         [403]
+  ✓ VIEWER cannot list audit (403)                               [403]
+  ✓ CONTRIBUTOR cannot list audit (403)                          [403]
+
+▶ 15. Archive — process is hidden from default list afterwards
+  ✓ ADMIN archives process                                       [200]
+  ✓ archived process visible under status=archived               [contains 40e24138-1828-4e49-85c3-20f65828ebaf]
+
+▶ Summary
+
+  Total: 102  PASS=102  FAIL=0
