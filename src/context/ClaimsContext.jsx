@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { INITIAL_CLAIMS, INITIAL_USERS, INITIAL_CLIENTS, INITIAL_LINKS } from '../constants/initialData';
+import { INITIAL_CLAIMS, INITIAL_USERS, INITIAL_CLIENTS } from '../constants/initialData';
 import { claimsService } from '../services/claimsService';
 import { loginWithUiRole, logoutSession } from '../api/auth';
 import { getToken, isMockEnabled } from '../api/client';
@@ -149,13 +149,14 @@ export const ClaimsProvider = ({ children }) => {
     // INITIAL_USERS is the *front-only* roster used by the Login screen to map
     // an email to a PAT in dev. It does not necessarily match the backend `users`
     // table (which holds the real seeded bots). When a manager+ logs in, we
-    // overlay the real users on top so audit/UserManagement see ground truth.
-    const [users, setUsers] = useState(() => {
+    // overlay the real users on top via `backendUsers` so audit/UserManagement
+    // see ground truth. This local list is never mutated at runtime.
+    const users = (() => {
         try {
             const saved = localStorage.getItem('arquivoseg_users');
             return saved ? JSON.parse(saved) : INITIAL_USERS;
         } catch { return INITIAL_USERS; }
-    });
+    })();
     const [usersLoading, setUsersLoading] = useState(false);
     const [backendUsers, setBackendUsers] = useState([]);
 
@@ -169,13 +170,6 @@ export const ClaimsProvider = ({ children }) => {
         return [];
     });
     const [clientsLoading, setClientsLoading] = useState(false);
-
-    const [links, setLinks] = useState(() => {
-        try {
-            const saved = localStorage.getItem('arquivoseg_links');
-            return saved ? JSON.parse(saved) : INITIAL_LINKS;
-        } catch { return INITIAL_LINKS; }
-    });
 
     const [currentUser, setCurrentUser] = useState(() => {
         try {
@@ -199,7 +193,6 @@ export const ClaimsProvider = ({ children }) => {
             localStorage.setItem('arquivoseg_clients', JSON.stringify(clients));
         }
         localStorage.setItem('arquivoseg_users', JSON.stringify(users));
-        localStorage.setItem('arquivoseg_links', JSON.stringify(links));
         localStorage.setItem('arquivoseg_settings', JSON.stringify(settings));
         localStorage.setItem('arquivoseg_claims_cache', JSON.stringify(claimsCache));
         if (currentUser) {
@@ -209,7 +202,7 @@ export const ClaimsProvider = ({ children }) => {
             localStorage.removeItem('arquivoseg_current_user');
             localStorage.removeItem('arquivoseg_authenticated');
         }
-    }, [claims, users, clients, links, settings, currentUser, claimsCache]);
+    }, [claims, users, clients, settings, currentUser, claimsCache]);
 
     // Re-establish API token on reload when session is still active
     useEffect(() => {
@@ -477,16 +470,6 @@ export const ClaimsProvider = ({ children }) => {
         return fileVer;
     };
 
-    // Backwards-compatible: addDocument is now a thin wrapper that ClaimDetails can keep using
-    // for purely-local document additions. For real uploads, prefer uploadFileToClaim.
-    const addDocument = (claimId, folderId, docData) => {
-        updateClaimLocal(claimId, c => {
-            const folders = c.folders.map(f => f.id === folderId ? { ...f, documents: [{ id: Date.now().toString(), ...docData, date: new Date().toLocaleDateString('pt-BR') }, ...f.documents] } : f);
-            const activity = { id: Date.now().toString(), user: currentUser?.name || docData.user, action: `enviou o documento "${docData.name}"`, date: new Date().toLocaleString('pt-BR'), type: 'UPLOAD' };
-            return { ...c, folders, activities: [activity, ...c.activities], lastModified: new Date().toLocaleDateString('pt-BR') };
-        });
-    };
-
     const documentDownloadHref = (fileId) => claimsService.downloadHref(fileId);
 
     const updateAnnotation = async (claimId, commentId, body) => {
@@ -598,15 +581,15 @@ export const ClaimsProvider = ({ children }) => {
         });
     };
 
-    const logView = (claimId, docName, token) => {
+    const logView = (claimId, docName) => {
+        // Server-side audit (ActionFileDownloaded) já registra acesso real;
+        // este log local alimenta a timeline visível na sidebar de quem é viewer
+        // (que não tem permissão pra GET /audit).
         claimsService.logDocumentView?.(claimId, docName, currentUser?.name || 'Visitante');
         updateClaimLocal(claimId, c => ({
             ...c,
             activities: [{ id: Date.now().toString(), user: currentUser?.name || 'Visitante', action: `visualizou "${docName}"`, date: new Date().toLocaleString('pt-BR'), type: 'VIEW' }, ...c.activities],
         }));
-        if (token) {
-            setLinks(prev => prev.map(l => l.token === token ? { ...l, views: l.views + 1, lastAccessed: new Date().toLocaleString('pt-BR') } : l));
-        }
     };
 
     const toggleDeadline = (claimId, reason) => {
@@ -620,8 +603,6 @@ export const ClaimsProvider = ({ children }) => {
     const setComplexStatus = (id, isComplex) => updateClaimLocal(id, c => ({ ...c, isComplex, deadline: { ...c.deadline, totalDays: isComplex ? 120 : 30 } }));
 
     const updateClaimObservations = (id, observations) => updateClaimLocal(id, c => ({ ...c, observations }));
-
-    const addUser = (userData) => setUsers(prev => [{ id: Date.now(), status: 'Ativo', ...userData }, ...prev]);
 
     const refreshUsers = useCallback(async () => {
         if (isMockEnabled() || !getToken()) return;
@@ -706,7 +687,7 @@ export const ClaimsProvider = ({ children }) => {
     return (
         <ClaimsContext.Provider value={{
             currentUser, setCurrentUser, logout,
-            claims, addClaim, addDocument, updateChecklistStatus,
+            claims, addClaim, updateChecklistStatus,
             transitionStatus, archiveClaim, assignClaim,
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
             uploadFileToClaim, refreshClaimFiles, documentDownloadHref,
@@ -715,10 +696,9 @@ export const ClaimsProvider = ({ children }) => {
             listFileShares, createFileShare, revokeFileShare, countShareAccesses,
             fetchAudit, auditByClaim,
             claimsLoading, claimsError, refreshClaims, claimsFilter,
-            users, addUser,
+            users,
             backendUsers, usersLoading, refreshUsers, resolveActorLabel,
             clients, clientsLoading, addClientEntity, updateClientEntity, deleteClientEntity, refreshClients,
-            links, setLinks,
             settings, updateSettings,
             isGuestVerified,
         }}>

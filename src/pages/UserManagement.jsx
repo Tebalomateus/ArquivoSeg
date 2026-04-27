@@ -1,98 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, UserPlus, Shield, Mail, MoreHorizontal, Building2, Search, X, CheckCircle, Lock, ArrowLeft } from 'lucide-react';
+import { UserPlus, Shield, Mail, MoreHorizontal, Building2, Search, Lock, ArrowLeft } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
-
-const InviteModal = ({ isOpen, onClose, onInvite }) => {
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
-    const [company, setCompany] = useState('');
-    const [role, setRole] = useState('CORRETOR');
-
-    if (!isOpen) return null;
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onInvite({ name, email, company, role });
-        setName('');
-        setEmail('');
-        setCompany('');
-        setRole('CORRETOR');
-        onClose();
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-            <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-fade-in border border-gray-100">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                    <div>
-                        <h3 className="text-xl font-bold text-gray-900 font-display">Convidar Colaborador</h3>
-                        <p className="text-xs text-gray-500 font-medium">O novo usuário receberá um convite por e-mail.</p>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-gray-400 transition-all border border-transparent hover:border-gray-100"><X size={20} /></button>
-                </div>
-                <form onSubmit={handleSubmit} className="p-8 space-y-6">
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Nome Completo</label>
-                        <input
-                            required
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="Ex: João Silva"
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-300 transition-all font-bold text-gray-900 shadow-inner"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">E-mail Corporativo</label>
-                        <input
-                            required
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="ex: joao@empresa.com"
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-300 transition-all font-bold text-gray-900 shadow-inner"
-                        />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Empresa</label>
-                            <input
-                                required
-                                type="text"
-                                value={company}
-                                onChange={(e) => setCompany(e.target.value)}
-                                placeholder="Porto Seguro, ABC..."
-                                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-300 transition-all font-bold text-gray-900 shadow-inner"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Papel (Role)</label>
-                            <select
-                                value={role}
-                                onChange={(e) => setRole(e.target.value)}
-                                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-300 transition-all font-bold text-gray-900 appearance-none shadow-inner"
-                            >
-                                <option value="ADMIN">Admin da Conta</option>
-                                <option value="ANALISTA">Admin do Sinistro</option>
-                                <option value="CORRETOR">Tipo 1 (Externo)</option>
-                                <option value="PERITO">Tipo 2 (Interno/Técnico)</option>
-                                <option value="AUDITOR">Auditor de Sistema</option>
-                            </select>
-                        </div>
-                    </div>
-                    <button
-                        type="submit"
-                        className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 flex items-center justify-center gap-2 mt-4"
-                    >
-                        <CheckCircle size={20} />
-                        Gerar Convite de Acesso
-                    </button>
-                </form>
-            </div>
-        </div>
-    );
-};
 
 // Maps backend role (viewer/contributor/manager/admin) to the PT-BR label used in the UI.
 const BACK_TO_UI_ROLE = {
@@ -115,7 +24,6 @@ const adaptBackendUser = (u) => ({
 export default function UserManagement() {
     const { backendUsers, usersLoading, refreshUsers } = useClaims();
     const [searchTerm, setSearchTerm] = useState('');
-    const [isModalOpen, setIsModalOpen] = useState(false);
 
     // Source of truth is the backend listing for managers+; if it's empty
     // (e.g. lower-privilege session) the table shows nothing real.
@@ -257,12 +165,6 @@ export default function UserManagement() {
                     </table>
                 </div>
             </div>
-
-            <InviteModal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                onInvite={addUser}
-            />
         </div>
     );
 }

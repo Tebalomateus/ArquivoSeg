@@ -174,7 +174,6 @@ export default function ClaimDetails() {
     const {
         currentUser,
         claims,
-        addDocument,
         uploadFileToClaim,
         refreshClaimFiles,
         documentDownloadHref,
@@ -375,22 +374,23 @@ export default function ClaimDetails() {
     if (!currentFolder) return <div className="p-20 text-center">Erro ao carregar pastas do sinistro.</div>;
 
     const handleUpload = async (payload) => {
-        if (payload.file) {
-            await uploadFileToClaim(claim.id, currentFolder.category, payload.file, {
-                annotation: payload.annotation,
-                confidentiality: payload.confidentiality,
-            });
-        } else {
-            addDocument(claim.id, currentFolderId, { ...payload, user: currentUser.name });
-        }
+        if (!payload?.file) return;
+        await uploadFileToClaim(claim.id, currentFolder.category, payload.file, {
+            annotation: payload.annotation,
+            confidentiality: payload.confidentiality,
+        });
     };
 
     const handleViewDoc = (doc) => {
         if (isAuditor) {
             return alert('Auditor: O conteúdo dos documentos é restrito para integridade de dados. Acesso negado pelo protocolo de compliance.');
         }
+        if (!doc?.backFileVerId) return;
+        // Backend's GET /files/:id/download responds 302 to a presigned MinIO URL.
+        // The browser opens the file inline (PDFs/images) or downloads it (.txt etc.).
+        // The redirect is audited server-side via ActionFileDownloaded.
+        window.open(documentDownloadHref(doc.backFileVerId), '_blank', 'noopener,noreferrer');
         logView(claim.id, doc.name);
-        alert(`Simulando visualização segura de: ${doc.name}\nLog registrado na auditoria.`);
     };
 
     const handleSaveObs = () => {
