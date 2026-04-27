@@ -286,12 +286,12 @@ export const ClaimsProvider = ({ children }) => {
 
     // Group backend files into the local folder structure by file_name prefix (causa__, prejuizo__, ...).
     // Files without a recognized prefix fall into "gerencial" (private folder).
-    const groupFilesIntoFolders = (folders, files) => {
+    const groupFilesIntoFolders = (folders, files, commentByFileVerId = {}) => {
         const byCategory = { causa: [], prejuizo: [], liquidacao: [], gerencial: [] };
         for (const fv of files) {
             const { category } = parseFolderFromFileName(fv.file_name);
             const target = category && byCategory[category] !== undefined ? category : 'gerencial';
-            byCategory[target].push(fileVerToDoc(fv));
+            byCategory[target].push(fileVerToDoc(fv, commentByFileVerId[fv.id]));
         }
         return folders.map(f => ({ ...f, documents: byCategory[f.category] || f.documents }));
     };
@@ -299,9 +299,24 @@ export const ClaimsProvider = ({ children }) => {
     const refreshClaimFiles = useCallback(async (claimId) => {
         if (isMockEnabled() || !getToken()) return;
         try {
-            const res = await claimsService.listFiles(claimId);
-            const files = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
-            updateClaimLocal(claimId, c => ({ ...c, folders: groupFilesIntoFolders(c.folders, files) }));
+            const [filesRes, commentsRes] = await Promise.all([
+                claimsService.listFiles(claimId),
+                claimsService.listComments(claimId).catch(() => ({ data: [] })),
+            ]);
+            const files = Array.isArray(filesRes?.data) ? filesRes.data : (Array.isArray(filesRes) ? filesRes : []);
+            const comments = Array.isArray(commentsRes?.data) ? commentsRes.data : (Array.isArray(commentsRes) ? commentsRes : []);
+
+            // Most recent comment per file_ver_id wins (good enough for the 5-word annotation flow).
+            const commentByFileVerId = {};
+            for (const c of comments) {
+                if (!c.file_ver_id) continue;
+                const existing = commentByFileVerId[c.file_ver_id];
+                if (!existing || new Date(c.created_at) > new Date(existing.created_at)) {
+                    commentByFileVerId[c.file_ver_id] = c;
+                }
+            }
+
+            updateClaimLocal(claimId, c => ({ ...c, folders: groupFilesIntoFolders(c.folders, files, commentByFileVerId) }));
         } catch (err) {
             console.error('[ClaimsContext] failed to fetch files for', claimId, err);
         }

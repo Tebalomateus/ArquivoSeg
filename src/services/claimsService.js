@@ -20,6 +20,9 @@ const realService = {
     addComment(processId, body, fileVerId) {
         return commentsApi.createComment(processId, body, fileVerId);
     },
+    listComments(processId) {
+        return commentsApi.listComments(processId);
+    },
     listAudit(processId) {
         return auditApi.listAudit({ resourceType: 'process', resourceId: processId, limit: 50 });
     },
@@ -50,6 +53,9 @@ const mockService = {
     async addComment(processId, body, fileVerId) {
         console.log(`[MOCK] addComment process=${processId} fileVer=${fileVerId}`, body);
         return { id: Date.now().toString(), body, file_ver_id: fileVerId };
+    },
+    async listComments() {
+        return { data: [], total: 0 };
     },
     async listAudit() {
         return { data: [], total: 0 };
