@@ -15,12 +15,37 @@ import {
 import { useClaims } from '../../context/ClaimsContext';
 
 export default function ClientManagement() {
-    const { clients, clientsLoading, addClientEntity, deleteClientEntity, refreshClients } = useClaims();
+    const { clients, clientsLoading, addClientEntity, updateClientEntity, deleteClientEntity, refreshClients } = useClaims();
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingId, setEditingId] = useState(null);
     const [form, setForm] = useState({ name: '', type: 'SEGURADORA', contact: '', billing_method: '' });
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
+
+    const openCreate = () => {
+        setEditingId(null);
+        setForm({ name: '', type: 'SEGURADORA', contact: '', billing_method: '' });
+        setIsModalOpen(true);
+    };
+
+    const openEdit = (client) => {
+        setEditingId(client.id);
+        setForm({
+            name: client.name || '',
+            type: client.type || 'SEGURADORA',
+            contact: client.contact || '',
+            billing_method: client.billing_method || client.billingMethod || '',
+        });
+        setError('');
+        setIsModalOpen(true);
+    };
+
+    const closeModal = () => {
+        setIsModalOpen(false);
+        setEditingId(null);
+        setForm({ name: '', type: 'SEGURADORA', contact: '', billing_method: '' });
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -28,11 +53,14 @@ export default function ClientManagement() {
         if (!form.name) { setError('Nome obrigatório.'); return; }
         setSubmitting(true);
         try {
-            await addClientEntity(form);
-            setForm({ name: '', type: 'SEGURADORA', contact: '', billing_method: '' });
-            setIsModalOpen(false);
+            if (editingId) {
+                await updateClientEntity(editingId, form);
+            } else {
+                await addClientEntity(form);
+            }
+            closeModal();
         } catch (err) {
-            setError(err?.message || 'Falha ao criar cliente.');
+            setError(err?.message || 'Falha ao salvar cliente.');
         } finally {
             setSubmitting(false);
         }
@@ -68,7 +96,7 @@ export default function ClientManagement() {
                     <p className="text-slate-500 font-medium">Administre seguradoras, corretoras e níveis de faturamento.</p>
                 </div>
                 <button
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={openCreate}
                     className="bg-blue-600 text-white px-6 py-3.5 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 flex items-center gap-2 group"
                 >
                     <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" />
@@ -162,7 +190,10 @@ export default function ClientManagement() {
                                         </span>
                                     </td>
                                     <td className="p-7 text-right">
-                                        <button onClick={() => handleDelete(client.id)} className="text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-700">Excluir</button>
+                                        <div className="flex justify-end gap-3">
+                                            <button onClick={() => openEdit(client)} className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800">Editar</button>
+                                            <button onClick={() => handleDelete(client.id)} className="text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-700">Excluir</button>
+                                        </div>
                                     </td>
                                     <td className="p-7 text-right">
                                         <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-xl transition-all border border-transparent hover:border-slate-100 shadow-sm">
@@ -177,9 +208,9 @@ export default function ClientManagement() {
             </div>
 
             {isModalOpen && (
-                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setIsModalOpen(false)}>
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeModal}>
                     <div className="bg-white rounded-2xl p-8 w-full max-w-lg shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-xl font-black text-gray-900 font-display">Novo Cliente B2B</h3>
+                        <h3 className="text-xl font-black text-gray-900 font-display">{editingId ? 'Editar Cliente B2B' : 'Novo Cliente B2B'}</h3>
                         {error && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{error}</div>}
                         <form onSubmit={handleSubmit} className="space-y-3">
                             <div>
@@ -203,8 +234,8 @@ export default function ClientManagement() {
                                 <input type="text" value={form.billing_method} onChange={e => setForm({ ...form, billing_method: e.target.value })} placeholder="Boleto, PIX, Cartão..." className="w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 mt-1" />
                             </div>
                             <div className="flex gap-2 pt-2">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold">Cancelar</button>
-                                <button type="submit" disabled={submitting} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold disabled:opacity-50">{submitting ? 'Salvando...' : 'Criar'}</button>
+                                <button type="button" onClick={closeModal} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold">Cancelar</button>
+                                <button type="submit" disabled={submitting} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold disabled:opacity-50">{submitting ? 'Salvando...' : (editingId ? 'Salvar' : 'Criar')}</button>
                             </div>
                         </form>
                     </div>
