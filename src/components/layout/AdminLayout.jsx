@@ -6,7 +6,6 @@ import {
     LogOut,
     ShieldCheck,
     Search,
-    Bell,
     FileCheck2,
     Database,
     Link as LinkIcon,
@@ -14,6 +13,7 @@ import {
     History
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
+import NotificationBell from '../NotificationBell';
 
 /**
  * AdminLayout - The structural frame for the Backoffice/Administration area.
@@ -106,10 +106,7 @@ export default function AdminLayout() {
                     </div>
 
                     <div className="flex items-center gap-6">
-                        <button className="relative w-10 h-10 flex items-center justify-center text-slate-400 hover:text-blue-600 bg-slate-50 border border-slate-100 rounded-xl transition-all">
-                            <Bell size={20} />
-                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
-                        </button>
+                        <NotificationBell basePath="/admin" />
                         <div className="h-8 w-px bg-slate-100"></div>
                         <div className="flex flex-col text-right">
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sessão Segura</span>

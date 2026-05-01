@@ -10,10 +10,10 @@ import {
     PlusCircle,
     Clock,
     LogOut,
-    Bell,
     ShieldCheck
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
+import NotificationBell from '../NotificationBell';
 
 const SidebarItem = ({ to, icon: Icon, label, isOpen }) => (
     <NavLink
@@ -117,10 +117,7 @@ export default function Layout() {
                     </div>
 
                     <div className="flex items-center gap-6">
-                        <button className="relative p-2 text-slate-400 hover:text-secondary hover:bg-white rounded-xl transition-all border border-transparent hover:border-secondary/10">
-                            <Bell size={20} />
-                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-                        </button>
+                        <NotificationBell basePath="/app" />
                         <div className="h-8 w-[1px] bg-slate-200"></div>
                         <div className="flex items-center gap-4">
                             <div className="text-right hidden sm:block">

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
     Users,
     FileText,
@@ -225,9 +226,12 @@ export default function AdminDashboard() {
                                     </div>
                                 </div>
                             </div>
-                            <button className="w-full mt-8 py-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all">
+                            <Link
+                                to="/admin/notificacoes"
+                                className="w-full mt-8 py-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center"
+                            >
                                 Central de Notificações
-                            </button>
+                            </Link>
                         </div>
                     </div>
 

@@ -16,6 +16,7 @@ import LinkTracker from './pages/admin/LinkTracker';
 import ClientManagement from './pages/admin/ClientManagement';
 import AuditLog from './pages/admin/AuditLog';
 import ComplianceDataCenter from './pages/admin/ComplianceDataCenter';
+import Notifications from './pages/Notifications';
 
 /**
  * Enhanced ProtectedRoute that supports role-based access control.
@@ -62,6 +63,7 @@ function App() {
                 <Route path="configuracoes" element={<Settings />} />
                 <Route path="compliance" element={<ComplianceDataCenter />} />
                 <Route path="audit" element={<AuditLog />} />
+                <Route path="notificacoes" element={<Notifications />} />
             </Route>
 
             {/* SAAS / CLIENT PORTAL */}
@@ -78,6 +80,7 @@ function App() {
                 <Route path="sinistros/novo" element={<NewClaim />} />
                 <Route path="sinistros/:id" element={<ClaimDetails />} />
                 <Route path="configuracoes" element={<Settings />} />
+                <Route path="notificacoes" element={<Notifications />} />
             </Route>
 
             {/* SHARED & REDIRECTS */}
