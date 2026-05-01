@@ -1,20 +1,20 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
     Users,
     FileText,
     Link as LinkIcon,
-    TrendingUp,
-    TrendingDown,
     ShieldCheck,
     AlertCircle,
     Building2,
     BarChart3,
     PieChart,
-    Wallet,
-    Bell
+    Server,
+    Bell,
+    Activity,
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
+import { listAudit } from '../../api/audit';
 
 const BIStatCard = ({ title, value, detail, icon: Icon, color, trend }) => (
     <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-100/50 flex flex-col justify-between group hover:border-blue-200 transition-all">
@@ -39,6 +39,33 @@ const BIStatCard = ({ title, value, detail, icon: Icon, color, trend }) => (
 
 export default function AdminDashboard() {
     const { claims, claimsLoading, backendUsers, clients } = useClaims();
+    const [healthOk, setHealthOk] = useState(null);
+    const [recentAudit, setRecentAudit] = useState([]);
+
+    useEffect(() => {
+        const check = async () => {
+            try {
+                const res = await fetch('/health/ready');
+                setHealthOk(res.ok);
+            } catch { setHealthOk(false); }
+        };
+        check();
+        const t = setInterval(check, 30000);
+        return () => clearInterval(t);
+    }, []);
+
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+                const res = await listAudit({ from: since, limit: 200 });
+                setRecentAudit(Array.isArray(res?.data) ? res.data : []);
+            } catch {
+                setRecentAudit([]);
+            }
+        };
+        load();
+    }, []);
 
     const stats = useMemo(() => {
         const totalClaims = claims.length;
@@ -53,8 +80,20 @@ export default function AdminDashboard() {
         const archived = byStatus.archived || 0;
         const inFlight = totalClaims - completed - archived;
 
-        return { totalClaims, totalUsers, totalClients, byStatus, completed, archived, inFlight };
-    }, [claims, backendUsers, clients]);
+        // Real activity from audit (last 7d)
+        const filesUploaded = recentAudit.filter((e) => e.action === 'file.uploaded').length;
+        const accessDeniedCount = recentAudit.filter((e) => e.action === 'access.denied').length;
+        const lastAuditTs = recentAudit[0]?.timestamp ? new Date(recentAudit[0].timestamp) : null;
+
+        // Inactive users in the last 7d (lower bound from /audit page slice)
+        const activeIds = new Set(recentAudit.map((e) => e.actor_user_id).filter(Boolean));
+        const inactiveUsers = backendUsers.filter((u) => !activeIds.has(u.id)).length;
+
+        return {
+            totalClaims, totalUsers, totalClients, byStatus, completed, archived, inFlight,
+            filesUploaded, accessDeniedCount, lastAuditTs, inactiveUsers,
+        };
+    }, [claims, backendUsers, clients, recentAudit]);
 
     const STATUS_LABELS = {
         ready: 'Aberto',
@@ -80,9 +119,17 @@ export default function AdminDashboard() {
                     <p className="text-slate-500 font-medium">Bem-vindo ao centro de comando do <span className="text-blue-600 font-bold">ArquivoSeg</span>.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="p-3 bg-slate-900 text-white rounded-2xl flex items-center gap-3 border border-slate-800 shadow-xl">
-                        <ShieldCheck size={20} className="text-blue-400" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Platform Integrity: Active</span>
+                    <div className={`p-3 rounded-2xl flex items-center gap-3 border shadow-xl ${
+                        healthOk === null
+                            ? 'bg-slate-900 text-white border-slate-800'
+                            : healthOk
+                              ? 'bg-slate-900 text-white border-slate-800'
+                              : 'bg-red-900 text-white border-red-800'
+                    }`}>
+                        <ShieldCheck size={20} className={healthOk === false ? 'text-red-400' : 'text-blue-400'} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">
+                            Backend {healthOk === null ? '…' : healthOk ? 'Online' : 'Offline'}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -111,10 +158,11 @@ export default function AdminDashboard() {
                     color="bg-indigo-600"
                 />
                 <BIStatCard
-                    title="Volume Financeiro"
-                    value="R$ 145k"
-                    detail="Faturamento bruto mensal (placeholder)"
-                    icon={Wallet}
+                    title="Documentos enviados (7d)"
+                    value={stats.filesUploaded}
+                    detail={`${stats.accessDeniedCount} acessos negados na janela`}
+                    icon={Activity}
+                    color="bg-emerald-600"
                 />
             </div>
 
@@ -166,14 +214,18 @@ export default function AdminDashboard() {
 
                             <div className="grid grid-cols-2 gap-6">
                                 <div className="p-6 bg-slate-900 rounded-3xl text-white">
-                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Cadeia de Custódia</p>
-                                    <h4 className="text-xl font-bold font-display">AES-256 Verified</h4>
-                                    <p className="text-[9px] text-slate-400 mt-2">Zero brechas detectadas nas últimas 24h.</p>
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Trilha de Auditoria</p>
+                                    <h4 className="text-xl font-bold font-display">Append-only</h4>
+                                    <p className="text-[9px] text-slate-400 mt-2">REVOKE UPDATE, DELETE em audit_logs no Postgres.</p>
                                 </div>
-                                <div className="p-6 bg-blue-600 rounded-3xl text-white shadow-xl shadow-blue-200">
-                                    <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1">SLA da Plataforma</p>
-                                    <h4 className="text-xl font-bold font-display">99.9% Uptime</h4>
-                                    <p className="text-[9px] text-blue-100 mt-2">Latência média: 45ms (AWS São Paulo).</p>
+                                <div className={`p-6 rounded-3xl text-white shadow-xl ${healthOk === false ? 'bg-red-600 shadow-red-200' : 'bg-blue-600 shadow-blue-200'}`}>
+                                    <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${healthOk === false ? 'text-red-200' : 'text-blue-200'}`}>Saúde do Backend</p>
+                                    <h4 className="text-xl font-bold font-display">
+                                        {healthOk === null ? '…' : healthOk ? 'Operacional' : 'Indisponível'}
+                                    </h4>
+                                    <p className={`text-[9px] mt-2 ${healthOk === false ? 'text-red-100' : 'text-blue-100'}`}>
+                                        DB + S3 verificados via /health/ready a cada 30s.
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -207,24 +259,38 @@ export default function AdminDashboard() {
                         <div className="relative z-10">
                             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-blue-400 mb-6">Alertas Críticos</h3>
                             <div className="space-y-6">
-                                <div className="flex gap-4">
-                                    <div className="shrink-0 w-8 h-8 rounded-lg bg-red-500/20 text-red-500 flex items-center justify-center">
-                                        <AlertCircle size={16} />
+                                {stats.accessDeniedCount > 0 ? (
+                                    <Link to="/admin/compliance" className="flex gap-4 hover:opacity-80 transition-opacity">
+                                        <div className="shrink-0 w-8 h-8 rounded-lg bg-red-500/20 text-red-500 flex items-center justify-center">
+                                            <AlertCircle size={16} />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <p className="text-xs font-bold leading-tight">{stats.accessDeniedCount} acessos negados (7d)</p>
+                                            <span className="text-[9px] text-slate-500 font-black uppercase mt-1">Compliance Data Center</span>
+                                        </div>
+                                    </Link>
+                                ) : (
+                                    <div className="flex gap-4">
+                                        <div className="shrink-0 w-8 h-8 rounded-lg bg-green-500/20 text-green-500 flex items-center justify-center">
+                                            <ShieldCheck size={16} />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <p className="text-xs font-bold leading-tight">Nenhum acesso negado nos últimos 7d</p>
+                                            <span className="text-[9px] text-slate-500 font-black uppercase mt-1">RBAC sem alertas</span>
+                                        </div>
                                     </div>
-                                    <div className="flex flex-col">
-                                        <p className="text-xs font-bold leading-tight">3 clientes com fatura em atraso</p>
-                                        <span className="text-[9px] text-slate-500 font-black uppercase mt-1">Ação imediata requerida</span>
-                                    </div>
-                                </div>
-                                <div className="flex gap-4">
-                                    <div className="shrink-0 w-8 h-8 rounded-lg bg-blue-500/20 text-blue-500 flex items-center justify-center">
-                                        <Bell size={16} />
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <p className="text-xs font-bold leading-tight">Novo Perito aguardando aprovação</p>
-                                        <span className="text-[9px] text-slate-500 font-black uppercase mt-1">Gestão de Usuários</span>
-                                    </div>
-                                </div>
+                                )}
+                                {stats.inactiveUsers > 0 && (
+                                    <Link to="/admin/usuarios" className="flex gap-4 hover:opacity-80 transition-opacity">
+                                        <div className="shrink-0 w-8 h-8 rounded-lg bg-blue-500/20 text-blue-500 flex items-center justify-center">
+                                            <Bell size={16} />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <p className="text-xs font-bold leading-tight">{stats.inactiveUsers} usuários sem atividade (7d)</p>
+                                            <span className="text-[9px] text-slate-500 font-black uppercase mt-1">Gestão de Usuários</span>
+                                        </div>
+                                    </Link>
+                                )}
                             </div>
                             <Link
                                 to="/admin/notificacoes"
@@ -237,16 +303,21 @@ export default function AdminDashboard() {
 
                     <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xl space-y-6">
                         <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                            <ShieldCheck size={16} className="text-blue-600" /> Auditoria Tokio Marine
+                            <ShieldCheck size={16} className="text-blue-600" /> Atividade de Auditoria
                         </h3>
                         <div className="p-6 bg-blue-50 rounded-3xl border border-blue-100">
                             <p className="text-[10px] text-blue-800 font-bold leading-relaxed">
-                                Última limpeza de logs realizada em: <br />
-                                <strong className="block mt-1 uppercase">18/02/2026 - 15:00</strong>
+                                Eventos lidos nos últimos 7 dias:
+                                <strong className="block mt-1 text-2xl font-black text-blue-700">{recentAudit.length}</strong>
                             </p>
+                            {stats.lastAuditTs && (
+                                <p className="text-[9px] text-blue-700 font-bold uppercase tracking-widest mt-3">
+                                    Último evento: {stats.lastAuditTs.toLocaleString('pt-BR')}
+                                </p>
+                            )}
                         </div>
                         <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-                            O sistema está configurado para retenção de 5 anos em conformidade com as normas regulatórias de seguros.
+                            Retenção sugerida: 5 anos (Lei do Seguro / SUSEP). Trilha append-only ao nível do banco.
                         </p>
                     </div>
                 </div>
