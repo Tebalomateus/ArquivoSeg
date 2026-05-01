@@ -15,6 +15,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import LinkTracker from './pages/admin/LinkTracker';
 import ClientManagement from './pages/admin/ClientManagement';
 import AuditLog from './pages/admin/AuditLog';
+import ComplianceDataCenter from './pages/admin/ComplianceDataCenter';
 
 /**
  * Enhanced ProtectedRoute that supports role-based access control.
@@ -57,7 +58,7 @@ function App() {
                 <Route path="links" element={<LinkTracker />} />
                 <Route path="usuarios" element={<UserManagement />} />
                 <Route path="configuracoes" element={<Settings />} />
-                <Route path="compliance" element={<div className="p-10 text-center font-bold text-slate-400">Compliance Center em breve...</div>} />
+                <Route path="compliance" element={<ComplianceDataCenter />} />
                 <Route path="audit" element={<AuditLog />} />
             </Route>
 
