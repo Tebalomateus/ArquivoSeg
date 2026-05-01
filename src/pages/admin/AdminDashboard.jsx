@@ -178,7 +178,7 @@ export default function AdminDashboard() {
                                 <h3 className="text-lg font-black text-slate-900 font-display uppercase tracking-tight">Monitor de Auditoria em Tempo Real</h3>
                                 <p className="text-xs text-slate-500 font-medium">Logs de atividade e integridade de dados</p>
                             </div>
-                            <button className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">Exportar Relatório Full</button>
+                            <Link to="/admin/compliance" className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">Abrir Compliance Center →</Link>
                         </div>
 
                         <div className="space-y-6 relative z-10">

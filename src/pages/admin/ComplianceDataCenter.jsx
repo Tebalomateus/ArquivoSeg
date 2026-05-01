@@ -798,10 +798,18 @@ export default function ComplianceDataCenter() {
                         {Object.entries(docStats.folderCounts)
                             .sort((a, b) => b[1] - a[1])
                             .map(([cat, count]) => (
-                                <div key={cat} className="p-4 rounded-2xl bg-slate-50/50 border border-slate-100">
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{cat}</p>
+                                <button
+                                    key={cat}
+                                    type="button"
+                                    onClick={() => setDrilldown({ type: 'docs_by_category', payload: { cat } })}
+                                    className="p-4 rounded-2xl bg-slate-50/50 border border-slate-100 hover:bg-blue-50 hover:border-blue-200 transition-colors text-left group"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-blue-600">{cat}</p>
+                                        <ChevronRight size={12} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                    </div>
                                     <p className="text-2xl font-black text-slate-900 mt-1">{count}</p>
-                                </div>
+                                </button>
                             ))}
                     </div>
                 )}
@@ -826,17 +834,24 @@ export default function ComplianceDataCenter() {
                             {Object.entries(rbac.dist).map(([role, count]) => {
                                 const pct = backendUsers.length > 0 ? Math.round((count / backendUsers.length) * 100) : 0;
                                 return (
-                                    <div key={role} className="space-y-1.5">
+                                    <button
+                                        key={role}
+                                        type="button"
+                                        onClick={() => setDrilldown({ type: 'role', payload: { role } })}
+                                        disabled={count === 0}
+                                        className="w-full text-left space-y-1.5 p-2 -m-2 rounded-xl hover:bg-slate-50 transition-colors group disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent"
+                                    >
                                         <div className="flex justify-between text-xs">
-                                            <span className="font-bold text-slate-700">{ROLE_LABELS[role] || role}</span>
-                                            <span className="font-black text-slate-900">
+                                            <span className="font-bold text-slate-700 group-hover:text-blue-600">{ROLE_LABELS[role] || role}</span>
+                                            <span className="font-black text-slate-900 flex items-center gap-1">
                                                 {count} <span className="text-slate-400 font-bold">({pct}%)</span>
+                                                {count > 0 && <ChevronRight size={12} className="text-slate-300 group-hover:text-blue-500 transition-colors" />}
                                             </span>
                                         </div>
                                         <div className="w-full h-2.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
                                             <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${pct}%` }}></div>
                                         </div>
-                                    </div>
+                                    </button>
                                 );
                             })}
                         </div>
@@ -856,11 +871,18 @@ export default function ComplianceDataCenter() {
                     ) : (
                         <ul className="space-y-2 max-h-72 overflow-y-auto">
                             {rbac.inactive.map((u) => (
-                                <li key={u.id} className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl">
-                                    <div className="min-w-0">
-                                        <p className="text-xs font-bold text-slate-700 truncate">{u.email}</p>
-                                        <p className="text-[9px] text-slate-400 uppercase tracking-widest font-black">{ROLE_LABELS[u.role] || u.role}</p>
-                                    </div>
+                                <li key={u.id}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setDrilldown({ type: 'actor', payload: { id: u.id, label: u.email, role: u.role } })}
+                                        className="w-full flex items-center justify-between p-3 bg-slate-50/50 rounded-xl hover:bg-slate-100 transition-colors group text-left"
+                                    >
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-bold text-slate-700 truncate group-hover:text-blue-600">{u.email}</p>
+                                            <p className="text-[9px] text-slate-400 uppercase tracking-widest font-black">{ROLE_LABELS[u.role] || u.role}</p>
+                                        </div>
+                                        <ChevronRight size={14} className="text-slate-300 group-hover:text-blue-500 transition-colors shrink-0" />
+                                    </button>
                                 </li>
                             ))}
                         </ul>
@@ -959,6 +981,64 @@ function DrilldownDrawer({ drilldown, onClose, auditEntries, claims, shares, bac
                 )}
                 <EventTable events={events} labelFor={labelFor} roleFor={roleFor} emptyText="Sem eventos para este link." />
             </>
+        );
+    } else if (type === 'role') {
+        const role = payload?.role;
+        const users = backendUsers.filter((u) => u.role === role);
+        title = `Usuários · ${role}`;
+        subtitle = `${users.length} usuário${users.length === 1 ? '' : 's'} com este papel`;
+        body = users.length === 0 ? (
+            <p className="text-xs text-slate-400 font-medium text-center py-12">Nenhum usuário neste papel.</p>
+        ) : (
+            <ul className="space-y-2">
+                {users.map((u) => {
+                    const eventCount = auditEntries.filter((e) => e.actor_user_id === u.id).length;
+                    return (
+                        <li key={u.id} className="p-3 bg-slate-50/60 rounded-xl border border-slate-100 flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-800 truncate">{u.email}</p>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                                    desde {u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '—'}
+                                </p>
+                            </div>
+                            <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                                {eventCount} {eventCount === 1 ? 'evento' : 'eventos'}
+                            </span>
+                        </li>
+                    );
+                })}
+            </ul>
+        );
+    } else if (type === 'docs_by_category') {
+        const cat = payload?.cat;
+        const docs = [];
+        for (const c of claims) {
+            for (const f of c.folders || []) {
+                if ((f.category || '').toLowerCase() !== cat) continue;
+                for (const d of f.documents || []) {
+                    if (!d.backFileVerId) continue;
+                    docs.push({ ...d, claim: c });
+                }
+            }
+        }
+        title = `Documentos · ${cat}`;
+        subtitle = `${docs.length} arquivo${docs.length === 1 ? '' : 's'} nesta categoria`;
+        body = docs.length === 0 ? (
+            <p className="text-xs text-slate-400 font-medium text-center py-12">Sem documentos nesta categoria.</p>
+        ) : (
+            <ul className="space-y-2">
+                {docs.map((d) => (
+                    <li key={d.backFileVerId} className="p-3 bg-slate-50/60 rounded-xl border border-slate-100">
+                        <p className="text-xs font-bold text-slate-800 truncate">{d.name}</p>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                            {d.claim?.title || d.claim?.number} · v{d.backVersion || 1}
+                        </p>
+                        <p className="text-[10px] font-mono text-slate-400 mt-1">
+                            {d.mime_type || '?'} · {Number(d.size_bytes || 0).toLocaleString('pt-BR')} bytes · {d.createdAt ? new Date(d.createdAt).toLocaleDateString('pt-BR') : '—'}
+                        </p>
+                    </li>
+                ))}
+            </ul>
         );
     }
 
