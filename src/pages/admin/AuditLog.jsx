@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, History, Filter, RotateCcw } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 import { listAudit, ACTION_LABELS } from '../../api/audit';
@@ -20,12 +20,13 @@ const RESOURCE_TYPES = [
 
 export default function AuditLog() {
     const { backendUsers, resolveActorLabel } = useClaims();
+    const [searchParams] = useSearchParams();
 
     const [filters, setFilters] = useState({
-        actorUserId: '',
-        resourceType: '',
-        from: '',
-        to: '',
+        actorUserId: searchParams.get('actor_user_id') || '',
+        resourceType: searchParams.get('resource_type') || '',
+        from: searchParams.get('from') || '',
+        to: searchParams.get('to') || '',
     });
     const [page, setPage] = useState(1);
     const [data, setData] = useState([]);

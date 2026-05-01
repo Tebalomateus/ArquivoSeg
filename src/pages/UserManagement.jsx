@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { UserPlus, Shield, Mail, MoreHorizontal, Building2, Search, Lock, ArrowLeft } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { UserPlus, Shield, Mail, MoreHorizontal, Building2, Search, Lock, ArrowLeft, Activity, Copy, ExternalLink } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 
 // Maps backend role (viewer/contributor/manager/admin) to the PT-BR label used in the UI.
@@ -24,7 +24,27 @@ const adaptBackendUser = (u) => ({
 
 export default function UserManagement() {
     const { backendUsers, usersLoading, refreshUsers } = useClaims();
+    const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
+    const [openMenuId, setOpenMenuId] = useState(null);
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+        if (!openMenuId) return;
+        const onClick = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setOpenMenuId(null); };
+        document.addEventListener('mousedown', onClick);
+        return () => document.removeEventListener('mousedown', onClick);
+    }, [openMenuId]);
+
+    const copyUuid = (uuid) => {
+        navigator.clipboard.writeText(uuid);
+        setOpenMenuId(null);
+    };
+
+    const goToActivity = (uuid) => {
+        setOpenMenuId(null);
+        navigate(`/admin/audit?actor_user_id=${uuid}`);
+    };
 
     // Source of truth is the backend listing for managers+; if it's empty
     // (e.g. lower-privilege session) the table shows nothing real.
@@ -161,9 +181,45 @@ export default function UserManagement() {
                                         )}
                                     </td>
                                     <td className="py-5 text-right pr-2">
-                                        <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-100 shadow-sm">
-                                            <MoreHorizontal size={20} />
-                                        </button>
+                                        <div className="relative inline-block" ref={openMenuId === user.id ? menuRef : null}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
+                                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-100 shadow-sm"
+                                            >
+                                                <MoreHorizontal size={20} />
+                                            </button>
+                                            {openMenuId === user.id && (
+                                                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-slate-100 shadow-2xl z-30 overflow-hidden animate-fade-in">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => goToActivity(user.id)}
+                                                        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
+                                                    >
+                                                        <Activity size={14} className="text-blue-600" />
+                                                        <span className="text-xs font-bold text-slate-700">Ver atividade</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => copyUuid(user.id)}
+                                                        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors border-t border-slate-50"
+                                                    >
+                                                        <Copy size={14} className="text-slate-500" />
+                                                        <span className="text-xs font-bold text-slate-700">Copiar UUID</span>
+                                                    </button>
+                                                    <a
+                                                        href="http://localhost:8081"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        onClick={() => setOpenMenuId(null)}
+                                                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors border-t border-slate-50"
+                                                    >
+                                                        <ExternalLink size={14} className="text-slate-500" />
+                                                        <span className="text-xs font-bold text-slate-700">Editar no Zitadel</span>
+                                                    </a>
+                                                </div>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
