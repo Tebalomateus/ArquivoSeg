@@ -315,6 +315,9 @@ export default function ClaimDetails() {
     const [versionsModal, setVersionsModal] = useState({ open: false, file: null, versions: [] });
     const [editingComment, setEditingComment] = useState({ id: null, draft: '' });
     const [collaboratorModal, setCollaboratorModal] = useState({ open: false, search: '' });
+    const [docSearch, setDocSearch] = useState('');
+    const [showDocSearch, setShowDocSearch] = useState(false);
+    const [docConfidentialityFilter, setDocConfidentialityFilter] = useState('all');
 
     const handleStartEditAnnotation = (doc) => {
         if (!doc.commentId) return alert('Esta anotação ainda não foi sincronizada com o servidor.');
@@ -604,9 +607,17 @@ export default function ClaimDetails() {
                             {canReadAudit && Array.isArray(auditEntries) && (
                                 <span className="ml-auto text-[9px] font-black bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100">BACKEND</span>
                             )}
+                            {!canReadAudit && (
+                                <span className="ml-auto text-[9px] font-black bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-100">LOCAL</span>
+                            )}
                         </h3>
                         {canReadAudit && auditEntries === null && (
                             <p className="text-[10px] text-amber-600 font-medium">Sem permissão para ler audit logs.</p>
+                        )}
+                        {!canReadAudit && (
+                            <p className="text-[10px] text-amber-700 font-medium leading-relaxed mb-4 px-3 py-2 bg-amber-50 border border-amber-100 rounded-lg">
+                                A trilha completa requer papel <strong>manager+</strong>. Abaixo, atividades locais (visíveis apenas neste navegador).
+                            </p>
                         )}
                         <div className="space-y-6 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-gray-200">
                             {(canReadAudit && Array.isArray(auditEntries) && auditEntries.length > 0
@@ -699,18 +710,48 @@ export default function ClaimDetails() {
                                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{currentFolder.documents.length} itens armazenados</p>
                                         </div>
                                     </div>
-                                    <div className="flex gap-2">
-                                        <button className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-100">
+                                    <div className="flex gap-2 items-center">
+                                        {showDocSearch && (
+                                            <input
+                                                type="text"
+                                                autoFocus
+                                                value={docSearch}
+                                                onChange={(e) => setDocSearch(e.target.value)}
+                                                placeholder="Buscar nome, anotação…"
+                                                className="px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 w-56"
+                                            />
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => { setShowDocSearch((v) => !v); if (showDocSearch) setDocSearch(''); }}
+                                            className={`p-2.5 rounded-xl transition-all border ${showDocSearch ? 'bg-blue-600 text-white border-blue-600' : 'text-gray-400 hover:text-blue-600 hover:bg-white border-transparent hover:border-gray-100'}`}
+                                            title="Buscar documentos"
+                                        >
                                             <Search size={18} />
                                         </button>
-                                        <button className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-100">
-                                            <Filter size={18} />
-                                        </button>
+                                        <select
+                                            value={docConfidentialityFilter}
+                                            onChange={(e) => setDocConfidentialityFilter(e.target.value)}
+                                            className="text-[10px] font-black uppercase tracking-widest bg-white border border-gray-100 rounded-xl px-3 py-2 text-gray-600 outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer"
+                                            title="Filtrar por confidencialidade"
+                                        >
+                                            <option value="all">Todos os níveis</option>
+                                            <option value="Geral">Geral</option>
+                                            <option value="Confidencial">Confidencial</option>
+                                            <option value="Altamente Confidencial">Altamente Confidencial</option>
+                                        </select>
                                     </div>
                                 </div>
 
                                 <div className="p-4 space-y-4">
-                                    {currentFolder.documents.map((doc) => (
+                                    {currentFolder.documents
+                                        .filter((doc) => {
+                                            if (docConfidentialityFilter !== 'all' && doc.confidentiality !== docConfidentialityFilter) return false;
+                                            if (!docSearch.trim()) return true;
+                                            const q = docSearch.toLowerCase();
+                                            return (doc.name || '').toLowerCase().includes(q) || (doc.annotation || '').toLowerCase().includes(q);
+                                        })
+                                        .map((doc) => (
                                         <div key={doc.id} className="group p-5 bg-white rounded-2xl border border-gray-100 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-50 transition-all duration-300">
                                             <div className="flex items-start justify-between gap-6">
                                                 <div className="flex gap-5 flex-1">

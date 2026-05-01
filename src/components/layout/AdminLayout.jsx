@@ -1,3 +1,4 @@
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard,
@@ -10,7 +11,8 @@ import {
     Database,
     Link as LinkIcon,
     Building2,
-    History
+    History,
+    FileText,
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 import NotificationBell from '../NotificationBell';
@@ -20,9 +22,40 @@ import NotificationBell from '../NotificationBell';
  * Features a distinct sidebar and specialized administrative tools.
  */
 export default function AdminLayout() {
-    const { currentUser, logout } = useClaims();
+    const { currentUser, logout, claims, backendUsers, clients } = useClaims();
     const navigate = useNavigate();
     const location = useLocation();
+    const [search, setSearch] = useState('');
+    const [searchOpen, setSearchOpen] = useState(false);
+    const searchRef = useRef(null);
+
+    useEffect(() => {
+        if (!searchOpen) return;
+        const onClick = (e) => { if (searchRef.current && !searchRef.current.contains(e.target)) setSearchOpen(false); };
+        document.addEventListener('mousedown', onClick);
+        return () => document.removeEventListener('mousedown', onClick);
+    }, [searchOpen]);
+
+    // Busca local nos arrays já carregados pelo contexto. Match por substring
+    // case-insensitive em campos relevantes de cada entidade.
+    const searchResults = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (q.length < 2) return null;
+        const matches = [];
+        for (const c of claims) {
+            const hay = `${c.title || ''} ${c.number || ''} ${c.insurer || ''} ${c.description || ''}`.toLowerCase();
+            if (hay.includes(q)) matches.push({ kind: 'sinistro', icon: FileText, label: c.title || c.number, sub: `#${c.number || c.id?.slice(0, 8)} · ${c.insurer || ''}`, to: `/admin/sinistros/${c.id}` });
+        }
+        for (const cl of clients) {
+            const hay = `${cl.name || ''} ${cl.contact || ''} ${cl.type || ''}`.toLowerCase();
+            if (hay.includes(q)) matches.push({ kind: 'cliente', icon: Building2, label: cl.name, sub: `${cl.type} · ${cl.contact || '—'}`, to: `/admin/clientes` });
+        }
+        for (const u of backendUsers) {
+            const hay = `${u.email || ''} ${u.role || ''}`.toLowerCase();
+            if (hay.includes(q)) matches.push({ kind: 'usuário', icon: Users, label: u.email, sub: `${u.role}`, to: `/admin/audit?actor_user_id=${u.id}` });
+        }
+        return matches.slice(0, 12);
+    }, [search, claims, clients, backendUsers]);
 
     const menuItems = [
         { icon: LayoutDashboard, label: 'Painel Global', path: '/admin' },
@@ -38,6 +71,12 @@ export default function AdminLayout() {
     const handleLogout = () => {
         logout();
         navigate('/login');
+    };
+
+    const handlePick = (item) => {
+        setSearch('');
+        setSearchOpen(false);
+        navigate(item.to);
     };
 
     return (
@@ -96,13 +135,40 @@ export default function AdminLayout() {
             <main className="flex-1 flex flex-col relative overflow-hidden">
                 {/* Admin Top Header */}
                 <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-10 z-10">
-                    <div className="relative w-96 group">
+                    <div className="relative w-96 group" ref={searchRef}>
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={18} />
                         <input
                             type="text"
-                            placeholder="Pesquisa global no banco de dados..."
+                            value={search}
+                            onChange={(e) => { setSearch(e.target.value); setSearchOpen(true); }}
+                            onFocus={() => setSearchOpen(true)}
+                            placeholder="Buscar sinistros, clientes ou usuários…"
                             className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-12 pr-4 py-2.5 text-xs font-medium focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-200 transition-all"
                         />
+                        {searchOpen && search.trim().length >= 2 && (
+                            <div className="absolute left-0 right-0 mt-2 bg-white rounded-xl border border-slate-100 shadow-2xl z-30 max-h-96 overflow-y-auto">
+                                {!searchResults || searchResults.length === 0 ? (
+                                    <p className="text-xs text-slate-400 text-center py-6 uppercase tracking-widest font-bold">Nenhum resultado.</p>
+                                ) : (
+                                    searchResults.map((r, i) => (
+                                        <button
+                                            key={`${r.kind}-${i}`}
+                                            type="button"
+                                            onClick={() => handlePick(r)}
+                                            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 border-b border-slate-50 last:border-b-0 transition-colors"
+                                        >
+                                            <div className="shrink-0 w-8 h-8 bg-slate-100 text-slate-500 rounded-lg flex items-center justify-center">
+                                                <r.icon size={14} />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-xs font-bold text-slate-800 truncate">{r.label}</p>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{r.kind} · {r.sub}</p>
+                                            </div>
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-6">
