@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Mail, Lock, ArrowRight, Github } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, ArrowRight, Github, KeyRound, ExternalLink, X } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { INITIAL_USERS } from '../constants/initialData';
 import { loginWithUiRole } from '../api/auth';
@@ -11,6 +11,7 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [forgotOpen, setForgotOpen] = useState(false);
     const navigate = useNavigate();
     const { setCurrentUser } = useClaims();
 
@@ -140,7 +141,7 @@ export default function Login() {
                                 <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-secondary focus:ring-secondary" />
                                 <span className="text-sm font-medium text-gray-600">Lembrar de mim</span>
                             </label>
-                            <button type="button" className="text-sm font-bold text-secondary hover:text-secondary-hover">Esqueceu a senha?</button>
+                            <button type="button" onClick={() => setForgotOpen(true)} className="text-sm font-bold text-secondary hover:text-secondary-hover">Esqueceu a senha?</button>
                         </div>
 
                         <button
@@ -174,6 +175,48 @@ export default function Login() {
                     </footer>
                 </div>
             </div>
+
+            {forgotOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setForgotOpen(false)}>
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-up" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-6 border-b border-slate-100 flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-2xl bg-blue-100 text-blue-600">
+                                    <KeyRound size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-black text-slate-900 font-display">Recuperar senha</h3>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Identidade gerenciada por Zitadel</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setForgotOpen(false)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <p className="text-sm text-slate-700 leading-relaxed">
+                                Senhas e MFA são gerenciados pelo provedor de identidade <strong>Zitadel</strong>. Para redefinir sua senha:
+                            </p>
+                            <ol className="text-sm text-slate-600 space-y-2 list-decimal list-inside leading-relaxed">
+                                <li>Acesse o console do Zitadel.</li>
+                                <li>Clique em <strong>"Forgot password"</strong> na tela de login.</li>
+                                <li>Siga as instruções enviadas para seu email corporativo.</li>
+                            </ol>
+                            <a
+                                href="http://localhost:8081"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all"
+                            >
+                                Abrir Console Zitadel <ExternalLink size={14} />
+                            </a>
+                            <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
+                                Em produção, este link aponta para o tenant Zitadel da sua organização (ex.: <code className="font-mono">auth.suaempresa.com</code>).
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
