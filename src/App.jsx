@@ -54,6 +54,8 @@ function App() {
             >
                 <Route index element={<AdminDashboard />} />
                 <Route path="sinistros" element={<ClaimsList />} />
+                <Route path="sinistros/novo" element={<NewClaim />} />
+                <Route path="sinistros/:id" element={<ClaimDetails />} />
                 <Route path="clientes" element={<ClientManagement />} />
                 <Route path="links" element={<LinkTracker />} />
                 <Route path="usuarios" element={<UserManagement />} />
