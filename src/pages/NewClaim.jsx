@@ -216,14 +216,15 @@ export default function NewClaim() {
             initialChecklist: checklist
         });
 
-        navigate(`/sinistros/${newClaimId}`);
+        // Relative navigation works under both /app/sinistros/novo and /admin/sinistros/novo.
+        navigate(`../${newClaimId}`);
     };
 
     return (
         <div className="max-w-5xl mx-auto space-y-8 animate-fade-in pb-20 relative z-10">
             <div className="flex items-center justify-between">
                 <div>
-                    <Link to="/sinistros" className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 hover:text-blue-600 transition-all mb-2 tracking-widest">
+                    <Link to=".." className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 hover:text-blue-600 transition-all mb-2 tracking-widest">
                         <ArrowLeft size={16} />
                         Voltar para Sinistros
                     </Link>
@@ -231,7 +232,7 @@ export default function NewClaim() {
                     <p className="text-gray-500">Cadastre os dados do sinistro conforme informações da seguradora.</p>
                 </div>
                 <button
-                    onClick={() => navigate('/sinistros')}
+                    onClick={() => navigate('..')}
                     className="p-2 hover:bg-white rounded-full text-gray-400 hover:text-gray-600 transition-all border border-transparent hover:border-gray-200"
                 >
                     <X size={24} />
