@@ -1,18 +1,58 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Bell, Key, Database, Mail, Clock, Calendar, CheckCircle, Save, Trash2, ShieldAlert, ArrowLeft } from 'lucide-react';
+import { Shield, Bell, Key, Database, Mail, Clock, CheckCircle, Save, ArrowLeft, ExternalLink, Server, Lock, FileCheck, AlertTriangle } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 
+const formatBytes = (n) => {
+    if (!n || Number.isNaN(n)) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0;
+    let v = n;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
+};
+
 export default function Settings() {
-    const { settings, updateSettings } = useClaims();
+    const { settings, updateSettings, claims, backendUsers } = useClaims();
     const [localSettings, setLocalSettings] = useState(settings);
     const [activeSection, setActiveSection] = useState('Notificações');
+    const [healthOk, setHealthOk] = useState(null);
 
     useEffect(() => {
         if (settings) {
             setLocalSettings(settings);
         }
     }, [settings]);
+
+    useEffect(() => {
+        const check = async () => {
+            try {
+                const res = await fetch('/health/ready');
+                setHealthOk(res.ok);
+            } catch { setHealthOk(false); }
+        };
+        check();
+        const t = setInterval(check, 30000);
+        return () => clearInterval(t);
+    }, []);
+
+    // Aggregations for Storage & Backup tab
+    const storage = useMemo(() => {
+        let totalDocs = 0;
+        let totalSize = 0;
+        let totalVersions = 0;
+        for (const c of claims) {
+            for (const f of c.folders || []) {
+                for (const d of f.documents || []) {
+                    if (!d.backFileVerId) continue;
+                    totalDocs++;
+                    totalSize += Number(d.size_bytes || 0);
+                    totalVersions += Number(d.backVersion || 1);
+                }
+            }
+        }
+        return { totalDocs, totalSize, totalVersions };
+    }, [claims]);
 
     const handleSave = () => {
         updateSettings(localSettings);
@@ -134,11 +174,177 @@ export default function Settings() {
                             </div>
                         )}
 
-                        {activeSection !== 'Notificações' && (
-                            <div className="py-24 text-center flex flex-col items-center animate-fade-in">
-                                <ShieldAlert size={64} className="text-gray-100 mb-6" />
-                                <h4 className="text-xl font-black text-gray-300 uppercase tracking-[0.2em]">Seção em Construção</h4>
-                                <p className="text-gray-200 text-xs font-bold uppercase mt-2 tracking-widest">Disponível na próxima iteração da POC</p>
+                        {activeSection === 'Segurança' && (
+                            <div className="space-y-8 animate-fade-in">
+                                <div>
+                                    <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
+                                        <Shield size={24} className="text-blue-600" /> Segurança da Plataforma
+                                    </h3>
+                                    <p className="text-sm text-gray-500 font-medium">Controles ativos no backend ArquivoSeg.</p>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="p-5 rounded-2xl border-2 border-green-100 bg-green-50/30">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <Lock size={18} className="text-green-600" />
+                                            <span className="text-xs font-black uppercase tracking-widest text-green-700">Multi-tenant RLS</span>
+                                        </div>
+                                        <p className="text-[11px] text-green-800/70 font-medium leading-relaxed">
+                                            Postgres Row-Level Security ativo em todas as tabelas. <code className="font-mono">app.current_tenant_id</code> definido por request via JWT.
+                                        </p>
+                                    </div>
+                                    <div className="p-5 rounded-2xl border-2 border-green-100 bg-green-50/30">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <FileCheck size={18} className="text-green-600" />
+                                            <span className="text-xs font-black uppercase tracking-widest text-green-700">Audit append-only</span>
+                                        </div>
+                                        <p className="text-[11px] text-green-800/70 font-medium leading-relaxed">
+                                            <code className="font-mono">REVOKE UPDATE, DELETE ON audit_logs FROM app</code>. Adulteração da trilha exige acesso ao DB admin.
+                                        </p>
+                                    </div>
+                                    <div className="p-5 rounded-2xl border-2 border-blue-100 bg-blue-50/30">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <Key size={18} className="text-blue-600" />
+                                            <span className="text-xs font-black uppercase tracking-widest text-blue-700">OIDC + Zitadel</span>
+                                        </div>
+                                        <p className="text-[11px] text-blue-800/70 font-medium leading-relaxed">
+                                            Autenticação via Personal Access Tokens, com introspection contra Zitadel. Senhas e MFA gerenciados pelo IdP.
+                                        </p>
+                                    </div>
+                                    <div className="p-5 rounded-2xl border-2 border-blue-100 bg-blue-50/30">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <Database size={18} className="text-blue-600" />
+                                            <span className="text-xs font-black uppercase tracking-widest text-blue-700">RBAC hierárquico</span>
+                                        </div>
+                                        <p className="text-[11px] text-blue-800/70 font-medium leading-relaxed">
+                                            <code className="font-mono">viewer &lt; contributor &lt; manager &lt; admin</code>. Enforcement no middleware <code className="font-mono">RequireRole</code>.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3">
+                                    <AlertTriangle size={18} className="text-amber-600 mt-0.5 shrink-0" />
+                                    <div>
+                                        <p className="text-xs font-bold text-amber-800">2FA, política de senha e sessões</p>
+                                        <p className="text-[11px] text-amber-800/80 font-medium mt-1 leading-relaxed">
+                                            São configurados no console do Zitadel — não nesta tela. Acesse <code className="font-mono">http://localhost:8081</code>.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeSection === 'Integrações' && (
+                            <div className="space-y-8 animate-fade-in">
+                                <div>
+                                    <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
+                                        <Key size={24} className="text-blue-600" /> Integrações
+                                    </h3>
+                                    <p className="text-sm text-gray-500 font-medium">Serviços externos que o ArquivoSeg consome.</p>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {[
+                                        { name: 'PostgreSQL 16', purpose: 'Persistência multi-tenant com RLS', status: healthOk, link: null },
+                                        { name: 'MinIO (S3)', purpose: 'Storage de arquivos com presigned URLs', status: healthOk, link: 'http://localhost:9001' },
+                                        { name: 'Zitadel OIDC', purpose: 'Identity provider e token introspection', status: healthOk, link: 'http://localhost:8081' },
+                                    ].map((svc) => (
+                                        <div key={svc.name} className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className={`w-2.5 h-2.5 rounded-full ${svc.status === null ? 'bg-slate-300' : svc.status ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-bold text-gray-900">{svc.name}</p>
+                                                    <p className="text-[11px] text-gray-500 font-medium">{svc.purpose}</p>
+                                                </div>
+                                            </div>
+                                            {svc.link && (
+                                                <a href={svc.link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">
+                                                    Console <ExternalLink size={12} />
+                                                </a>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <p className="text-[11px] text-gray-400 font-medium leading-relaxed">
+                                    Status atualizado a cada 30s via <code className="font-mono">/health/ready</code> (verifica DB + S3 simultaneamente).
+                                </p>
+                            </div>
+                        )}
+
+                        {activeSection === 'Storage & Backup' && (
+                            <div className="space-y-8 animate-fade-in">
+                                <div>
+                                    <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
+                                        <Database size={24} className="text-blue-600" /> Storage & Backup
+                                    </h3>
+                                    <p className="text-sm text-gray-500 font-medium">Volume armazenado e política de retenção.</p>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="p-5 rounded-2xl bg-blue-50 border border-blue-100">
+                                        <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Documentos ativos</p>
+                                        <p className="text-3xl font-black text-blue-900 mt-1">{storage.totalDocs}</p>
+                                    </div>
+                                    <div className="p-5 rounded-2xl bg-purple-50 border border-purple-100">
+                                        <p className="text-[10px] font-black text-purple-700 uppercase tracking-widest">Versões totais</p>
+                                        <p className="text-3xl font-black text-purple-900 mt-1">{storage.totalVersions}</p>
+                                    </div>
+                                    <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-100">
+                                        <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Espaço usado</p>
+                                        <p className="text-3xl font-black text-emerald-900 mt-1">{formatBytes(storage.totalSize)}</p>
+                                    </div>
+                                </div>
+
+                                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 space-y-3">
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-700">Política de retenção</h4>
+                                    <ul className="text-[11px] text-slate-600 font-medium space-y-1.5 leading-relaxed">
+                                        <li>• Versões antigas mantidas indefinidamente (soft-delete em <code className="font-mono">deleted_at</code>).</li>
+                                        <li>• Audit log preservado por 5 anos (Lei do Seguro / SUSEP).</li>
+                                        <li>• Backup do Postgres é responsabilidade da infraestrutura (RDS / cron).</li>
+                                        <li>• MinIO/S3 com versionamento por chave; cada upload do mesmo arquivo cria nova versão lógica.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeSection === 'Templates de Email' && (
+                            <div className="space-y-8 animate-fade-in">
+                                <div>
+                                    <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
+                                        <Mail size={24} className="text-blue-600" /> Templates de Email
+                                    </h3>
+                                    <p className="text-sm text-gray-500 font-medium">Modelos de notificação automática.</p>
+                                </div>
+
+                                <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3">
+                                    <AlertTriangle size={18} className="text-amber-600 mt-0.5 shrink-0" />
+                                    <div>
+                                        <p className="text-xs font-bold text-amber-800">Disparo de email não está no escopo do back atual</p>
+                                        <p className="text-[11px] text-amber-800/80 font-medium mt-1 leading-relaxed">
+                                            O backend ArquivoSeg apenas registra eventos no audit log. Notificações por email são tratadas externamente (Zitadel para identidade; SES/SendGrid para domínio operacional, em produção).
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {[
+                                        { id: 'sla', name: 'SLA SUSEP em risco', desc: 'Disparado quando faltam 5 dias para os 30d e o sinistro não foi liquidado.' },
+                                        { id: 'assigned', name: 'Sinistro atribuído', desc: 'Avisa o responsável recém-designado.' },
+                                        { id: 'document', name: 'Novo documento anexado', desc: 'Notifica gestores de sinistro sobre uploads.' },
+                                        { id: 'share-access', name: 'Link público acessado', desc: 'Avisa o criador do share quando o portal externo é aberto.' },
+                                    ].map((t) => (
+                                        <div key={t.id} className="p-4 bg-white border border-gray-100 rounded-2xl">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-bold text-gray-900">{t.name}</p>
+                                                    <p className="text-[11px] text-gray-500 font-medium mt-0.5">{t.desc}</p>
+                                                </div>
+                                                <span className="text-[9px] font-black px-2 py-1 rounded-md bg-slate-100 text-slate-500 uppercase tracking-widest shrink-0">Read-only</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </div>
