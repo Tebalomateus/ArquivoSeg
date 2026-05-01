@@ -42,10 +42,10 @@
 ▶ 6. Processes — assign_to (manager picks contributor)
   ✓ PATCH assigned_to                                            [200]
   ✓ assigned_to persisted                                        [contains 9427e2d9-c4b4-4498-8ec9-3165c80f230b]
-  ✓ list filtered by assigned_to includes our process            [contains 40e24138-1828-4e49-85c3-20f65828ebaf]
+  ✓ list filtered by assigned_to includes our process            [contains 1622c912-29ae-4246-9f39-3d86d7fc8003]
 
 ▶ 7. Processes — list filters & pagination
-  ✓ filter status=done includes our process                      [contains 40e24138-1828-4e49-85c3-20f65828ebaf]
+  ✓ filter status=done includes our process                      [contains 1622c912-29ae-4246-9f39-3d86d7fc8003]
   ✓ filter status=ready excludes done process                    [yes]
   ✓ pagination response has total                                [contains total]
 
@@ -54,9 +54,9 @@
   ✓ upload returns uploaded_by                                   [contains uploaded_by]
   ✓ upload v2 same name                                          [201]
   ✓ list files                                                   [200]
-  ✓ list contains v2 file id                                     [contains 8d72c2d5-3691-46b2-a56a-aa8c02e0cc90]
+  ✓ list contains v2 file id                                     [contains 3989774a-8602-4e4c-b20f-f46be97fba7e]
   ✓ list file versions                                           [200]
-  ✓ versions contain both ids                                    [contains 4dd7e758-b31e-4bad-93bf-2061f534db8a]
+  ✓ versions contain both ids                                    [contains 61253649-461b-4245-b2c8-f92dd51b4fbb]
   ✓ download endpoint returns redirect/200                       [yes]
   ✓ download redirects to MinIO                                  [contains 3900]
   ✓ delete v1                                                    [204]
@@ -68,7 +68,7 @@
   ✓ CONTRIBUTOR edits own comment                                [200]
   ✓ comment body persisted                                       [contains editada cinco]
   ✓ comment has updated_at                                       [contains updated_at]
-  ✓ list comments includes ours                                  [contains 5beb66bb-74f6-4cbb-a851-aa6ae963ed7d]
+  ✓ list comments includes ours                                  [contains 94e0c783-3ace-43a8-baaf-4027c61a8de4]
   ✓ CONTRIBUTOR deletes own comment                              [204]
   ✓ deleted comment not listed                                   [yes]
 
@@ -78,7 +78,7 @@
   ✓ share has token                                              [contains token]
   ✓ public /s/:token redirects                                   [yes]
   ✓ list shares for file                                         [200]
-  ✓ list contains our share id                                   [contains 28bb50da-2807-4847-8f1d-abd491578efe]
+  ✓ list contains our share id                                   [contains f7489c9a-ebb6-4b8a-8df9-df49c7433325]
   ✓ revoke share                                                 [204]
   ✓ public /s/:token after revoke is blocked (got 404)           [yes]
 
@@ -105,10 +105,10 @@
   ✓ MANAGER creates client                                       [201]
   ✓ client payload has type=SEGURADORA                           [contains SEGURADORA]
   ✓ VIEWER lists clients                                         [200]
-  ✓ list includes our client                                     [contains 280a6765-0856-4d92-92df-03e81b7644ae]
+  ✓ list includes our client                                     [contains 54064e8f-6898-4f8a-91ce-fc71dd95b874]
   ✓ MANAGER updates client                                       [200]
   ✓ client rename persisted                                      [contains renamed]
-  ✓ list filtered by type includes ours                          [contains 280a6765-0856-4d92-92df-03e81b7644ae]
+  ✓ list filtered by type includes ours                          [contains 54064e8f-6898-4f8a-91ce-fc71dd95b874]
   ✓ VIEWER cannot delete client (403)                            [403]
   ✓ MANAGER cannot delete client (403)                           [403]
   ✓ ADMIN deletes client                                         [204]
@@ -131,7 +131,7 @@
 
 ▶ 15. Archive — process is hidden from default list afterwards
   ✓ ADMIN archives process                                       [200]
-  ✓ archived process visible under status=archived               [contains 40e24138-1828-4e49-85c3-20f65828ebaf]
+  ✓ archived process visible under status=archived               [contains 1622c912-29ae-4246-9f39-3d86d7fc8003]
 
 ▶ Summary
 
