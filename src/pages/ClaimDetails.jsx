@@ -314,6 +314,7 @@ export default function ClaimDetails() {
     };
     const [versionsModal, setVersionsModal] = useState({ open: false, file: null, versions: [] });
     const [editingComment, setEditingComment] = useState({ id: null, draft: '' });
+    const [collaboratorModal, setCollaboratorModal] = useState({ open: false, search: '' });
 
     const handleStartEditAnnotation = (doc) => {
         if (!doc.commentId) return alert('Esta anotação ainda não foi sincronizada com o servidor.');
@@ -1033,7 +1034,7 @@ export default function ClaimDetails() {
                                     </div>
                                     <button
                                         className="w-full py-4 border-2 border-blue-100 text-blue-600 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm"
-                                        onClick={() => alert('Abrindo modal de convite para o sinistro ' + claim.number)}
+                                        onClick={() => setCollaboratorModal({ open: true, search: '' })}
                                     >
                                         Adicionar Colaborador
                                     </button>
@@ -1219,6 +1220,79 @@ export default function ClaimDetails() {
                                 })}
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: Adicionar Colaborador */}
+            {collaboratorModal.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setCollaboratorModal({ open: false, search: '' })}>
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-scale-up" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-6 border-b border-slate-100 flex items-start justify-between">
+                            <div>
+                                <h3 className="text-lg font-black text-slate-900 font-display">Adicionar Colaborador</h3>
+                                <p className="text-xs text-slate-500 font-medium mt-1">Selecione um usuário do tenant para atribuir como responsável pelo sinistro #{claim.number}.</p>
+                            </div>
+                            <button onClick={() => setCollaboratorModal({ open: false, search: '' })} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {(backendUsers || []).length === 0 ? (
+                                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium leading-relaxed">
+                                    Lista de usuários indisponível. Apenas manager+ consegue listar usuários do tenant via /users — este botão é uma operação exclusiva de gestores.
+                                </div>
+                            ) : (
+                                <>
+                                    <input
+                                        type="text"
+                                        autoFocus
+                                        value={collaboratorModal.search}
+                                        onChange={(e) => setCollaboratorModal({ ...collaboratorModal, search: e.target.value })}
+                                        placeholder="Buscar por email…"
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-300"
+                                    />
+                                    <ul className="max-h-72 overflow-y-auto space-y-1.5">
+                                        {backendUsers
+                                            .filter((u) => u.role !== 'admin')
+                                            .filter((u) => !collaboratorModal.search || u.email?.toLowerCase().includes(collaboratorModal.search.toLowerCase()))
+                                            .map((u) => {
+                                                const isCurrent = u.id === claim.assignedTo;
+                                                return (
+                                                    <li key={u.id}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={async () => {
+                                                                await handleAssign(u.id);
+                                                                setCollaboratorModal({ open: false, search: '' });
+                                                            }}
+                                                            className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-all ${isCurrent ? 'bg-blue-50 border border-blue-200' : 'hover:bg-slate-50 border border-transparent'}`}
+                                                        >
+                                                            <div className="min-w-0">
+                                                                <p className="text-sm font-bold text-slate-800 truncate">{u.email}</p>
+                                                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{u.role}</p>
+                                                            </div>
+                                                            {isCurrent && <span className="text-[10px] font-black uppercase tracking-widest text-blue-600">Atual</span>}
+                                                        </button>
+                                                    </li>
+                                                );
+                                            })}
+                                    </ul>
+                                    {claim.assignedTo && (
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                await handleAssign('');
+                                                setCollaboratorModal({ open: false, search: '' });
+                                            }}
+                                            className="w-full py-2.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                        >
+                                            Remover responsável atual
+                                        </button>
+                                    )}
+                                </>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
