@@ -1,0 +1,301 @@
+
+▶ 0. Pré-requisitos
+  ✓ Vite proxy responde                                                      [200]
+  ✓ Backend /health/live                                                     [200]
+  ✓ Backend /health/ready (DB+S3)                                            [200]
+  ✓ Backend /metrics (Prometheus)                                            [200]
+
+▶ 1. Autenticação
+  → Login simulado: front mapeia email → PAT do .env.local
+  ✓ PAT VIEWER → /processes acessível                                     [200]
+  ✓ PAT CONTRIBUTOR → /processes acessível                                [200]
+  ✓ PAT MANAGER → /processes acessível                                    [200]
+  ✓ PAT ADMIN → /processes acessível                                      [200]
+  → Token inválido / ausente
+  ✓ Sem token → 401                                                        [401]
+  ✓ Token inválido → 401                                                  [401]
+
+▶ 2. Sinistros — lifecycle completo via UI flow
+  → 2.1 Tela NewClaim → POST /processes com metadata completo
+  ✓ MANAGER cria sinistro (NewClaim form submit)                             [201]
+  →     process_id = b995b557-fb0a-403d-991d-f0f610291f34
+  → 2.2 GET /processes/:id → ClaimDetails carrega
+  ✓ GET single process retorna 200                                           [200]
+  ✓ campo title preservado                                                  
+  ✓ campo description preservado                                            
+  ✓ metadata.insurer preservada                                             
+  ✓ metadata.brokerName preservada                                          
+  ✓ metadata.adjusterName preservada                                        
+  ✓ metadata.policyNumber preservada                                        
+  ✓ metadata.observations preservada                                        
+  ✓ metadata.checklistByFolder.causa                                        
+  ✓ metadata.checklistByFolder.prejuizo                                     
+  ✓ campo created_by                                                        
+  ✓ status inicial = ready                                                   [ready]
+  → 2.3 ClaimDetails → editar título via modal
+  ✓ PATCH title retorna 200                                                  [200]
+  ✓ título persistido                                                      
+  → 2.4 ClaimDetails → editar descrição
+  ✓ PATCH description retorna 200                                            [200]
+  ✓ descrição persistida                                                  
+  → 2.5 ClaimDetails → checklist do contributor (PATCH metadata.checklistByFolder)
+  ✓ PATCH checklist (2 itens marcados)                                       [200]
+  ✓ checklist item BO marcado                                               
+  → 2.6 ClaimDetails → marcar isComplex (sinistro complexo, prazo 120d)
+  ✓ PATCH metadata isComplex=true                                            [200]
+  ✓ isComplex=true persistido                                               
+  → 2.7 ClaimDetails → suspender SLA com motivo
+  ✓ PATCH metadata suspendendo SLA                                           [200]
+  ✓ razão da suspensão persistida                                         
+  ✓ data limite persistida                                                  
+  → 2.8 ClaimDetails → retomar SLA suspenso
+  ✓ PATCH metadata retomando SLA                                             [200]
+  ✓ resumedAt persistido                                                    
+  → 2.9 ClaimDetails → workflow ready→ongoing→review→done
+  ✓ transição → ongoing aceita                                           [200]
+  ✓ status final = ongoing                                                   [ongoing]
+  ✓ transição → review aceita                                            [200]
+  ✓ status final = review                                                    [review]
+  ✓ transição → done aceita                                              [200]
+  ✓ status final = done                                                      [done]
+  → 2.10 ClaimDetails → tentativa de transição inválida
+  ✓ done→ongoing rejeitado pelo back                                       [422]
+  ✓ status com valor não-enum → 400                                       [400]
+  → 2.11 ClaimDetails → modal Adicionar Colaborador (assign)
+  ✓ PATCH assigned_to → contributor                                        [200]
+  ✓ assigned_to persistido                                                  
+  → 2.12 Modal → trocar responsável
+  ✓ PATCH troca de responsável                                              [200]
+  ✓ novo assigned_to persistido                                             
+  → 2.13 Modal → trocar responsável (não há null clearing — limitação do back)
+  ✓ PATCH para um terceiro responsável                                      [200]
+  ✓ novo assigned_to (viewer) persistido                                    
+  → 2.14 ClaimsList → filtros server-side
+  ✓ filtro status=done inclui o sinistro                                    
+  ✓ filtro status=ready exclui o done                                       
+  ✓ filtro assigned_to inclui o sinistro                                    
+  → 2.15 ClaimsList → paginação
+  ✓ response inclui campo total                                             
+  ✓ response inclui campo data                                              
+
+▶ 3. Documentos — lifecycle completo
+  → 3.1 Modal de upload → POST /processes/:id/files com prefix folder
+  ✓ Upload v1 com folder=causa                                               [201]
+  →     file_ver_id v1 = 6b9718b4-0a57-488f-ba1f-356af4fdfc84
+  ✓ campo file_name preserva prefix                                         
+  ✓ campo size_bytes presente                                               
+  ✓ campo mime_type presente                                                
+  ✓ campo s3_key presente                                                   
+  ✓ campo uploaded_by presente                                              
+  ✓ version inicial = 1                                                      [1]
+  → 3.2 Re-upload mesmo nome → cria nova versão
+  ✓ Upload v2 mesmo file_name                                                [201]
+  →     file_ver_id v2 = ad233966-391d-4703-a140-b05b716d2cb9
+  ✓ version v2 = 2                                                           [2]
+  → 3.3 Upload em folder=prejuizo (categoria diferente)
+  ✓ Upload em folder=prejuizo                                                [201]
+  → 3.4 Upload em folder=sigiloso
+  ✓ Upload em folder=liquidacao                                              [201]
+  → 3.5 ClaimDetails → listar arquivos do sinistro (latest version per file)
+  ✓ GET files retorna 200                                                    [200]
+  ✓ lista contém v2 (versão atual do BO)                                  
+  ✓ lista contém arquivo prejuizo                                          
+  ✓ v1 NÃO aparece na listagem (só latest)                                
+  → 3.6 ClaimDetails → modal de versões
+  ✓ GET versions retorna 200                                                 [200]
+  ✓ versions contém v1                                                     
+  ✓ versions contém v2                                                     
+  → 3.7 Eye icon → download (302 para MinIO presigned)
+  ✓ download redireciona [302]
+  ✓ Location aponta para MinIO :3900                                        
+  ✓ Location tem signature presigned                                        
+  → 3.8 Trash icon → DELETE soft-delete versão
+  ✓ DELETE v1 retorna 204                                                    [204]
+  ✓ v1 some da listagem após delete                                        
+  → 3.9 Tentativa de download de versão deletada
+  ✓ download de v1 deletada → 404
+
+▶ 4. Anotações (comments) — lifecycle completo
+  → 4.1 ClaimDetails → criar anotação ligada a arquivo
+  ✓ CONTRIBUTOR cria anotação                                              [201]
+  ✓ campo author_id presente                                                
+  ✓ campo file_ver_id preservado                                            
+  ✓ campo body preservado                                                   
+  → 4.2 ClaimDetails → criar anotação geral (sem file_ver_id)
+  ✓ CONTRIBUTOR cria anotação sem arquivo                                  [201]
+  ✓ file_ver_id é null/omitido                                             
+  → 4.3 ClaimDetails → editar anotação própria (PATCH)
+  ✓ CONTRIBUTOR edita própria anotação                                    [200]
+  ✓ body atualizado                                                         
+  ✓ campo updated_at retornado                                              
+  → 4.4 Manager edita anotação de outro (deve permitir)
+  ✓ MANAGER edita anotação de outro autor                                  [200]
+  ✓ edição do manager persistida                                          
+  → 4.5 ClaimDetails → listar anotações
+  ✓ lista inclui anotação 1                                               
+  ✓ lista inclui anotação 2                                               
+  → 4.6 Trash icon → deletar anotação
+  ✓ CONTRIBUTOR deleta própria anotação                                   [204]
+  ✓ anotação 2 some após delete                                          
+
+▶ 5. Share Links — lifecycle completo
+  → 5.1 ClaimDetails (Portal panel) → criar share com label e expiração
+  ✓ MANAGER cria share com label                                             [201]
+  ✓ campo created_by presente                                               
+  ✓ campo token presente                                                    
+  ✓ campo expires_at preservado                                             
+  ✓ campo label preservado                                                  
+  → 5.2 Criar share sem expiração
+  ✓ Share sem expires_at aceito                                              [201]
+  → 5.3 LinkTracker → listar shares por arquivo
+  ✓ GET shares por arquivo                                                   [200]
+  ✓ lista inclui share 1                                                    
+  → 5.4 PublicShare (/portal/:token) → /s/:token redireciona com 302
+  ✓ /s/:token redireciona [302]
+  → 5.5 Acesso público registra share.accessed na auditoria
+  ✓ audit tem share.accessed                                                
+  → 5.6 ClaimDetails → revogar share
+  ✓ DELETE share retorna 204                                                 [204]
+  → 5.7 Acesso após revogação
+  ✓ share revogado bloqueado [404]
+
+▶ 6. Auditoria — verificar TODOS os action types disparam
+  → 6.1 Cada ação UI gera entry específica no audit
+scripts/e2e-deep.sh: line 420: process.created: syntax error: invalid arithmetic operator (error token is ".created")
+scripts/e2e-deep.sh: line 425: process.created: syntax error: invalid arithmetic operator (error token is ".created")
+  → 6.2 Audit entries têm contexto completo
+  ✓ actor_user_id populado                                                  
+  ✓ ip_address populado                                                     
+  ✓ user_agent populado                                                     
+  ✓ timestamp populado                                                      
+  ✓ metadata jsonb presente                                                 
+  → 6.3 Audit metadata em status_changed inclui old_status/new_status
+  ⚠ audit.status_changed sem old/new visível (mas evento existe)
+  → 6.4 Filtros do AuditLog admin
+  ✓ filtro actor_user_id retorna entries do manager                         
+  ✓ filtro resource_type=file_version retorna files                         
+  ✓ filtro resource_type=comment retorna comments                           
+  ✓ filtro from=<1h atrás> retorna entries                                 
+  → 6.5 Compliance Data Center → audit window grande
+  ✓ audit 30d window retorna data                                           
+
+▶ 7. Clientes — lifecycle completo via ClientManagement
+  → 7.1 Modal Novo Cliente → SEGURADORA
+  ✓ MANAGER cria SEGURADORA                                                  [201]
+  ✓ type=SEGURADORA preservado                                              
+  → 7.2 Modal → criar CORRETORA
+  ✓ MANAGER cria CORRETORA                                                   [201]
+  → 7.3 Modal → criar AUDITORIA
+  ✓ MANAGER cria AUDITORIA                                                   [201]
+  → 7.4 ClientManagement → listar todos
+  ✓ lista contém SEGURADORA criada                                         
+  ✓ lista contém CORRETORA criada                                          
+  ✓ lista contém AUDITORIA criada                                          
+  → 7.5 Filtro por type=SEGURADORA
+  ✓ filtro inclui SEGURADORA                                                
+  ✓ filtro exclui CORRETORA                                                 
+  ✓ filtro exclui AUDITORIA                                                 
+  → 7.6 NewClaim dropdown lê seguradoras
+  ✓ dropdown da NewClaim recebe SEGURADORA                                  
+  → 7.7 ClientManagement → editar cliente (PATCH)
+  ✓ MANAGER edita cliente                                                    [200]
+  ✓ name atualizado persistido                                              
+  ✓ status atualizado persistido                                            
+  → 7.8 PATCH parcial preserva campos não enviados
+  ✓ PATCH parcial aceito                                                     [200]
+  ✓ contact atualizado                                                      
+  ✓ name não foi sobrescrito                                               
+  ✓ type não foi sobrescrito                                               
+  → 7.9 RBAC: VIEWER tenta deletar
+  ✓ VIEWER delete cliente → 403                                            [403]
+  → 7.10 RBAC: MANAGER tenta deletar (admin-only)
+  ✓ MANAGER delete cliente → 403                                           [403]
+  → 7.11 ADMIN deleta cliente
+  ✓ ADMIN delete cliente → 204                                             [204]
+  ✓ GET cliente deletado → 404                                             [404]
+
+▶ 8. Usuários — UserManagement read-only
+  → 8.1 GET /users (manager+)
+  ✓ MANAGER lista usuários                                                  [200]
+  ✓ lista contém campo email                                               
+  ✓ lista contém campo role                                                
+  ✓ lista contém campo created_at                                          
+  ✓ lista tem viewer                                                        
+  ✓ lista tem contributor                                                   
+  ✓ lista tem manager                                                       
+  ✓ lista tem admin                                                         
+  → 8.2 RBAC: viewer/contributor não podem listar usuários
+  ✓ VIEWER /users → 403                                                    [403]
+  ✓ CONTRIBUTOR /users → 403                                               [403]
+
+▶ 9. RBAC — matriz completa de permissões
+  → 9.1 Processes — POST/PATCH/DELETE por papel
+  ✓ VIEWER POST /processes → 403                                           [403]
+  ✓ CONTRIBUTOR POST /processes → 201                                      [201]
+  ✓ MANAGER POST /processes → 201                                          [201]
+  ✓ ADMIN POST /processes → 201                                            [201]
+  → 9.2 Files — DELETE precisa manager+
+  ✓ VIEWER DELETE file → 403                                               [403]
+  ✓ CONTRIBUTOR DELETE file → 403                                          [403]
+  → 9.3 Comments — POST precisa contributor+
+  ✓ VIEWER POST /comments → 403                                            [403]
+  → 9.4 Shares — POST precisa manager+
+  ✓ VIEWER POST /shares → 403                                              [403]
+  ✓ CONTRIBUTOR POST /shares → 403                                         [403]
+  → 9.5 Audit — leitura precisa manager+
+  ✓ VIEWER GET /audit → 403                                                [403]
+  ✓ CONTRIBUTOR GET /audit → 403                                           [403]
+  → 9.6 Process archive (DELETE) precisa admin
+  ✓ VIEWER DELETE process → 403                                            [403]
+  ✓ CONTRIBUTOR DELETE process → 403                                       [403]
+  ✓ MANAGER DELETE process → 403                                           [403]
+
+▶ 10. Edge cases
+  → 10.1 GET de recurso inexistente → 404 com error.code
+  ✓ 404 retorna JSON com error.code                                         
+  ✓ 404 client retorna JSON estruturado                                     
+  → 10.2 Body JSON inválido → 400
+  ✓ JSON inválido → 400 [400]
+  → 10.3 POST sem campos obrigatórios
+  ✓ POST process sem title → 400                                           [400]
+  → 10.4 PATCH com type errado
+  ✓ client type inválido → 400
+  → 10.5 Filename sem prefix vai para folder default
+  ✓ Upload sem __ aceito                                                     [201]
+  → 10.6 Audit visível para manager mas escondido para viewer no UI
+  ✓ MANAGER vê audit do processo                                            [200]
+  ✓ VIEWER bloqueado em audit do processo                                    [403]
+
+▶ 11. Flow integrado — simulação de uso real (corretor + perito + admin)
+  → 11.1 CORRETOR (manager) abre sinistro novo
+  ✓ Manager cria sinistro                                                    [201]
+  → 11.2 CORRETOR atribui ao PERITO (contributor)
+  ✓ Manager atribui sinistro                                                 [200]
+  → 11.3 PERITO (contributor) lista sinistros atribuídos a ele
+  ✓ Perito vê o sinistro atribuído                                        
+  → 11.4 PERITO faz upload de documento técnico
+  ✓ Perito faz upload                                                        [201]
+  → 11.5 PERITO adiciona anotação ao documento
+  ✓ Perito anota documento                                                   [201]
+  → 11.6 CORRETOR avança status para review
+  ✓ Manager → ongoing                                                      [200]
+  ✓ Manager → review                                                       [200]
+  → 11.7 CORRETOR cria share link para segurado externo
+  ✓ Manager cria share                                                       [201]
+  → 11.8 SEGURADO acessa portal anônimo
+  ✓ Segurado acessa /s/<token> [302]
+  → 11.9 ADMIN audita todo o fluxo
+  ✓ audit tem process.created                                               
+  ✓ audit tem process.status_changed                                        
+  ✓ audit tem process.updated                                               
+  ✓ audit do share tem share.created                                        
+  ✓ audit do share tem share.accessed                                       
+  → 11.10 ADMIN arquiva o sinistro (status=archived)
+  ✓ Admin arquiva → 200                                                    [200]
+
+▶ 12. Cleanup — arquivar sinistros criados, deletar clientes
+  ✓ 5 sinistros arquivados, 3 clientes deletados
+
+▶ Sumário
+
+  Total: 186  PASS=186  FAIL=0
