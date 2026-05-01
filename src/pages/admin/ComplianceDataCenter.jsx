@@ -16,6 +16,8 @@ import {
     TrendingUp,
     Server,
     Info,
+    X,
+    ChevronRight,
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 import { listAudit, ACTION_LABELS } from '../../api/audit';
@@ -65,28 +67,80 @@ const formatBytes = (n) => {
     return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
 };
 
-const KpiCard = ({ icon: Icon, color, title, value, detail, regulator }) => (
-    <div className="bg-white p-7 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-100/50 flex flex-col justify-between hover:border-blue-200 transition-all">
-        <div className="flex items-center justify-between mb-5">
-            <div className={`p-3 rounded-2xl ${color} text-white shadow-lg`}>
-                <Icon size={20} />
+const KpiCard = ({ icon: Icon, color, title, value, detail, regulator, onClick }) => {
+    const clickable = typeof onClick === 'function';
+    return (
+        <button
+            type="button"
+            onClick={clickable ? onClick : undefined}
+            disabled={!clickable}
+            className={`bg-white p-7 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-100/50 flex flex-col justify-between transition-all text-left w-full h-full ${
+                clickable
+                    ? 'hover:border-blue-300 hover:shadow-blue-100 hover:-translate-y-0.5 cursor-pointer group'
+                    : 'cursor-default'
+            }`}
+        >
+            <div className="flex items-center justify-between mb-5">
+                <div className={`p-3 rounded-2xl ${color} text-white shadow-lg`}>
+                    <Icon size={20} />
+                </div>
+                <div className="flex items-center gap-2">
+                    {regulator && (
+                        <span
+                            title={regulator}
+                            className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md bg-slate-50 text-slate-500 cursor-help flex items-center gap-1"
+                        >
+                            <Info size={10} /> {regulator.split(' — ')[0]}
+                        </span>
+                    )}
+                    {clickable && (
+                        <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                    )}
+                </div>
             </div>
-            {regulator && (
-                <span
-                    title={regulator}
-                    className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md bg-slate-50 text-slate-500 cursor-help flex items-center gap-1"
-                >
-                    <Info size={10} /> {regulator.split(' — ')[0]}
-                </span>
-            )}
+            <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{title}</p>
+                <h3 className="text-3xl font-black text-slate-900 font-display">{value}</h3>
+                <p className="text-xs text-slate-500 mt-2 font-medium leading-snug">{detail}</p>
+            </div>
+        </button>
+    );
+};
+
+// Slide-in drawer with backdrop. Renders fixed at viewport level so the
+// page underneath stops scrolling while details are open.
+const Drawer = ({ open, title, subtitle, onClose, children }) => {
+    useEffect(() => {
+        if (!open) return;
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            window.removeEventListener('keydown', onKey);
+            document.body.style.overflow = prevOverflow;
+        };
+    }, [open, onClose]);
+
+    if (!open) return null;
+    return (
+        <div className="fixed inset-0 z-50 flex justify-end">
+            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm animate-fade-in" onClick={onClose} />
+            <div className="relative w-full max-w-2xl h-full bg-white shadow-2xl flex flex-col animate-slide-in-right">
+                <div className="flex items-start justify-between p-6 border-b border-slate-100 shrink-0">
+                    <div className="min-w-0">
+                        <h2 className="text-xl font-black text-slate-900 font-display">{title}</h2>
+                        {subtitle && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{subtitle}</p>}
+                    </div>
+                    <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all">
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-6">{children}</div>
+            </div>
         </div>
-        <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{title}</p>
-            <h3 className="text-3xl font-black text-slate-900 font-display">{value}</h3>
-            <p className="text-xs text-slate-500 mt-2 font-medium leading-snug">{detail}</p>
-        </div>
-    </div>
-);
+    );
+};
 
 export default function ComplianceDataCenter() {
     const {
@@ -104,6 +158,10 @@ export default function ComplianceDataCenter() {
     const [shares, setShares] = useState([]);
     const [sharesLoading, setSharesLoading] = useState(false);
     const [healthOk, setHealthOk] = useState(null);
+
+    // drilldown = { type, payload? } — controls what the side drawer renders.
+    const [drilldown, setDrilldown] = useState(null);
+    const closeDrawer = useCallback(() => setDrilldown(null), []);
 
     // Build the from/to ISO window from the period preset.
     const window = useMemo(() => {
@@ -438,6 +496,7 @@ export default function ComplianceDataCenter() {
                             : 'Nenhum sinistro concluído na janela.'
                     }
                     regulator="SUSEP 621/2021 — art. 41 (30d entre documentos básicos e liquidação)"
+                    onClick={() => setDrilldown({ type: 'sla_susep' })}
                 />
                 <KpiCard
                     icon={AlertTriangle}
@@ -446,6 +505,7 @@ export default function ComplianceDataCenter() {
                     value={claimsWithSuspendedSla}
                     detail="Processos com SLA pausado (justificativa registrada)"
                     regulator="CNSP 416/2021 — controles operacionais"
+                    onClick={() => setDrilldown({ type: 'suspended' })}
                 />
                 <KpiCard
                     icon={Lock}
@@ -454,6 +514,7 @@ export default function ComplianceDataCenter() {
                     value={accessDeniedCount}
                     detail={`Últimos ${window.days} dias · 403 servidos pelo back`}
                     regulator="LGPD Art. 37 — segregação de funções"
+                    onClick={() => setDrilldown({ type: 'access_denied' })}
                 />
                 <KpiCard
                     icon={LinkIcon}
@@ -462,6 +523,7 @@ export default function ComplianceDataCenter() {
                     value={sharesLoading ? '…' : activeShares}
                     detail={`${revokedShares} revogados · ${expiredShares} expirados`}
                     regulator="LGPD Art. 7 — compartilhamento com terceiros"
+                    onClick={() => setDrilldown({ type: 'shares_active' })}
                 />
             </div>
 
@@ -485,11 +547,17 @@ export default function ComplianceDataCenter() {
                                 .map(([rt, count]) => {
                                     const pct = Math.round((count / totalEvents) * 100);
                                     return (
-                                        <div key={rt} className="space-y-1.5">
+                                        <button
+                                            key={rt}
+                                            type="button"
+                                            onClick={() => setDrilldown({ type: 'events_by_resource', payload: { rt } })}
+                                            className="w-full text-left space-y-1.5 p-2 -m-2 rounded-xl hover:bg-slate-50 transition-colors group"
+                                        >
                                             <div className="flex justify-between text-xs">
-                                                <span className="font-bold text-slate-700">{RESOURCE_LABELS[rt] || rt}</span>
-                                                <span className="font-black text-slate-900">
+                                                <span className="font-bold text-slate-700 group-hover:text-blue-600">{RESOURCE_LABELS[rt] || rt}</span>
+                                                <span className="font-black text-slate-900 flex items-center gap-1">
                                                     {count} <span className="text-slate-400 font-bold">({pct}%)</span>
+                                                    <ChevronRight size={12} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
                                                 </span>
                                             </div>
                                             <div className="w-full h-2.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
@@ -498,7 +566,7 @@ export default function ComplianceDataCenter() {
                                                     style={{ width: `${pct}%` }}
                                                 ></div>
                                             </div>
-                                        </div>
+                                        </button>
                                     );
                                 })}
                         </div>
@@ -517,17 +585,26 @@ export default function ComplianceDataCenter() {
                     {topActors.length === 0 ? (
                         <p className="text-xs text-slate-400 font-medium text-center py-12">Nenhum ator no período.</p>
                     ) : (
-                        <ul className="space-y-3">
+                        <ul className="space-y-2">
                             {topActors.map((a, i) => (
-                                <li key={a.id} className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <span className="text-[10px] font-black text-slate-400 w-5">{i + 1}</span>
-                                        <div className="min-w-0">
-                                            <p className="text-xs font-bold text-slate-800 truncate" title={a.label}>{a.label}</p>
-                                            <p className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">{a.role || '—'}</p>
+                                <li key={a.id}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setDrilldown({ type: 'actor', payload: { id: a.id, label: a.label, role: a.role } })}
+                                        className="w-full flex items-center justify-between gap-2 p-2 -m-2 rounded-xl hover:bg-slate-50 transition-colors group"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="text-[10px] font-black text-slate-400 w-5">{i + 1}</span>
+                                            <div className="min-w-0 text-left">
+                                                <p className="text-xs font-bold text-slate-800 truncate group-hover:text-blue-600" title={a.label}>{a.label}</p>
+                                                <p className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">{a.role || '—'}</p>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <span className="text-xs font-black text-slate-900 shrink-0">{a.count}</span>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <span className="text-xs font-black text-slate-900">{a.count}</span>
+                                            <ChevronRight size={14} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                        </div>
+                                    </button>
                                 </li>
                             ))}
                         </ul>
@@ -661,18 +738,25 @@ export default function ComplianceDataCenter() {
                     ) : (
                         <ul className="space-y-2">
                             {topShareAccesses.rows.map((s, i) => (
-                                <li key={s.id} className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <span className="text-[10px] font-black text-slate-400 w-5">{i + 1}</span>
-                                        <div className="min-w-0">
-                                            <p className="text-xs font-mono text-slate-700">{s.token}</p>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{s.label}</p>
+                                <li key={s.id}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setDrilldown({ type: 'share', payload: { id: s.id, token: s.token, label: s.label, revoked: s.revoked } })}
+                                        className="w-full flex items-center justify-between p-3 bg-slate-50/50 rounded-xl hover:bg-slate-100 transition-colors group text-left"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="text-[10px] font-black text-slate-400 w-5">{i + 1}</span>
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-mono text-slate-700 group-hover:text-blue-600">{s.token}</p>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{s.label}</p>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="flex items-center gap-3 shrink-0">
-                                        {s.revoked && <span className="text-[9px] font-black text-red-700 bg-red-100 px-2 py-0.5 rounded uppercase">Revogado</span>}
-                                        <span className="text-xs font-black text-slate-900">{s.count}</span>
-                                    </div>
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            {s.revoked && <span className="text-[9px] font-black text-red-700 bg-red-100 px-2 py-0.5 rounded uppercase">Revogado</span>}
+                                            <span className="text-xs font-black text-slate-900">{s.count}</span>
+                                            <ChevronRight size={14} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                        </div>
+                                    </button>
                                 </li>
                             ))}
                         </ul>
@@ -792,6 +876,240 @@ export default function ComplianceDataCenter() {
                     (<code className="font-mono">http://localhost:8081</code>) e geram trilha lá. Esta tela cobre apenas o domínio operacional do ArquivoSeg.
                 </p>
             </div>
+
+            {/* ========= Drilldown drawer ========= */}
+            <DrilldownDrawer
+                drilldown={drilldown}
+                onClose={closeDrawer}
+                auditEntries={auditEntries}
+                claims={claims}
+                shares={shares}
+                backendUsers={backendUsers}
+                clients={clients}
+                resolveActorLabel={resolveActorLabel}
+                window={window}
+            />
+        </div>
+    );
+}
+
+// ===========================================================================
+// Drilldown drawer — switches content based on drilldown.type.
+// Each branch reads from already-loaded state (no extra fetches).
+// ===========================================================================
+function DrilldownDrawer({ drilldown, onClose, auditEntries, claims, shares, backendUsers, clients, resolveActorLabel, window: win }) {
+    const open = !!drilldown;
+    const type = drilldown?.type;
+    const payload = drilldown?.payload;
+
+    const labelFor = (uuid) => {
+        if (!uuid) return 'Sistema';
+        const u = backendUsers.find((x) => x.id === uuid);
+        return u?.email || resolveActorLabel?.(uuid) || actorLabelFromDbId(uuid, `User ${String(uuid).slice(0, 8)}`);
+    };
+    const roleFor = (uuid) => backendUsers.find((x) => x.id === uuid)?.role;
+
+    let title = '';
+    let subtitle = '';
+    let body = null;
+
+    if (type === 'access_denied') {
+        const events = auditEntries.filter((e) => e.action === 'access.denied');
+        title = 'Acessos negados';
+        subtitle = `LGPD Art. 37 · CNSP 416/2021 — ${events.length} ocorrência${events.length === 1 ? '' : 's'} nos últimos ${win.days} dias`;
+        body = <EventTable events={events} labelFor={labelFor} roleFor={roleFor} emptyText="Nenhum acesso negado no período — RBAC sem alertas." />;
+    } else if (type === 'sla_susep') {
+        const completed = claims.filter((c) => c.backStatus === 'done' && c.backCreatedAt && c.backUpdatedAt);
+        title = 'SLA SUSEP — sinistros concluídos';
+        subtitle = `SUSEP Circular 621/2021 art. 41 · prazo de ${SUSEP_SLA_DAYS} dias entre criação e liquidação`;
+        body = <ClaimSlaList claims={completed} backendUsers={backendUsers} />;
+    } else if (type === 'suspended') {
+        const susp = claims.filter((c) => Array.isArray(c.deadline?.history) && (c.deadline?.suspensionCount || 0) > 0);
+        title = 'Sinistros com SLA suspenso';
+        subtitle = `CNSP 416/2021 — ${susp.length} processo${susp.length === 1 ? '' : 's'} pausado${susp.length === 1 ? '' : 's'}`;
+        body = <SuspensionList claims={susp} />;
+    } else if (type === 'shares_active') {
+        const now = Date.now();
+        const items = shares.filter((s) => !s.revoked && (!s.expires_at || new Date(s.expires_at).getTime() > now));
+        title = 'Links públicos ativos';
+        subtitle = `LGPD Art. 7 — ${items.length} link${items.length === 1 ? '' : 's'} compartilhado${items.length === 1 ? '' : 's'} com terceiros`;
+        body = <ShareList shares={items} labelFor={labelFor} />;
+    } else if (type === 'events_by_resource') {
+        const rt = payload?.rt;
+        const events = auditEntries.filter((e) => e.resource_type === rt);
+        title = `Eventos · ${RESOURCE_LABELS[rt] || rt}`;
+        subtitle = `${events.length} evento${events.length === 1 ? '' : 's'} no período · LGPD Art. 37`;
+        body = <EventTable events={events} labelFor={labelFor} roleFor={roleFor} emptyText="Sem eventos nesta categoria." />;
+    } else if (type === 'actor') {
+        const events = auditEntries.filter((e) => e.actor_user_id === payload?.id);
+        title = payload?.label || 'Ator';
+        subtitle = `${events.length} operações · papel ${payload?.role || '—'}`;
+        body = <EventTable events={events} labelFor={labelFor} roleFor={roleFor} emptyText="Sem eventos para este ator." />;
+    } else if (type === 'share') {
+        const events = auditEntries.filter((e) => e.resource_id === payload?.id && e.resource_type === 'share_token');
+        const accessed = events.filter((e) => e.action === 'share.accessed');
+        title = `Link · ${payload?.token || ''}`;
+        subtitle = `${payload?.label || 'sem rótulo'} — ${accessed.length} acesso${accessed.length === 1 ? '' : 's'} público${accessed.length === 1 ? '' : 's'}`;
+        body = (
+            <>
+                {payload?.revoked && (
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-bold uppercase tracking-widest">
+                        Este link foi revogado.
+                    </div>
+                )}
+                <EventTable events={events} labelFor={labelFor} roleFor={roleFor} emptyText="Sem eventos para este link." />
+            </>
+        );
+    }
+
+    return (
+        <Drawer open={open} title={title} subtitle={subtitle} onClose={onClose}>
+            {body}
+        </Drawer>
+    );
+}
+
+// Reusable event table for drill-downs.
+function EventTable({ events, labelFor, roleFor, emptyText }) {
+    if (events.length === 0) {
+        return <p className="text-xs text-slate-400 font-medium text-center py-12">{emptyText || 'Sem eventos.'}</p>;
+    }
+    return (
+        <div className="space-y-2">
+            {events.map((e) => {
+                const ts = e.timestamp ? new Date(e.timestamp) : null;
+                const label = labelFor(e.actor_user_id);
+                const role = roleFor(e.actor_user_id);
+                const meta = e.metadata || {};
+                const metaKeys = Object.keys(meta);
+                return (
+                    <div key={e.id} className="p-3 bg-slate-50/60 rounded-xl border border-slate-100">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-widest">
+                                {ACTION_LABELS[e.action] || e.action}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-bold tabular-nums">{ts ? ts.toLocaleString('pt-BR') : '-'}</span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-800">
+                            {label}
+                            {role && <span className="ml-2 text-[9px] text-slate-400 font-black uppercase tracking-widest">({role})</span>}
+                        </p>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] font-mono text-slate-500">
+                            <div>
+                                <span className="text-slate-400">recurso: </span>
+                                {e.resource_type}{e.resource_id ? ` · ${String(e.resource_id).slice(0, 8)}` : ''}
+                            </div>
+                            <div>
+                                <span className="text-slate-400">ip: </span>
+                                {e.ip_address || '-'}
+                            </div>
+                        </div>
+                        {e.user_agent && (
+                            <p className="mt-1 text-[10px] font-mono text-slate-400 break-all">
+                                <span className="text-slate-400">ua: </span>{e.user_agent}
+                            </p>
+                        )}
+                        {metaKeys.length > 0 && (
+                            <div className="mt-2 p-2 rounded-lg bg-white border border-slate-100 text-[10px] font-mono text-slate-600 space-y-0.5">
+                                {metaKeys.map((k) => (
+                                    <div key={k}><span className="text-slate-400">{k}: </span>{typeof meta[k] === 'object' ? JSON.stringify(meta[k]) : String(meta[k])}</div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function ClaimSlaList({ claims }) {
+    if (claims.length === 0) {
+        return <p className="text-xs text-slate-400 font-medium text-center py-12">Nenhum sinistro concluído na janela.</p>;
+    }
+    return (
+        <div className="space-y-2">
+            {claims.map((c) => {
+                const start = new Date(c.backCreatedAt).getTime();
+                const end = new Date(c.backUpdatedAt).getTime();
+                const days = Math.round((end - start) / (1000 * 60 * 60 * 24));
+                const within = days <= SUSEP_SLA_DAYS;
+                return (
+                    <div key={c.id} className="p-3 bg-slate-50/60 rounded-xl border border-slate-100 flex items-start gap-3">
+                        <span className={`shrink-0 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${within ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {within ? 'No prazo' : 'Fora do prazo'}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-slate-800 truncate">{c.title || c.number}</p>
+                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                                {c.insurer || '—'} · criado em {new Date(c.backCreatedAt).toLocaleDateString('pt-BR')} · concluído em {new Date(c.backUpdatedAt).toLocaleDateString('pt-BR')}
+                            </p>
+                            <p className="text-[10px] font-mono text-slate-400 mt-1">{days} dia{days === 1 ? '' : 's'} de tramitação · limite SUSEP {SUSEP_SLA_DAYS}d</p>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function SuspensionList({ claims }) {
+    if (claims.length === 0) {
+        return <p className="text-xs text-slate-400 font-medium text-center py-12">Nenhum sinistro com SLA suspenso.</p>;
+    }
+    return (
+        <div className="space-y-3">
+            {claims.map((c) => (
+                <div key={c.id} className="p-4 bg-slate-50/60 rounded-xl border border-slate-100">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800 truncate">{c.title || c.number}</p>
+                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.insurer || '—'}</p>
+                        </div>
+                        <span className="shrink-0 px-2 py-1 rounded-md bg-amber-100 text-amber-700 text-[9px] font-black uppercase tracking-widest">
+                            {c.deadline?.suspensionCount || 0}× pausado
+                        </span>
+                    </div>
+                    {Array.isArray(c.deadline?.history) && c.deadline.history.length > 0 ? (
+                        <ul className="space-y-1.5 mt-2 border-l-2 border-amber-200 pl-3">
+                            {c.deadline.history.map((h, i) => (
+                                <li key={i} className="text-[10px] text-slate-600">
+                                    <span className="font-bold text-slate-400">{h.date}</span>
+                                    <span className="ml-2">{h.action}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-[10px] text-slate-400 italic">Histórico de suspensões não disponível.</p>
+                    )}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function ShareList({ shares, labelFor }) {
+    if (shares.length === 0) {
+        return <p className="text-xs text-slate-400 font-medium text-center py-12">Nenhum link ativo.</p>;
+    }
+    return (
+        <div className="space-y-2">
+            {shares.map((s) => {
+                const created = s.created_at ? new Date(s.created_at).toLocaleDateString('pt-BR') : '-';
+                const expires = s.expires_at ? new Date(s.expires_at).toLocaleDateString('pt-BR') : 'sem expiração';
+                return (
+                    <div key={s.id} className="p-3 bg-slate-50/60 rounded-xl border border-slate-100">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                            <p className="text-xs font-mono text-slate-700 truncate">{s.token ? `${s.token.slice(0, 16)}…` : String(s.id).slice(0, 8)}</p>
+                            <span className="text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest bg-green-100 text-green-700 shrink-0">Ativo</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-bold">{s.label || 'sem rótulo'}</p>
+                        <p className="text-[10px] font-mono text-slate-400 mt-1">
+                            criado {created} · expira {expires} · por {labelFor(s.created_by)}
+                        </p>
+                    </div>
+                );
+            })}
         </div>
     );
 }
