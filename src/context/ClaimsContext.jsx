@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { INITIAL_CLAIMS, INITIAL_USERS, INITIAL_CLIENTS } from '../constants/initialData';
 import { claimsService } from '../services/claimsService';
-import { loginWithUiRole, logoutSession } from '../api/auth';
-import { getToken, isMockEnabled } from '../api/client';
+import { logoutSession } from '../api/auth';
+import { zitadel } from '../api/zitadel';
+import { getToken, isMockEnabled, setToken } from '../api/client';
 import { parseFolderFromFileName } from '../api/files';
 
 const ClaimsContext = createContext();
@@ -208,9 +209,14 @@ export const ClaimsProvider = ({ children }) => {
 
     // Re-establish API token on reload when session is still active
     useEffect(() => {
-        if (currentUser && !getToken()) {
-            loginWithUiRole(currentUser.role);
-        }
+        if (!currentUser || getToken() || !zitadel) return;
+        zitadel.userManager.getUser().then((oidcUser) => {
+            if (oidcUser && !oidcUser.expired) {
+                setToken(oidcUser.access_token);
+            } else {
+                setCurrentUser(null);
+            }
+        });
     }, [currentUser]);
 
     // Last filter passed to refreshClaims, so the auto-refetch on currentUser
@@ -250,7 +256,12 @@ export const ClaimsProvider = ({ children }) => {
     const logout = () => {
         logoutSession();
         setCurrentUser(null);
-        if (!isMockEnabled()) setClaims([]);
+        localStorage.removeItem('arquivoseg_current_user');
+        localStorage.removeItem('arquivoseg_authenticated');
+        if (!isMockEnabled()) {
+            setClaims([]);
+            zitadel?.signout();
+        }
     };
 
     const persistClaimMetadata = (claim) => {

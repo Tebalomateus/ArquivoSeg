@@ -31,7 +31,8 @@ async function request(method, path, { body, headers = {}, multipart = false } =
         finalBody = JSON.stringify(body);
     }
 
-    const res = await fetch(path, { method, headers: finalHeaders, body: finalBody });
+    const base = import.meta.env.VITE_API_BASE_URL ?? '';
+    const res = await fetch(`${base}${path}`, { method, headers: finalHeaders, body: finalBody });
 
     if (res.status === 204) return null;
 

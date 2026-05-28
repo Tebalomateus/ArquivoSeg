@@ -6,6 +6,9 @@ frontend:
         - npm ci
     build:
       commands:
+        # VITE_* env vars são injetadas pelo Amplify em tempo de build.
+        # Configure-as via AWS CLI: aws amplify update-app --app-id <id> --environment-variables ...
+        # Variáveis necessárias: ver .env.example
         - npm run build
   artifacts:
     baseDirectory: dist
