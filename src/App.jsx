@@ -8,6 +8,7 @@ import UserManagement from './pages/UserManagement';
 import Settings from './pages/Settings';
 import PublicShare from './pages/PublicShare';
 import Login from './pages/Login';
+import Callback from './pages/Callback';
 import { useClaims } from './context/ClaimsContext';
 
 import AdminLayout from './components/layout/AdminLayout';
@@ -43,6 +44,7 @@ function App() {
     return (
         <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/callback" element={<Callback />} />
 
             {/* BACKOFFICE / ADMIN PORTAL */}
             <Route

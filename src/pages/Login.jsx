@@ -1,10 +1,15 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Mail, Lock, ArrowRight, Github, KeyRound, ExternalLink, X } from 'lucide-react';
+import { ArrowRight, ExternalLink, KeyRound, Lock, Mail, ShieldCheck, X } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { INITIAL_USERS } from '../constants/initialData';
-import { loginWithUiRole } from '../api/auth';
+import { backRoleFor } from '../api/auth';
 import { isMockEnabled } from '../api/client';
+import { zitadel } from '../api/zitadel';
+
+const ZITADEL_CONSOLE = import.meta.env.VITE_ZITADEL_AUTHORITY
+    ? `${import.meta.env.VITE_ZITADEL_AUTHORITY}/ui/console`
+    : 'http://localhost:8081';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -15,27 +20,19 @@ export default function Login() {
     const navigate = useNavigate();
     const { setCurrentUser } = useClaims();
 
-    const handleLogin = (e) => {
+    const handleMockLogin = (e) => {
         e.preventDefault();
         setError('');
         setIsLoading(true);
 
         setTimeout(() => {
             const user = INITIAL_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
-
             if (!user) {
                 setError('Email não cadastrado. Use um dos perfis de INITIAL_USERS.');
                 setIsLoading(false);
                 return;
             }
-
-            const { backRole, token } = loginWithUiRole(user.role);
-            if (!isMockEnabled() && !token) {
-                setError(`PAT não configurado para o papel ${user.role}. Verifique .env.local.`);
-                setIsLoading(false);
-                return;
-            }
-
+            const backRole = backRoleFor(user.role);
             setCurrentUser({ ...user, backRole });
             localStorage.setItem('arquivoseg_authenticated', 'true');
             navigate('/');
@@ -43,13 +40,18 @@ export default function Login() {
         }, 600);
     };
 
+    const handleZitadelLogin = () => {
+        if (zitadel) zitadel.authorize();
+    };
+
+    const mockMode = isMockEnabled();
+
     return (
         <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans overflow-hidden">
-            {/* Left Decoration Side (Marketing) */}
+            {/* Left Decoration Side */}
             <div className="hidden md:flex md:w-1/2 bg-primary relative p-12 flex-col justify-between text-white overflow-hidden">
-                {/* Abstract Blobs */}
-                <div className="absolute top-[-20%] right-[-20%] w-[80%] h-[80%] bg-white/5 blur-[120px] rounded-full animate-pulse"></div>
-                <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] bg-secondary/10 blur-[100px] rounded-full"></div>
+                <div className="absolute top-[-20%] right-[-20%] w-[80%] h-[80%] bg-white/5 blur-[120px] rounded-full animate-pulse" />
+                <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] bg-secondary/10 blur-[100px] rounded-full" />
 
                 <div className="relative z-10 flex items-center gap-3">
                     <div className="relative">
@@ -99,86 +101,119 @@ export default function Login() {
                         </div>
                     )}
 
-                    <form onSubmit={handleLogin} className="space-y-6">
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">E-mail Corporativo</label>
-                                <div className="relative group">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-secondary transition-colors">
-                                        <Mail size={18} />
+                    {mockMode ? (
+                        <form onSubmit={handleMockLogin} className="space-y-6">
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <label htmlFor="email" className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">E-mail Corporativo</label>
+                                    <div className="relative group">
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-secondary transition-colors">
+                                            <Mail size={18} />
+                                        </div>
+                                        <input
+                                            id="email"
+                                            type="email"
+                                            required
+                                            placeholder="ex: contato@arquivoseg.com.br"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-secondary/10 focus:border-secondary transition-all font-medium text-gray-900"
+                                        />
                                     </div>
-                                    <input
-                                        type="email"
-                                        required
-                                        placeholder="ex: contato@arquivoseg.com.br"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-secondary/10 focus:border-secondary transition-all font-medium text-gray-900"
-                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label htmlFor="password" className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Senha</label>
+                                    <div className="relative group">
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-secondary transition-colors">
+                                            <Lock size={18} />
+                                        </div>
+                                        <input
+                                            id="password"
+                                            type="password"
+                                            required
+                                            placeholder="••••••••"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-secondary/10 focus:border-secondary transition-all font-medium text-gray-900"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Senha</label>
-                                <div className="relative group">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-secondary transition-colors">
-                                        <Lock size={18} />
-                                    </div>
-                                    <input
-                                        type="password"
-                                        required
-                                        placeholder="••••••••"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-secondary/10 focus:border-secondary transition-all font-medium text-gray-900"
-                                    />
-                                </div>
+                            <div className="flex items-center justify-between">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-secondary focus:ring-secondary" />
+                                    <span className="text-sm font-medium text-gray-600">Lembrar de mim</span>
+                                </label>
+                                <button type="button" onClick={() => setForgotOpen(true)} className="text-sm font-bold text-secondary hover:text-secondary-hover">Esqueceu a senha?</button>
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className={`w-full py-4 rounded-2xl font-bold text-white transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-3 text-lg ${isLoading ? 'bg-secondary/40 cursor-wait' : 'bg-secondary hover:bg-secondary-hover hover:-translate-y-0.5'}`}
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                                        Entrando...
+                                    </>
+                                ) : (
+                                    <>
+                                        Acessar Painel
+                                        <ArrowRight size={20} />
+                                    </>
+                                )}
+                            </button>
+                        </form>
+                    ) : (
+                        <div className="space-y-6">
+                            <button
+                                type="button"
+                                onClick={handleZitadelLogin}
+                                className="w-full py-4 rounded-2xl font-bold text-white bg-secondary hover:bg-secondary-hover hover:-translate-y-0.5 transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-3 text-lg"
+                            >
+                                Entrar com ArquivoSeg
+                                <ArrowRight size={20} />
+                            </button>
+                            <div className="flex items-center justify-end">
+                                <button type="button" onClick={() => setForgotOpen(true)} className="text-sm font-bold text-secondary hover:text-secondary-hover">Esqueceu a senha?</button>
                             </div>
                         </div>
-
-                        <div className="flex items-center justify-between">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-secondary focus:ring-secondary" />
-                                <span className="text-sm font-medium text-gray-600">Lembrar de mim</span>
-                            </label>
-                            <button type="button" onClick={() => setForgotOpen(true)} className="text-sm font-bold text-secondary hover:text-secondary-hover">Esqueceu a senha?</button>
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className={`w-full py-4 rounded-2xl font-bold text-white transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-3 text-lg ${isLoading ? 'bg-secondary/40 cursor-wait' : 'bg-secondary hover:bg-secondary-hover hover:-translate-y-0.5'}`}
-                        >
-                            {isLoading ? (
-                                <>
-                                    <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                                    Entrando...
-                                </>
-                            ) : (
-                                <>
-                                    Acessar Painel
-                                    <ArrowRight size={20} />
-                                </>
-                            )}
-                        </button>
-                    </form>
+                    )}
 
                     <footer className="pt-8 text-center border-t border-gray-100 space-y-3">
                         <p className="text-sm text-gray-400 font-medium">Não tem acesso? Fale com nosso suporte.</p>
-                        <div className="text-[10px] text-gray-400 font-mono leading-relaxed">
-                            <p className="font-bold mb-1 text-gray-500 uppercase tracking-widest">Perfis de teste (dev)</p>
-                            <p>sato@arquivoseg.com.br · admin</p>
-                            <p>ricardo@corretora.com · corretor (manager)</p>
-                            <p>ana.souza@allianz.com · perito (contributor)</p>
-                            <p>analista@arquivoseg.com.br · analista (viewer)</p>
-                        </div>
+                        {mockMode && (
+                            <div className="text-[10px] text-gray-400 font-mono leading-relaxed">
+                                <p className="font-bold mb-1 text-gray-500 uppercase tracking-widest">Perfis de teste (dev)</p>
+                                <p>sato@arquivoseg.com.br · admin</p>
+                                <p>ricardo@corretora.com · corretor (manager)</p>
+                                <p>ana.souza@allianz.com · perito (contributor)</p>
+                                <p>analista@arquivoseg.com.br · analista (viewer)</p>
+                            </div>
+                        )}
                     </footer>
                 </div>
             </div>
 
             {forgotOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setForgotOpen(false)}>
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-up" onClick={(e) => e.stopPropagation()}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+                    {/* Backdrop */}
+                    <button
+                        type="button"
+                        aria-label="Fechar modal"
+                        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                        onClick={() => setForgotOpen(false)}
+                    />
+                    {/* Modal */}
+                    <div
+                        className="relative z-10 bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-up"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Recuperar senha"
+                    >
                         <div className="p-6 border-b border-slate-100 flex items-start justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="p-2.5 rounded-2xl bg-blue-100 text-blue-600">
@@ -189,7 +224,7 @@ export default function Login() {
                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Identidade gerenciada por Zitadel</p>
                                 </div>
                             </div>
-                            <button onClick={() => setForgotOpen(false)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                            <button type="button" onClick={() => setForgotOpen(false)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700">
                                 <X size={20} />
                             </button>
                         </div>
@@ -203,16 +238,13 @@ export default function Login() {
                                 <li>Siga as instruções enviadas para seu email corporativo.</li>
                             </ol>
                             <a
-                                href="http://localhost:8081"
+                                href={ZITADEL_CONSOLE}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all"
                             >
                                 Abrir Console Zitadel <ExternalLink size={14} />
                             </a>
-                            <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
-                                Em produção, este link aponta para o tenant Zitadel da sua organização (ex.: <code className="font-mono">auth.suaempresa.com</code>).
-                            </p>
                         </div>
                     </div>
                 </div>
