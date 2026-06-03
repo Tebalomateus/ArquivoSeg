@@ -741,6 +741,26 @@ export const ClaimsProvider = ({ children }) => {
         setClients(prev => prev.filter(c => c.id !== id));
     };
 
+    const inviteUserAction = async (data) => {
+        const created = await claimsService.inviteUser(data);
+        await refreshUsers();
+        return created;
+    };
+
+    const updateUserRoleAction = async (id, role) => {
+        await claimsService.updateUserRole(id, role);
+        await refreshUsers();
+    };
+
+    const deactivateUserAction = async (id) => {
+        await claimsService.deactivateUser(id);
+        await refreshUsers();
+    };
+
+    const resendInviteAction = async (id) => {
+        return claimsService.resendInvite(id);
+    };
+
     const updateSettings = (newSettings) => setSettings(newSettings);
 
     const isGuestVerified = (token) => sessionStorage.getItem(`verified_guest_${token}`) === 'true';
@@ -759,6 +779,8 @@ export const ClaimsProvider = ({ children }) => {
             claimsLoading, claimsError, claimsTotal, refreshClaims, claimsFilter,
             users,
             backendUsers, usersLoading, refreshUsers, resolveActorLabel,
+            inviteUser: inviteUserAction, updateUserRole: updateUserRoleAction,
+            deactivateUser: deactivateUserAction, resendInvite: resendInviteAction,
             clients, clientsLoading, addClientEntity, updateClientEntity, deleteClientEntity, refreshClients,
             settings, updateSettings,
             isGuestVerified,
