@@ -53,10 +53,11 @@ const STATUS_LABELS_PT = {
  * @param {Function} props.onUpload - Success callback with file metadata
  * @param {string} props.folderName - Target folder label for the UI
  */
-const UploadModal = ({ isOpen, onClose, onUpload, folderName }) => {
+const UploadModal = ({ isOpen, onClose, onUpload, onCommentOnly, folderName }) => {
     const [file, setFile] = useState(null);
     const [annotation, setAnnotation] = useState('');
     const [confidentiality, setConfidentiality] = useState('Geral');
+    const [commentOnly, setCommentOnly] = useState(false);
     const fileInputRef = useRef();
 
     if (!isOpen) return null;
@@ -71,21 +72,26 @@ const UploadModal = ({ isOpen, onClose, onUpload, folderName }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!file) return alert('Selecione um arquivo!');
+        if (!commentOnly && !file) return alert('Selecione um arquivo!');
         if (wordCount < 5) return alert('A anotação contextual deve ter no mínimo 5 palavras!');
 
         try {
-            await onUpload({
-                file,
-                name: file.name,
-                annotation,
-                confidentiality,
-            });
+            if (commentOnly) {
+                await onCommentOnly({ annotation, confidentiality });
+            } else {
+                await onUpload({
+                    file,
+                    name: file.name,
+                    annotation,
+                    confidentiality,
+                });
+            }
             setFile(null);
             setAnnotation('');
+            setCommentOnly(false);
             onClose();
         } catch (err) {
-            alert(`Falha no upload: ${err?.message || err}`);
+            alert(`Falha no envio: ${err?.message || err}`);
         }
     };
 
@@ -97,23 +103,42 @@ const UploadModal = ({ isOpen, onClose, onUpload, folderName }) => {
                     <button onClick={onClose} className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-gray-400 border border-transparent hover:border-gray-100 transition-all"><X size={20} /></button>
                 </div>
                 <form onSubmit={handleSubmit} className="p-8 space-y-6">
-                    <div
-                        onClick={() => fileInputRef.current.click()}
-                        className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer group shadow-inner bg-gray-50"
-                    >
-                        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-                        <div className="w-16 h-16 bg-white shadow-sm border border-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-secondary group-hover:bg-secondary group-hover:text-white transition-all duration-500">
-                            <Upload size={28} />
-                        </div>
-                        <p className="text-sm font-black text-gray-900 uppercase tracking-widest">Selecione o arquivo</p>
-                        <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase">PDF, DOCX, XLSX, JPG (Max. 50MB)</p>
-                        {file && (
-                            <div className="mt-6 p-3 bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg animate-bounce">
-                                <FileText size={16} />
-                                {file.name}
-                            </div>
-                        )}
+                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                        <button
+                            type="button"
+                            onClick={() => { setCommentOnly(false); setFile(null); }}
+                            className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!commentOnly ? 'bg-white shadow-md text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            Arquivo + Observação
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setCommentOnly(true); setFile(null); }}
+                            className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${commentOnly ? 'bg-white shadow-md text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            Apenas Observação
+                        </button>
                     </div>
+
+                    {!commentOnly && (
+                        <div
+                            onClick={() => fileInputRef.current.click()}
+                            className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer group shadow-inner bg-gray-50"
+                        >
+                            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                            <div className="w-16 h-16 bg-white shadow-sm border border-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-secondary group-hover:bg-secondary group-hover:text-white transition-all duration-500">
+                                <Upload size={28} />
+                            </div>
+                            <p className="text-sm font-black text-gray-900 uppercase tracking-widest">Selecione o arquivo</p>
+                            <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase">PDF, DOCX, XLSX, JPG (Max. 50MB)</p>
+                            {file && (
+                                <div className="mt-6 p-3 bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg animate-bounce">
+                                    <FileText size={16} />
+                                    {file.name}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-6">
                         <div className="space-y-2">
@@ -151,10 +176,10 @@ const UploadModal = ({ isOpen, onClose, onUpload, folderName }) => {
 
                     <button
                         type="submit"
-                        className={`w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-xl ${file && wordCount >= 5 ? 'bg-secondary text-white shadow-secondary/10 hover:bg-secondary-hover hover:-translate-y-1' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                        className={`w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-xl ${(commentOnly || file) && wordCount >= 5 ? 'bg-secondary text-white shadow-secondary/10 hover:bg-secondary-hover hover:-translate-y-1' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
                     >
                         <Send size={20} />
-                        Confirmar Envio Seguro
+                        {commentOnly ? 'Registrar Observação' : 'Confirmar Envio Seguro'}
                     </button>
                 </form>
             </div>
@@ -176,6 +201,7 @@ export default function ClaimDetails() {
         currentUser,
         claims,
         uploadFileToClaim,
+        addCommentToClaim,
         refreshClaimFiles,
         documentDownloadHref,
         listFileShares,
@@ -318,6 +344,7 @@ export default function ClaimDetails() {
     const [docSearch, setDocSearch] = useState('');
     const [showDocSearch, setShowDocSearch] = useState(false);
     const [docConfidentialityFilter, setDocConfidentialityFilter] = useState('all');
+    const [showCompletedChecklist, setShowCompletedChecklist] = useState(false);
 
     const handleStartEditAnnotation = (doc) => {
         if (!doc.commentId) return alert('Esta anotação ainda não foi sincronizada com o servidor.');
@@ -398,7 +425,9 @@ export default function ClaimDetails() {
     if (!currentUser) return null;
 
     const isAdminOrInternal = currentUser?.role === 'ADMIN' || currentUser?.role === 'ANALISTA' || currentUser?.role === 'PERITO';
+    const isManager = currentUser?.role === 'CORRETOR';
     const isAuditor = currentUser?.role === 'AUDITOR';
+    const canManageDocuments = isAdminOrInternal || isManager;
 
     // Regra Reunião 3: Tipo 1 (Corretor) não vê "Gerencial". Auditor vê tudo para segurança mas não precisa de conteúdo.
     const visibleFolders = claim.folders.filter(f => {
@@ -420,6 +449,10 @@ export default function ClaimDetails() {
             annotation: payload.annotation,
             confidentiality: payload.confidentiality,
         });
+    };
+
+    const handleCommentOnly = async (payload) => {
+        await addCommentToClaim(claim.id, payload.annotation);
     };
 
     const handleViewDoc = (doc) => {
@@ -492,7 +525,7 @@ export default function ClaimDetails() {
                         >
                             Exploração
                         </button>
-                        {(isAdminOrInternal || isAuditor) && (
+                        {(canManageDocuments || isAuditor) && (
                             <button
                                 onClick={() => setViewMode('management')}
                                 className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'management' ? 'bg-white shadow-md text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
@@ -675,28 +708,53 @@ export default function ClaimDetails() {
                     {viewMode === 'interaction' ? (
                         <>
                             {/* Checklist Section */}
-                            {currentFolder.checklist && currentFolder.checklist.length > 0 && (
-                                <div className="card border-l-[6px] border-blue-600 py-6 bg-blue-50/10">
-                                    <h3 className="text-xs font-black text-gray-900 mb-6 flex items-center gap-2 uppercase tracking-widest">
-                                        <CheckCircle size={18} className="text-blue-600" />
-                                        Checklist: {currentFolder.name}
-                                    </h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {currentFolder.checklist.map(item => (
-                                            <div
-                                                key={item.id}
-                                                onClick={() => toggleChecklistItem(item.id, item.received)}
-                                                className={`flex items-center gap-3 p-4 rounded-2xl border transition-all group ${item.received ? 'bg-white border-green-100 opacity-60' : 'bg-white border-gray-100 hover:border-blue-400 cursor-pointer'}`}
-                                            >
-                                                <div className={`w-6 h-6 rounded-lg flex items-center justify-center border transition-all ${item.received ? 'bg-green-500 border-green-500 text-white shadow-lg shadow-green-100' : 'bg-gray-50 border-gray-100 group-hover:bg-blue-50'}`}>
-                                                    {item.received && <CheckCircle size={14} />}
-                                                </div>
-                                                <span className={`text-xs font-bold tracking-tight ${item.received ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{item.name}</span>
+                            {currentFolder.checklist && currentFolder.checklist.length > 0 && (() => {
+                                const pendingItems = currentFolder.checklist.filter(i => !i.received);
+                                const completedCount = currentFolder.checklist.length - pendingItems.length;
+                                const displayItems = showCompletedChecklist ? currentFolder.checklist : pendingItems;
+                                return (
+                                    <div className="card border-l-[6px] border-blue-600 py-6 bg-blue-50/10">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h3 className="text-xs font-black text-gray-900 flex items-center gap-2 uppercase tracking-widest">
+                                                <CheckCircle size={18} className="text-blue-600" />
+                                                Checklist: {currentFolder.name}
+                                                {completedCount > 0 && (
+                                                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-green-50 border border-green-200 text-green-700 ml-2">
+                                                        {completedCount} concluído{completedCount > 1 ? 's' : ''}
+                                                    </span>
+                                                )}
+                                            </h3>
+                                            {completedCount > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowCompletedChecklist(v => !v)}
+                                                    className="text-[10px] font-black text-blue-600 hover:underline uppercase tracking-widest"
+                                                >
+                                                    {showCompletedChecklist ? 'Ocultar concluídos' : 'Mostrar todos'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        {displayItems.length === 0 ? (
+                                            <p className="text-xs text-green-700 font-bold text-center py-4">Todos os itens foram recebidos.</p>
+                                        ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {displayItems.map(item => (
+                                                    <div
+                                                        key={item.id}
+                                                        onClick={() => toggleChecklistItem(item.id, item.received)}
+                                                        className={`flex items-center gap-3 p-4 rounded-2xl border transition-all group ${item.received ? 'bg-white border-green-100 opacity-60' : 'bg-white border-gray-100 hover:border-blue-400 cursor-pointer'}`}
+                                                    >
+                                                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center border transition-all ${item.received ? 'bg-green-500 border-green-500 text-white shadow-lg shadow-green-100' : 'bg-gray-50 border-gray-100 group-hover:bg-blue-50'}`}>
+                                                            {item.received && <CheckCircle size={14} />}
+                                                        </div>
+                                                        <span className={`text-xs font-bold tracking-tight ${item.received ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{item.name}</span>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
+                                        )}
                                     </div>
-                                </div>
-                            )}
+                                );
+                            })()}
 
                             {/* Document List Card */}
                             <div className="card p-0 overflow-hidden min-h-[400px]">
@@ -1111,7 +1169,7 @@ export default function ClaimDetails() {
                                 <Shield className="absolute top-0 right-0 w-32 h-32 text-purple-100 -mr-12 opacity-40" />
                                 <div className="flex items-center justify-between mb-6 relative z-10">
                                     <h3 className="text-lg font-black text-gray-900 font-display flex items-center gap-3 uppercase tracking-tight">
-                                        <Shield size={24} className="text-purple-600" /> Regulação Tokio Marine
+                                        <Shield size={24} className="text-purple-600" /> Regulação {claim.insurer || 'Seguradora'}
                                     </h3>
                                     <div className="flex items-center gap-4 bg-white p-2 px-4 rounded-xl shadow-sm border border-purple-100">
                                         <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Complexidade (Art. 86)</span>
@@ -1183,6 +1241,7 @@ export default function ClaimDetails() {
                 isOpen={isUploadModalOpen}
                 onClose={() => setUploadModalOpen(false)}
                 onUpload={handleUpload}
+                onCommentOnly={handleCommentOnly}
                 folderName={currentFolder.name}
             />
 

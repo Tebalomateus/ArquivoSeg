@@ -531,6 +531,22 @@ export const ClaimsProvider = ({ children }) => {
         return fileVer;
     };
 
+    const addCommentToClaim = async (claimId, body) => {
+        if (isMockEnabled()) {
+            updateClaimLocal(claimId, c => ({
+                ...c,
+                activities: [{ id: Date.now().toString(), user: currentUser?.name || 'Sistema', action: `registrou observação`, date: new Date().toLocaleString('pt-BR'), type: 'COMMENT' }, ...c.activities],
+            }));
+            return;
+        }
+        if (!getToken()) return;
+        await claimsService.addComment(claimId, body);
+        updateClaimLocal(claimId, c => ({
+            ...c,
+            activities: [{ id: Date.now().toString(), user: currentUser?.name || 'Sistema', action: `registrou observação`, date: new Date().toLocaleString('pt-BR'), type: 'COMMENT' }, ...c.activities],
+        }));
+    };
+
     const documentDownloadHref = (fileId) => claimsService.downloadHref(fileId);
 
     const updateAnnotation = async (claimId, commentId, body) => {
@@ -771,7 +787,7 @@ export const ClaimsProvider = ({ children }) => {
             claims, addClaim, updateChecklistStatus,
             transitionStatus, archiveClaim, assignClaim, updateClaimFields, fetchSingleClaim,
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
-            uploadFileToClaim, refreshClaimFiles, documentDownloadHref,
+            uploadFileToClaim, addCommentToClaim, refreshClaimFiles, documentDownloadHref,
             deleteDocument, listFileVersions,
             updateAnnotation, deleteAnnotation,
             listFileShares, createFileShare, revokeFileShare, countShareAccesses,
