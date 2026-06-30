@@ -14,8 +14,8 @@ const realService = {
     getClaim(processId) {
         return processesApi.getProcess(processId);
     },
-    createClaim({ title, description, metadata }) {
-        return processesApi.createProcess({ title, description, metadata });
+    createClaim({ title, description, metadata, claim_type }) {
+        return processesApi.createProcess({ title, description, metadata, claim_type });
     },
     updateClaim(processId, patch) {
         return processesApi.updateProcess(processId, patch);

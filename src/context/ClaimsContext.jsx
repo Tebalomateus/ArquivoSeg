@@ -97,6 +97,8 @@ const adaptProcessToClaim = (proc, cached) => {
         backUpdatedAt: proc.updated_at,
         assignedTo: proc.assigned_to || null,
         backCreatedBy: proc.created_by || null,
+        claimType: proc.claim_type || null,
+        checklistState: meta.checklist_state || {},
         date: created.toLocaleDateString('pt-BR'),
         lastModified: updated.toLocaleDateString('pt-BR'),
 
@@ -319,6 +321,7 @@ export const ClaimsProvider = ({ children }) => {
                 title,
                 description,
                 metadata: extractMetadata(draftClaim),
+                claim_type: newClaim.claimType || null,
             });
             processId = proc.id;
             backCreatedAt = proc.created_at || backCreatedAt;
