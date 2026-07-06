@@ -77,6 +77,18 @@ const realService = {
     listUsers() {
         return usersApi.listUsers();
     },
+    inviteUser(data) {
+        return usersApi.inviteUser(data);
+    },
+    updateUserRole(id, role) {
+        return usersApi.updateUserRole(id, role);
+    },
+    deactivateUser(id) {
+        return usersApi.deactivateUser(id);
+    },
+    resendInvite(id) {
+        return usersApi.resendInvite(id);
+    },
     downloadHref(fileId) {
         return filesApi.downloadHref(fileId);
     },

@@ -101,6 +101,13 @@ export const INSURERS_CONFIG = {
     },
 };
 
+export const GENERAL_CHECKLIST = [
+    { name: 'Apólice de Seguro', folder: 'Causa', required: true },
+    { name: 'Aviso de Sinistro', folder: 'Causa', required: true },
+    { name: 'Documentos de Identificação do Segurado', folder: 'Causa', required: true },
+    { name: 'Procuração / Carta de Preposto', folder: 'Causa', required: false },
+];
+
 export const STATUS_COLORS = {
     'Aberto': 'bg-blue-100 text-blue-700',
     'Em Análise': 'bg-amber-100 text-amber-700',

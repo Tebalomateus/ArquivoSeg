@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Save, X, Plus, Trash2, Shield, Info, Link as LinkIcon, Share2, Building2, User, FileText, Calendar, MapPin, Briefcase, ArrowLeft } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
+import { GENERAL_CHECKLIST } from '../constants/config';
 
 // Configuração de Seguradoras e Modalidades com suas listas de documentos padrão
 const INSURERS_CONFIG = {
@@ -123,11 +124,13 @@ export default function NewClaim() {
     // Informações da Apólice
     const [claimNumber, setClaimNumber] = useState('');
     const [insurer, setInsurer] = useState('');
+    const [customInsurer, setCustomInsurer] = useState('');
     const [policyNumber, setPolicyNumber] = useState('');
     const [policyStartDate, setPolicyStartDate] = useState('');
     const [policyEndDate, setPolicyEndDate] = useState('');
     const [retroactiveDate, setRetroactiveDate] = useState('');
     const [modality, setModality] = useState('');
+    const [customModality, setCustomModality] = useState('');
 
     // Informações do Segurado
     const [insuredName, setInsuredName] = useState('');
@@ -147,28 +150,39 @@ export default function NewClaim() {
     // Checklist dinâmico
     const [checklist, setChecklist] = useState([]);
 
+    const isCustomInsurer = insurer === '__other__';
+    const effectiveInsurer = isCustomInsurer ? customInsurer : insurer;
+
     // Modalidades disponíveis baseadas na seguradora selecionada
     const availableModalities = useMemo(() => {
-        if (!insurer || !INSURERS_CONFIG[insurer]) return [];
+        if (!insurer || isCustomInsurer || !INSURERS_CONFIG[insurer]) return [];
         return Object.keys(INSURERS_CONFIG[insurer].modalities);
-    }, [insurer]);
+    }, [insurer, isCustomInsurer]);
+
+    const isCustomModality = modality === '__other__';
+    const effectiveModality = isCustomModality ? customModality : modality;
 
     // Quando seguradora ou modalidade mudam, atualizar checklist
     const handleInsurerChange = (value) => {
         setInsurer(value);
+        setCustomInsurer('');
         setModality('');
+        setCustomModality('');
         setChecklist([]);
+    };
+
+    const buildChecklist = (modalityDocs) => {
+        const allDocs = [...GENERAL_CHECKLIST, ...(modalityDocs || [])];
+        return allDocs.map((doc, idx) => ({ id: Date.now() + idx, ...doc, received: false }));
     };
 
     const handleModalityChange = (value) => {
         setModality(value);
-        if (insurer && value && INSURERS_CONFIG[insurer]?.modalities[value]) {
-            const defaultDocs = INSURERS_CONFIG[insurer].modalities[value].map((doc, idx) => ({
-                id: Date.now() + idx,
-                ...doc,
-                received: false
-            }));
-            setChecklist(defaultDocs);
+        setCustomModality('');
+        if (value === '__other__') {
+            setChecklist(buildChecklist([]));
+        } else if (insurer && value && INSURERS_CONFIG[insurer]?.modalities[value]) {
+            setChecklist(buildChecklist(INSURERS_CONFIG[insurer].modalities[value]));
         } else {
             setChecklist([]);
         }
@@ -187,8 +201,8 @@ export default function NewClaim() {
             alert('O número do sinistro é obrigatório!');
             return;
         }
-        if (!insurer) {
-            alert('Selecione uma seguradora!');
+        if (!effectiveInsurer) {
+            alert('Selecione ou digite uma seguradora!');
             return;
         }
         if (!insuredName) {
@@ -199,13 +213,13 @@ export default function NewClaim() {
         const newClaimId = addClaim({
             number: claimNumber,
             title: title || `Sinistro ${claimNumber}`,
-            insurer,
+            insurer: effectiveInsurer,
             insuredName,
             policyNumber,
             policyStartDate,
             policyEndDate,
             retroactiveDate,
-            modality,
+            modality: effectiveModality,
             brokerName,
             brokerClaimId,
             adjusterName,
@@ -270,22 +284,56 @@ export default function NewClaim() {
                             {insurerOptions.map(ins => (
                                 <option key={ins} value={ins}>{ins}</option>
                             ))}
+                            <option value="__other__">Outra (digitar)</option>
                         </select>
+                        {isCustomInsurer && (
+                            <input
+                                type="text"
+                                value={customInsurer}
+                                onChange={(e) => setCustomInsurer(e.target.value)}
+                                placeholder="Digite o nome da seguradora"
+                                className="w-full mt-2 px-4 py-2.5 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-blue-50/30 placeholder:text-gray-300"
+                                autoFocus
+                            />
+                        )}
                     </div>
 
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Modalidade</label>
-                        <select
-                            value={modality}
-                            onChange={(e) => handleModalityChange(e.target.value)}
-                            disabled={!insurer}
-                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                        >
-                            <option value="">Selecione...</option>
-                            {availableModalities.map(mod => (
-                                <option key={mod} value={mod}>{mod}</option>
-                            ))}
-                        </select>
+                        {isCustomInsurer ? (
+                            <input
+                                type="text"
+                                value={customModality}
+                                onChange={(e) => { setModality('__other__'); setCustomModality(e.target.value); if (checklist.length === 0) setChecklist(buildChecklist([])); }}
+                                placeholder="Digite a modalidade"
+                                className="w-full px-4 py-2.5 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-blue-50/30 placeholder:text-gray-300"
+                            />
+                        ) : (
+                            <>
+                                <select
+                                    value={modality}
+                                    onChange={(e) => handleModalityChange(e.target.value)}
+                                    disabled={!insurer}
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                                >
+                                    <option value="">Selecione...</option>
+                                    {availableModalities.map(mod => (
+                                        <option key={mod} value={mod}>{mod}</option>
+                                    ))}
+                                    {insurer && <option value="__other__">Outra (digitar)</option>}
+                                </select>
+                                {isCustomModality && (
+                                    <input
+                                        type="text"
+                                        value={customModality}
+                                        onChange={(e) => setCustomModality(e.target.value)}
+                                        placeholder="Digite a modalidade"
+                                        className="w-full mt-2 px-4 py-2.5 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-blue-50/30 placeholder:text-gray-300"
+                                        autoFocus
+                                    />
+                                )}
+                            </>
+                        )}
                         <p className="text-[10px] text-gray-400 mt-1">Define a lista de documentos padrão</p>
                     </div>
 
@@ -494,9 +542,9 @@ export default function NewClaim() {
                             <Shield size={18} className="text-blue-600" />
                             Checklist de Documentos
                         </h3>
-                        {insurer && modality && (
+                        {effectiveInsurer && effectiveModality && (
                             <p className="text-xs text-gray-500 mt-1">
-                                Template: <span className="font-bold">{insurer}</span> → <span className="font-bold">{modality}</span>
+                                Template: <span className="font-bold">{effectiveInsurer}</span> → <span className="font-bold">{effectiveModality}</span>
                             </p>
                         )}
                     </div>

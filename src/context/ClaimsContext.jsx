@@ -531,6 +531,22 @@ export const ClaimsProvider = ({ children }) => {
         return fileVer;
     };
 
+    const addCommentToClaim = async (claimId, body) => {
+        if (isMockEnabled()) {
+            updateClaimLocal(claimId, c => ({
+                ...c,
+                activities: [{ id: Date.now().toString(), user: currentUser?.name || 'Sistema', action: `registrou observação`, date: new Date().toLocaleString('pt-BR'), type: 'COMMENT' }, ...c.activities],
+            }));
+            return;
+        }
+        if (!getToken()) return;
+        await claimsService.addComment(claimId, body);
+        updateClaimLocal(claimId, c => ({
+            ...c,
+            activities: [{ id: Date.now().toString(), user: currentUser?.name || 'Sistema', action: `registrou observação`, date: new Date().toLocaleString('pt-BR'), type: 'COMMENT' }, ...c.activities],
+        }));
+    };
+
     const documentDownloadHref = (fileId) => claimsService.downloadHref(fileId);
 
     const updateAnnotation = async (claimId, commentId, body) => {
@@ -741,6 +757,26 @@ export const ClaimsProvider = ({ children }) => {
         setClients(prev => prev.filter(c => c.id !== id));
     };
 
+    const inviteUserAction = async (data) => {
+        const created = await claimsService.inviteUser(data);
+        await refreshUsers();
+        return created;
+    };
+
+    const updateUserRoleAction = async (id, role) => {
+        await claimsService.updateUserRole(id, role);
+        await refreshUsers();
+    };
+
+    const deactivateUserAction = async (id) => {
+        await claimsService.deactivateUser(id);
+        await refreshUsers();
+    };
+
+    const resendInviteAction = async (id) => {
+        return claimsService.resendInvite(id);
+    };
+
     const updateSettings = (newSettings) => setSettings(newSettings);
 
     const isGuestVerified = (token) => sessionStorage.getItem(`verified_guest_${token}`) === 'true';
@@ -751,7 +787,7 @@ export const ClaimsProvider = ({ children }) => {
             claims, addClaim, updateChecklistStatus,
             transitionStatus, archiveClaim, assignClaim, updateClaimFields, fetchSingleClaim,
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
-            uploadFileToClaim, refreshClaimFiles, documentDownloadHref,
+            uploadFileToClaim, addCommentToClaim, refreshClaimFiles, documentDownloadHref,
             deleteDocument, listFileVersions,
             updateAnnotation, deleteAnnotation,
             listFileShares, createFileShare, revokeFileShare, countShareAccesses,
@@ -759,6 +795,8 @@ export const ClaimsProvider = ({ children }) => {
             claimsLoading, claimsError, claimsTotal, refreshClaims, claimsFilter,
             users,
             backendUsers, usersLoading, refreshUsers, resolveActorLabel,
+            inviteUser: inviteUserAction, updateUserRole: updateUserRoleAction,
+            deactivateUser: deactivateUserAction, resendInvite: resendInviteAction,
             clients, clientsLoading, addClientEntity, updateClientEntity, deleteClientEntity, refreshClients,
             settings, updateSettings,
             isGuestVerified,
