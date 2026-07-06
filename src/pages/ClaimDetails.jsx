@@ -29,8 +29,10 @@ import {
     Send,
     User,
     Search,
-    Filter
+    Filter,
+    ListChecks
 } from 'lucide-react';
+import ChecklistPanel from '../components/ChecklistPanel';
 import { useClaims, VALID_NEXT_STATUS } from '../context/ClaimsContext';
 import { actorLabelFromDbId } from '../api/auth';
 import { formatBytes, mimeShortLabel } from '../api/files';
@@ -525,6 +527,13 @@ export default function ClaimDetails() {
                         >
                             Exploração
                         </button>
+                        <button
+                            onClick={() => setViewMode('checklist')}
+                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${viewMode === 'checklist' ? 'bg-white shadow-md text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            <ListChecks size={13} />
+                            Checklist
+                        </button>
                         {(canManageDocuments || isAuditor) && (
                             <button
                                 onClick={() => setViewMode('management')}
@@ -705,7 +714,9 @@ export default function ClaimDetails() {
 
                 {/* Content Area */}
                 <div className="lg:col-span-3 space-y-6">
-                    {viewMode === 'interaction' ? (
+                    {viewMode === 'checklist' ? (
+                        <ChecklistPanel claim={claim} />
+                    ) : viewMode === 'interaction' ? (
                         <>
                             {/* Checklist Section */}
                             {currentFolder.checklist && currentFolder.checklist.length > 0 && (() => {

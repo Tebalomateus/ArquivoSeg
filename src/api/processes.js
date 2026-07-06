@@ -11,9 +11,10 @@ export function getProcess(id) {
     return api.get(`/api/v1/processes/${id}`);
 }
 
-export function createProcess({ title, description, metadata }) {
+export function createProcess({ title, description, metadata, claim_type }) {
     const body = { title, description };
     if (metadata !== undefined) body.metadata = metadata;
+    if (claim_type) body.claim_type = claim_type;
     return api.post('/api/v1/processes', body);
 }
 

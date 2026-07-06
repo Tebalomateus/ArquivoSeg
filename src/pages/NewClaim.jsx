@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Save, X, Plus, Trash2, Shield, Info, Link as LinkIcon, Share2, Building2, User, FileText, Calendar, MapPin, Briefcase, ArrowLeft } from 'lucide-react';
+import { Save, X, Plus, Trash2, Shield, Info, Link as LinkIcon, Share2, Building2, User, FileText, Calendar, MapPin, Briefcase, ArrowLeft, ListChecks } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { GENERAL_CHECKLIST } from '../constants/config';
+import { listChecklistTypes } from '../api/checklist';
+import { isMockEnabled } from '../api/client';
 
 // Configuração de Seguradoras e Modalidades com suas listas de documentos padrão
 const INSURERS_CONFIG = {
@@ -121,6 +123,17 @@ export default function NewClaim() {
         ...apiInsurerNames,
     ])).sort((a, b) => a.localeCompare(b));
 
+    // Tipo de sinistro (checklist dinâmica do S3)
+    const [claimType, setClaimType] = useState('');
+    const [availableClaimTypes, setAvailableClaimTypes] = useState([]);
+
+    useEffect(() => {
+        if (isMockEnabled()) return;
+        listChecklistTypes()
+            .then(res => setAvailableClaimTypes(res?.data || []))
+            .catch(() => {});
+    }, []);
+
     // Informações da Apólice
     const [claimNumber, setClaimNumber] = useState('');
     const [insurer, setInsurer] = useState('');
@@ -227,7 +240,8 @@ export default function NewClaim() {
             occurrenceDate,
             occurrenceLocation,
             description,
-            initialChecklist: checklist
+            initialChecklist: checklist,
+            claimType: claimType || null,
         });
 
         // Relative navigation works under both /app/sinistros/novo and /admin/sinistros/novo.
@@ -260,6 +274,26 @@ export default function NewClaim() {
                         <FileText size={18} className="text-blue-600" />
                         Informações da Apólice
                     </h3>
+
+                    {availableClaimTypes.length > 0 && (
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                <ListChecks size={13} className="text-blue-600" />
+                                Tipo de Sinistro
+                            </label>
+                            <select
+                                value={claimType}
+                                onChange={(e) => setClaimType(e.target.value)}
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white"
+                            >
+                                <option value="">Selecione o tipo...</option>
+                                {availableClaimTypes.map(t => (
+                                    <option key={t} value={t}>{t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
+                                ))}
+                            </select>
+                            <p className="text-[10px] text-gray-400 mt-1">Define a checklist dinâmica de documentos</p>
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Nº do Sinistro *</label>
