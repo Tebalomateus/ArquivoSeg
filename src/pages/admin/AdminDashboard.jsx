@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 import { listAudit } from '../../api/audit';
+import RelatorioGerencialCard from '../../components/RelatorioGerencialCard';
 
 const BIStatCard = ({ title, value, detail, icon: Icon, color, trend }) => (
     <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-100/50 flex flex-col justify-between group hover:border-blue-200 transition-all">
@@ -165,6 +166,8 @@ export default function AdminDashboard() {
                     color="bg-emerald-600"
                 />
             </div>
+
+            <RelatorioGerencialCard claims={claims} />
 
             {/* Deep Analytics Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">

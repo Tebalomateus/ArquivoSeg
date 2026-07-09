@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { BarChart3, Clock, CheckCircle2, AlertCircle, FileText, TrendingUp, Shield, ArrowRight, Search } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { useNavigate } from 'react-router-dom';
+import RelatorioGerencialCard from '../components/RelatorioGerencialCard';
 
 /**
  * Individual Stat Card for the Dashboard.
@@ -43,15 +44,23 @@ const StatCard = ({ title, value, icon: Icon, color, trend, onClick }) => (
  * Displays real-time metrics, recent activities, and portfolio health.
  */
 export default function Dashboard() {
-    const { claims, currentUser } = useClaims();
+    const { claims, currentUser, backendUsers } = useClaims();
     const navigate = useNavigate();
 
-    // MEMOIZED: Multi-Tenancy Filter (Simulado)
+    // Resolve "current user's internal DB id" the same way NotificationBell/Notifications
+    // already do — by matching email against backendUsers (only populated for manager+;
+    // contributor/viewer get an empty list and fall through to seeing every tenant claim).
+    const myDbId = useMemo(
+        () => (backendUsers || []).find((u) => u.email?.toLowerCase() === currentUser?.email?.toLowerCase())?.id,
+        [backendUsers, currentUser]
+    );
+
     const myClaims = useMemo(() => {
         if (!currentUser) return [];
-        if (currentUser.role === 'ADMIN') return claims;
-        return claims.filter(c => c.insurer === currentUser.company || c.broker === currentUser.company);
-    }, [claims, currentUser]);
+        if (currentUser.role === 'ADMIN' || !myDbId) return claims;
+        // Relevant to me = I created it or I'm the assigned responsible.
+        return claims.filter(c => c.backCreatedBy === myDbId || c.assignedTo === myDbId);
+    }, [claims, currentUser, myDbId]);
 
     // MEMOIZED: Portfolio Calculations
     const portfolioStats = useMemo(() => {
@@ -186,6 +195,8 @@ export default function Dashboard() {
                     onClick={() => navigate('/app/sinistros?filter=critico')}
                 />
             </div>
+
+            <RelatorioGerencialCard claims={myClaims} />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Recent Activity */}
