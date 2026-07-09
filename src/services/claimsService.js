@@ -89,8 +89,11 @@ const realService = {
     resendInvite(id) {
         return usersApi.resendInvite(id);
     },
-    downloadHref(fileId) {
-        return filesApi.downloadHref(fileId);
+    openDocument(fileId) {
+        return filesApi.openDocument(fileId);
+    },
+    downloadDocument(fileId, filename) {
+        return filesApi.downloadDocument(fileId, filename);
     },
     async logDocumentView(claimId, docName, user) {
         console.log(`[AUDIT] view registrado pelo back: claim=${claimId} doc="${docName}" user=${user}`);
@@ -178,8 +181,11 @@ const mockService = {
         const users = saved ? JSON.parse(saved) : [];
         return { data: users, total: users.length };
     },
-    downloadHref(fileId) {
-        return `#mock-download-${fileId}`;
+    async openDocument() {
+        alert('Modo mock: não há arquivo real para visualizar.');
+    },
+    async downloadDocument() {
+        alert('Modo mock: não há arquivo real para baixar.');
     },
     async logDocumentView(claimId, docName, user) {
         console.log(`[MOCK AUDIT] doc "${docName}" visto por ${user} em ${new Date().toISOString()}`);

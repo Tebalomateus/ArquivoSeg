@@ -205,7 +205,8 @@ export default function ClaimDetails() {
         uploadFileToClaim,
         addCommentToClaim,
         refreshClaimFiles,
-        documentDownloadHref,
+        openDocument,
+        downloadDocument,
         listFileShares,
         createFileShare,
         revokeFileShare,
@@ -223,6 +224,8 @@ export default function ClaimDetails() {
         auditByClaim,
         resolveActorLabel,
         updateChecklistStatus,
+        markFileReviewed,
+        addChecklistItem,
         toggleDeadline,
         logView,
         setComplexStatus,
@@ -376,6 +379,11 @@ export default function ClaimDetails() {
         catch (err) { console.error(err); }
     };
 
+    const handleDownloadFile = async (fileVerId, filename) => {
+        try { await downloadDocument(fileVerId, filename); }
+        catch (err) { alert(`Falha ao baixar o documento: ${err?.message || err}`); }
+    };
+
     const openVersions = async (doc) => {
         if (!doc?.backFileVerId) return;
         const versions = await listFileVersions(doc.backFileVerId);
@@ -457,16 +465,21 @@ export default function ClaimDetails() {
         await addCommentToClaim(claim.id, payload.annotation);
     };
 
-    const handleViewDoc = (doc) => {
+    const handleViewDoc = async (doc) => {
         if (isAuditor) {
             return alert('Auditor: O conteúdo dos documentos é restrito para integridade de dados. Acesso negado pelo protocolo de compliance.');
         }
         if (!doc?.backFileVerId) return;
-        // Backend's GET /files/:id/download responds 302 to a presigned MinIO URL.
-        // The browser opens the file inline (PDFs/images) or downloads it (.txt etc.).
-        // The redirect is audited server-side via ActionFileDownloaded.
-        window.open(documentDownloadHref(doc.backFileVerId), '_blank', 'noopener,noreferrer');
-        logView(claim.id, doc.name);
+        // Backend's GET /files/:id/download requires a Bearer token and 302s to a
+        // presigned MinIO URL — a plain window.open() never attaches Authorization,
+        // so we fetch it ourselves and open the resulting blob. Audited server-side
+        // via ActionFileDownloaded on the initial authenticated request.
+        try {
+            await openDocument(doc.backFileVerId);
+            logView(claim.id, doc.name);
+        } catch (err) {
+            alert(`Falha ao abrir o documento: ${err?.message || err}`);
+        }
     };
 
     const handleSaveObs = () => {
@@ -476,6 +489,10 @@ export default function ClaimDetails() {
 
     const toggleChecklistItem = (itemId, received) => {
         if (isAuditor) return;
+        // Marking as received is a claim ("this document arrived") — require an explicit
+        // confirmation so a stray click doesn't silently give a document a false pass.
+        // Unmarking is always safe to reverse and stays instant.
+        if (!received && !confirm('Confirma que este item foi recebido/conferido?')) return;
         updateChecklistStatus(claim.id, currentFolderId, itemId, !received);
     };
 
@@ -735,15 +752,29 @@ export default function ClaimDetails() {
                                                     </span>
                                                 )}
                                             </h3>
-                                            {completedCount > 0 && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowCompletedChecklist(v => !v)}
-                                                    className="text-[10px] font-black text-blue-600 hover:underline uppercase tracking-widest"
-                                                >
-                                                    {showCompletedChecklist ? 'Ocultar concluídos' : 'Mostrar todos'}
-                                                </button>
-                                            )}
+                                            <div className="flex items-center gap-4">
+                                                {completedCount > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowCompletedChecklist(v => !v)}
+                                                        className="text-[10px] font-black text-blue-600 hover:underline uppercase tracking-widest"
+                                                    >
+                                                        {showCompletedChecklist ? 'Ocultar concluídos' : 'Mostrar todos'}
+                                                    </button>
+                                                )}
+                                                {canEditClaimMeta && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const name = prompt('Descrição do novo item da checklist (documento complementar):');
+                                                            if (name?.trim()) addChecklistItem(claim.id, currentFolderId, name);
+                                                        }}
+                                                        className="text-[10px] font-black text-blue-600 hover:underline uppercase tracking-widest flex items-center gap-1"
+                                                    >
+                                                        <Plus size={12} /> Adicionar item
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                         {displayItems.length === 0 ? (
                                             <p className="text-xs text-green-700 font-bold text-center py-4">Todos os itens foram recebidos.</p>
@@ -835,6 +866,11 @@ export default function ClaimDetails() {
                                                                     v{doc.backVersion}
                                                                 </span>
                                                             )}
+                                                            {doc.backFileVerId && claim.reviewedFiles?.[doc.backFileVerId] && (
+                                                                <span className="text-[9px] font-black px-2 py-0.5 rounded bg-green-50 border border-green-200 text-green-700 tracking-widest flex items-center gap-1" title={`Conferido em ${new Date(claim.reviewedFiles[doc.backFileVerId].reviewedAt).toLocaleString('pt-BR')}`}>
+                                                                    <CheckCircle size={10} /> Conferido
+                                                                </span>
+                                                            )}
                                                             <span className={`text-[9px] font-black px-2 py-0.5 rounded border tracking-widest transition-all ${doc.confidentiality === 'Altamente Confidencial' ? 'bg-red-50 border-red-200 text-red-600' :
                                                                 doc.confidentiality === 'Confidencial' ? 'bg-amber-50 border-amber-200 text-amber-600' :
                                                                     doc.confidentiality === 'Público' ? 'bg-green-50 border-green-200 text-green-600' :
@@ -912,15 +948,14 @@ export default function ClaimDetails() {
                                                     </button>
                                                     {doc.backFileVerId ? (
                                                         <>
-                                                            <a
-                                                                href={documentDownloadHref(doc.backFileVerId)}
-                                                                target="_blank"
-                                                                rel="noreferrer"
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDownloadFile(doc.backFileVerId, doc.name)}
                                                                 className="w-10 h-10 flex items-center justify-center bg-white shadow-lg border border-gray-100 rounded-xl text-gray-600 hover:bg-blue-600 hover:text-white transition-all"
                                                                 title="Baixar documento"
                                                             >
                                                                 <Download size={18} />
-                                                            </a>
+                                                            </button>
                                                             <button
                                                                 type="button"
                                                                 onClick={() => openVersions(doc)}
@@ -929,6 +964,16 @@ export default function ClaimDetails() {
                                                             >
                                                                 <History size={18} />
                                                             </button>
+                                                            {canDeleteFile && !claim.reviewedFiles?.[doc.backFileVerId] && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => markFileReviewed(claim.id, doc.backFileVerId)}
+                                                                    className="w-10 h-10 flex items-center justify-center bg-white shadow-lg border border-gray-100 rounded-xl text-gray-600 hover:bg-green-600 hover:text-white transition-all"
+                                                                    title="Marcar como conferido/OK"
+                                                                >
+                                                                    <CheckCircle size={18} />
+                                                                </button>
+                                                            )}
                                                             {canDeleteFile && (
                                                                 <button
                                                                     type="button"
@@ -1318,14 +1363,13 @@ export default function ClaimDetails() {
                                                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{v.size_bytes} bytes · {v.mime_type}</p>
                                                 <p className="text-[10px] text-gray-400 font-bold mt-1">enviado em {created}</p>
                                             </div>
-                                            <a
-                                                href={documentDownloadHref(v.id)}
-                                                target="_blank"
-                                                rel="noreferrer"
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDownloadFile(v.id, versionsModal.file?.name)}
                                                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-700"
                                             >
                                                 Baixar
-                                            </a>
+                                            </button>
                                         </div>
                                     );
                                 })}

@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, getToken } from './client';
 
 // The backend's multipart parser calls filepath.Base() on the upload filename, so any
 // "/" path prefix is stripped. We encode the folder category as a "<cat>__<name>" prefix
@@ -53,6 +53,40 @@ export function listVersions(fileId) {
 
 export function downloadHref(fileId) {
     return `/api/v1/files/${fileId}/download`;
+}
+
+// GET /files/:id/download requires a Bearer token and 302s to a presigned MinIO URL.
+// A plain <a href>/window.open() never attaches Authorization, so in production
+// (front and back on different origins) this either 401s or — worse — resolves
+// against the SPA's own origin and gets swallowed by its catch-all route.
+// Fetch it ourselves, follow the redirect, and hand back a blob object URL.
+async function fetchDocumentBlobUrl(fileId) {
+    const token = getToken();
+    const base = import.meta.env.VITE_API_BASE_URL ?? '';
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await fetch(`${base}${downloadHref(fileId)}`, { headers });
+    if (!res.ok) {
+        throw new Error(`Não foi possível baixar o documento (HTTP ${res.status}).`);
+    }
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+}
+
+export async function openDocument(fileId) {
+    const url = await fetchDocumentBlobUrl(fileId);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function downloadDocument(fileId, filename) {
+    const url = await fetchDocumentBlobUrl(fileId);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'documento';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
 }
 
 export function deleteFile(fileId) {
