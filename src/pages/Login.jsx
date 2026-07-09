@@ -1,15 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, ExternalLink, KeyRound, Lock, Mail, ShieldCheck, X } from 'lucide-react';
+import { ArrowRight, KeyRound, Lock, Mail, ShieldCheck, X } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { INITIAL_USERS } from '../constants/initialData';
 import { backRoleFor } from '../api/auth';
 import { isMockEnabled } from '../api/client';
 import { zitadel } from '../api/zitadel';
-
-const ZITADEL_CONSOLE = import.meta.env.VITE_ZITADEL_AUTHORITY
-    ? `${import.meta.env.VITE_ZITADEL_AUTHORITY}/ui/console`
-    : 'http://localhost:8081';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -230,21 +226,20 @@ export default function Login() {
                         </div>
                         <div className="p-6 space-y-4">
                             <p className="text-sm text-slate-700 leading-relaxed">
-                                Senhas e MFA são gerenciados pelo provedor de identidade <strong>Zitadel</strong>. Para redefinir sua senha:
+                                Senhas e MFA são gerenciados pelo provedor de identidade <strong>Zitadel</strong>. O reset acontece direto na tela de login — não é preciso (nem funciona) acessar o console administrativo.
                             </p>
                             <ol className="text-sm text-slate-600 space-y-2 list-decimal list-inside leading-relaxed">
-                                <li>Acesse o console do Zitadel.</li>
-                                <li>Clique em <strong>"Forgot password"</strong> na tela de login.</li>
-                                <li>Siga as instruções enviadas para seu email corporativo.</li>
+                                <li>Clique no botão abaixo para ir à tela de login.</li>
+                                <li>Clique em <strong>"Forgot password?"</strong>, já disponível ali.</li>
+                                <li>Siga as instruções enviadas para o seu email corporativo.</li>
                             </ol>
-                            <a
-                                href={ZITADEL_CONSOLE}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                            <button
+                                type="button"
+                                onClick={() => { setForgotOpen(false); handleZitadelLogin(); }}
                                 className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all"
                             >
-                                Abrir Console Zitadel <ExternalLink size={14} />
-                            </a>
+                                Ir para a tela de login <ArrowRight size={14} />
+                            </button>
                         </div>
                     </div>
                 </div>
