@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Bell, Key, Database, Mail, Clock, CheckCircle, Save, ArrowLeft, ExternalLink, Server, Lock, FileCheck, AlertTriangle } from 'lucide-react';
+import { Shield, Bell, Key, Database, Mail, Clock, CheckCircle, Save, ArrowLeft, ExternalLink, Server, Lock, FileCheck, AlertTriangle, User } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 
 const formatBytes = (n) => {
@@ -13,9 +13,9 @@ const formatBytes = (n) => {
 };
 
 export default function Settings() {
-    const { settings, updateSettings, claims, backendUsers } = useClaims();
+    const { settings, updateSettings, claims, backendUsers, currentUser } = useClaims();
     const [localSettings, setLocalSettings] = useState(settings);
-    const [activeSection, setActiveSection] = useState('Notificações');
+    const [activeSection, setActiveSection] = useState('Meu Perfil');
     const [healthOk, setHealthOk] = useState(null);
 
     useEffect(() => {
@@ -60,6 +60,7 @@ export default function Settings() {
     };
 
     const sections = [
+        { title: 'Meu Perfil', icon: User, desc: 'Seus dados de acesso (somente leitura).' },
         { title: 'Segurança', icon: Shield, desc: 'Políticas de 2FA e RBAC (Auditor).' },
         { title: 'Notificações', icon: Bell, desc: 'Frequência de alertas e relatórios.' },
         { title: 'Integrações', icon: Key, desc: 'Configurar APIs e conexões externas.' },
@@ -120,6 +121,42 @@ export default function Settings() {
                 {/* Conteúdo Central */}
                 <div className="lg:col-span-3">
                     <div className="card h-full min-h-[500px] border-gray-100 shadow-2xl shadow-gray-100 relative overflow-hidden">
+                        {activeSection === 'Meu Perfil' && (
+                            <div className="space-y-8 animate-fade-in">
+                                <div>
+                                    <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
+                                        <User size={24} className="text-blue-600" /> Meu Perfil
+                                    </h3>
+                                    <p className="text-sm text-gray-500 font-medium">Dados da sua conta, somente leitura.</p>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="p-5 rounded-2xl border-2 border-gray-100 bg-gray-50/30">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Nome</p>
+                                        <p className="text-sm font-bold text-gray-900">{currentUser?.name || '—'}</p>
+                                    </div>
+                                    <div className="p-5 rounded-2xl border-2 border-gray-100 bg-gray-50/30">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">E-mail</p>
+                                        <p className="text-sm font-bold text-gray-900">{currentUser?.email || '—'}</p>
+                                    </div>
+                                    <div className="p-5 rounded-2xl border-2 border-gray-100 bg-gray-50/30">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Papel</p>
+                                        <p className="text-sm font-bold text-gray-900">{currentUser?.role || '—'}</p>
+                                    </div>
+                                </div>
+
+                                <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3">
+                                    <AlertTriangle size={18} className="text-amber-600 mt-0.5 shrink-0" />
+                                    <div>
+                                        <p className="text-xs font-bold text-amber-800">E-mail e senha são geridos pelo Zitadel</p>
+                                        <p className="text-[11px] text-amber-800/80 font-medium mt-1 leading-relaxed">
+                                            Para trocar a senha, saia da conta e use <strong>"Esqueceu a senha?"</strong> na tela de login. Alteração de e-mail cadastrado e telefone ainda não têm autoatendimento nesta versão — fale com o administrador do tenant.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {activeSection === 'Notificações' && (
                             <div className="space-y-10 animate-fade-in">
                                 <div>
@@ -227,7 +264,7 @@ export default function Settings() {
                                     <div>
                                         <p className="text-xs font-bold text-amber-800">2FA, política de senha e sessões</p>
                                         <p className="text-[11px] text-amber-800/80 font-medium mt-1 leading-relaxed">
-                                            São configurados no console do Zitadel — não nesta tela. Acesse <code className="font-mono">http://localhost:8081</code>.
+                                            Geridos pelo Zitadel, não nesta tela. Troca de senha acontece na própria tela de login (veja <strong>Meu Perfil</strong>) — não use o console administrativo, ele não é um autoatendimento para o usuário final.
                                         </p>
                                     </div>
                                 </div>
