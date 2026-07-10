@@ -21,7 +21,7 @@ export default function Callback() {
                 return;
             }
 
-            const roles = oidcUser.profile['urn:zitadel:iam:org:projects:roles'] || {};
+            const roles = oidcUser.profile['urn:zitadel:iam:org:project:roles'] || {};
             const backRole = Object.keys(roles)[0] || 'viewer';
             const uiRole = uiRoleFor(backRole);
 

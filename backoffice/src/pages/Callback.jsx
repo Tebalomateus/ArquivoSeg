@@ -18,7 +18,7 @@ export default function Callback() {
                 return;
             }
 
-            const roles = oidcUser.profile['urn:zitadel:iam:org:projects:roles'] || {};
+            const roles = oidcUser.profile['urn:zitadel:iam:org:project:roles'] || {};
             const role = Object.keys(roles)[0] || '';
 
             if (role !== 'backoffice') {
