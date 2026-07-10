@@ -136,10 +136,12 @@ export default function ClaimsList() {
                         </span>
                     </h1>
                 </div>
-                <Link to="novo" className="w-full lg:w-auto bg-secondary text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-secondary-hover transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-2 group">
-                    <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" />
-                    Novo Sinistro
-                </Link>
+                {(currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin') && (
+                    <Link to="novo" className="w-full lg:w-auto bg-secondary text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-secondary-hover transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-2 group">
+                        <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" />
+                        Novo Sinistro
+                    </Link>
+                )}
             </div>
 
             {/* Navigation & Search Bar */}

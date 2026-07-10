@@ -38,6 +38,16 @@ function ProtectedRoute({ children, requiredRole }) {
     return children;
 }
 
+// Only manager/admin can open a new sinistro from the client portal — contributor
+// (PERITO) and viewer (ANALISTA) should only interact with existing sinistros.
+// This is a UI-only gate: the backend still accepts POST /processes from contributor.
+function RequireCreateAccess({ children }) {
+    const { currentUser } = useClaims();
+    const canCreate = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
+    if (!canCreate) return <Navigate to="/app/sinistros" replace />;
+    return children;
+}
+
 function App() {
     const { currentUser } = useClaims();
 
@@ -79,7 +89,7 @@ function App() {
             >
                 <Route index element={<Dashboard />} />
                 <Route path="sinistros" element={<ClaimsList />} />
-                <Route path="sinistros/novo" element={<NewClaim />} />
+                <Route path="sinistros/novo" element={<RequireCreateAccess><NewClaim /></RequireCreateAccess>} />
                 <Route path="sinistros/:id" element={<ClaimDetails />} />
                 <Route path="configuracoes" element={<Settings />} />
                 <Route path="notificacoes" element={<Notifications />} />

@@ -40,7 +40,12 @@ export default function ChecklistPanel({ claim }) {
 
     const toggleItem = (stageId, itemId) => {
         const key = `${stageId}.${itemId}`;
-        const nextState = { ...state, [key]: !state[key] };
+        const willBeChecked = !state[key];
+        // Marking as done is a claim ("this document arrived") — require an explicit
+        // confirmation so a stray click doesn't silently give a document a false pass.
+        // Unmarking is always safe to reverse and stays instant.
+        if (willBeChecked && !confirm('Confirma que este item foi recebido/conferido?')) return;
+        const nextState = { ...state, [key]: willBeChecked };
         setState(nextState);
         persistState(nextState);
     };

@@ -222,6 +222,15 @@ export default function NewClaim() {
             alert('O nome do segurado é obrigatório!');
             return;
         }
+        if (policyStartDate && policyEndDate && policyEndDate < policyStartDate) {
+            alert('O término de vigência da apólice não pode ser anterior ao início!');
+            return;
+        }
+        const today = new Date().toISOString().slice(0, 10);
+        if (occurrenceDate && occurrenceDate > today) {
+            alert('A data do sinistro não pode ser uma data futura!');
+            return;
+        }
 
         const newClaimId = addClaim({
             number: claimNumber,

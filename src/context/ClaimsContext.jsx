@@ -60,7 +60,7 @@ const METADATA_KEYS = [
     'number', 'insurer', 'insuredName', 'policyNumber', 'policyStartDate', 'policyEndDate',
     'retroactiveDate', 'modality', 'brokerName', 'brokerClaimId', 'adjusterName', 'adjusterClaimId',
     'occurrenceDate', 'occurrenceLocation', 'observations', 'isComplex', 'progress',
-    'deadline', 'shareToken', 'activities',
+    'deadline', 'shareToken', 'activities', 'reviewedFiles',
 ];
 
 const extractMetadata = (claim) => {
@@ -122,6 +122,7 @@ const adaptProcessToClaim = (proc, cached) => {
         isComplex,
         deadline: meta.deadline || computeDeadline(proc.created_at, isComplex),
         activities: Array.isArray(meta.activities) ? meta.activities : [],
+        reviewedFiles: meta.reviewedFiles || {},
         folders: baseFolders,
         shareToken: meta.shareToken || randId(),
     };
@@ -550,7 +551,8 @@ export const ClaimsProvider = ({ children }) => {
         }));
     };
 
-    const documentDownloadHref = (fileId) => claimsService.downloadHref(fileId);
+    const openDocument = (fileId) => claimsService.openDocument(fileId);
+    const downloadDocument = (fileId, filename) => claimsService.downloadDocument(fileId, filename);
 
     const updateAnnotation = async (claimId, commentId, body) => {
         if (isMockEnabled() || !getToken() || !commentId) return;
@@ -653,6 +655,35 @@ export const ClaimsProvider = ({ children }) => {
             const folders = c.folders.map(f => {
                 if (f.id !== folderId) return f;
                 const checklist = f.checklist.map(i => i.id === itemId ? { ...i, received } : i);
+                const completion = checklist.length > 0 ? Math.round((checklist.filter(i => i.received).length / checklist.length) * 100) : 0;
+                return { ...f, checklist, completion };
+            });
+            const totalComp = folders.reduce((acc, f) => acc + f.completion, 0);
+            return { ...c, folders, progress: Math.round(totalComp / folders.length) };
+        });
+    };
+
+    // "Marcar como conferido" — dá baixa/OK num documento já inserido, sem excluí-lo.
+    // Persistido no mesmo `metadata` genérico do processo (PATCH /processes/:id já
+    // existente), então não precisa de nenhuma rota nova no backend.
+    const markFileReviewed = (claimId, fileVerId) => {
+        updateClaimLocal(claimId, c => ({
+            ...c,
+            reviewedFiles: {
+                ...c.reviewedFiles,
+                [fileVerId]: { reviewedAt: new Date().toISOString(), reviewedBy: currentUser?.name || currentUser?.email || null },
+            },
+        }));
+    };
+
+    // Item complementar de checklist adicionado depois da criação do sinistro —
+    // mesmo padrão de updateChecklistStatus, também persistido via metadata.folders.
+    const addChecklistItem = (claimId, folderId, name) => {
+        if (!name?.trim()) return;
+        updateClaimLocal(claimId, c => {
+            const folders = c.folders.map(f => {
+                if (f.id !== folderId) return f;
+                const checklist = [...f.checklist, { id: randId(), name: name.trim(), received: false }];
                 const completion = checklist.length > 0 ? Math.round((checklist.filter(i => i.received).length / checklist.length) * 100) : 0;
                 return { ...f, checklist, completion };
             });
@@ -787,10 +818,10 @@ export const ClaimsProvider = ({ children }) => {
     return (
         <ClaimsContext.Provider value={{
             currentUser, setCurrentUser, logout,
-            claims, addClaim, updateChecklistStatus,
+            claims, addClaim, updateChecklistStatus, markFileReviewed, addChecklistItem,
             transitionStatus, archiveClaim, assignClaim, updateClaimFields, fetchSingleClaim,
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
-            uploadFileToClaim, addCommentToClaim, refreshClaimFiles, documentDownloadHref,
+            uploadFileToClaim, addCommentToClaim, refreshClaimFiles, openDocument, downloadDocument,
             deleteDocument, listFileVersions,
             updateAnnotation, deleteAnnotation,
             listFileShares, createFileShare, revokeFileShare, countShareAccesses,
