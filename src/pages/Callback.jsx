@@ -22,7 +22,8 @@ export default function Callback() {
             }
 
             const roles = oidcUser.profile['urn:zitadel:iam:org:project:roles'] || {};
-            const backRole = Object.keys(roles)[0] || 'viewer';
+            const roleKeys = Object.keys(roles);
+            const backRole = roleKeys.find((r) => r !== 'backoffice') || 'viewer';
             const uiRole = uiRoleFor(backRole);
 
             setToken(oidcUser.access_token);
