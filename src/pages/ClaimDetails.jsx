@@ -33,6 +33,7 @@ import {
     ListChecks
 } from 'lucide-react';
 import ChecklistPanel from '../components/ChecklistPanel';
+import KanbanBoard from '../components/KanbanBoard';
 import { useClaims, VALID_NEXT_STATUS } from '../context/ClaimsContext';
 import { actorLabelFromDbId } from '../api/auth';
 import { formatBytes, mimeShortLabel } from '../api/files';
@@ -234,7 +235,7 @@ export default function ClaimDetails() {
 
     const [selectedFolderId, setSelectedFolderId] = useState(null);
     const [isUploadModalOpen, setUploadModalOpen] = useState(false);
-    const [viewMode, setViewMode] = useState('interaction');
+    const [viewMode, setViewMode] = useState('decks');
     const [localObs, setLocalObs] = useState('');
     const [shares, setShares] = useState([]);
     const [sharesLoading, setSharesLoading] = useState(false);
@@ -539,17 +540,17 @@ export default function ClaimDetails() {
                 <div className="flex flex-wrap gap-4 bg-white/50 p-2 rounded-2xl border border-white shadow-sm backdrop-blur-md">
                     <div className="flex p-1 bg-gray-100 rounded-xl border border-gray-200">
                         <button
-                            onClick={() => setViewMode('interaction')}
-                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'interaction' ? 'bg-white shadow-md text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            Exploração
-                        </button>
-                        <button
                             onClick={() => setViewMode('checklist')}
                             className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${viewMode === 'checklist' ? 'bg-white shadow-md text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
                         >
                             <ListChecks size={13} />
                             Checklist
+                        </button>
+                        <button
+                            onClick={() => setViewMode('decks')}
+                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'decks' ? 'bg-white shadow-md text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            Decks
                         </button>
                         {(canManageDocuments || isAuditor) && (
                             <button
@@ -731,7 +732,9 @@ export default function ClaimDetails() {
 
                 {/* Content Area */}
                 <div className="lg:col-span-3 space-y-6">
-                    {viewMode === 'checklist' ? (
+                    {viewMode === 'decks' ? (
+                        <KanbanBoard claim={claim} currentUser={currentUser} folderId={currentFolderId} />
+                    ) : viewMode === 'checklist' ? (
                         <ChecklistPanel claim={claim} />
                     ) : viewMode === 'interaction' ? (
                         <>
