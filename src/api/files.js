@@ -55,38 +55,48 @@ export function downloadHref(fileId) {
     return `/api/v1/files/${fileId}/download`;
 }
 
-// GET /files/:id/download requires a Bearer token and 302s to a presigned MinIO URL.
-// A plain <a href>/window.open() never attaches Authorization, so in production
-// (front and back on different origins) this either 401s or — worse — resolves
-// against the SPA's own origin and gets swallowed by its catch-all route.
-// Fetch it ourselves, follow the redirect, and hand back a blob object URL.
-async function fetchDocumentBlobUrl(fileId) {
+// GET /files/:id/download requires a Bearer token and normally 302s to a presigned
+// S3 URL. A cross-origin fetch that carries Authorization is preflighted, and
+// browsers refuse to follow a cross-origin redirect on a preflighted request
+// (surfaces as an opaque "Failed to fetch" / CORS error). So we ask the backend
+// for the URL as JSON (?json=1 → no redirect) and then open/download it directly:
+// a navigation to the presigned URL needs no CORS at all.
+async function presignedUrl(fileId) {
     const token = getToken();
     const base = import.meta.env.VITE_API_BASE_URL ?? '';
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const res = await fetch(`${base}${downloadHref(fileId)}`, { headers });
+    const res = await fetch(`${base}${downloadHref(fileId)}?json=1`, { headers });
     if (!res.ok) {
-        throw new Error(`Não foi possível baixar o documento (HTTP ${res.status}).`);
+        throw new Error(`Não foi possível obter o documento (HTTP ${res.status}).`);
     }
-    const blob = await res.blob();
-    return URL.createObjectURL(blob);
+    const data = await res.json();
+    if (!data?.url) throw new Error('Resposta inválida do servidor (sem URL do documento).');
+    return data.url;
 }
 
 export async function openDocument(fileId) {
-    const url = await fetchDocumentBlobUrl(fileId);
-    window.open(url, '_blank', 'noopener,noreferrer');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    // Open the tab synchronously (inside the click) so popup blockers allow it,
+    // then point it at the presigned URL once we have it.
+    const win = window.open('about:blank', '_blank');
+    try {
+        const url = await presignedUrl(fileId);
+        if (win) { win.opener = null; win.location.replace(url); }
+        else window.open(url, '_blank', 'noopener,noreferrer'); // popup was blocked — retry
+    } catch (err) {
+        if (win) win.close();
+        throw err;
+    }
 }
 
 export async function downloadDocument(fileId, filename) {
-    const url = await fetchDocumentBlobUrl(fileId);
+    const url = await presignedUrl(fileId);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename || 'documento';
+    a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
 }
 
 export function deleteFile(fileId) {
