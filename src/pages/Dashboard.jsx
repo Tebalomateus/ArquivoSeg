@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { BarChart3, Clock, CheckCircle2, AlertCircle, FileText, TrendingUp, Shield, ArrowRight, Search } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
+import { usePermissions } from '../context/PermissionsContext';
 import { useNavigate } from 'react-router-dom';
 import RelatorioGerencialCard from '../components/RelatorioGerencialCard';
 
@@ -45,6 +46,7 @@ const StatCard = ({ title, value, icon: Icon, color, trend, onClick }) => (
  */
 export default function Dashboard() {
     const { claims, currentUser, backendUsers } = useClaims();
+    const { isAdmin } = usePermissions();
     const navigate = useNavigate();
 
     // Resolve "current user's internal DB id" the same way NotificationBell/Notifications
@@ -57,10 +59,13 @@ export default function Dashboard() {
 
     const myClaims = useMemo(() => {
         if (!currentUser) return [];
-        if (currentUser.role === 'ADMIN' || !myDbId) return claims;
+        // The admin looks at the whole tenant; everyone else looks at their own
+        // work. There is no catalog action for "sees everything" — the backend
+        // already scopes the list — so this stays on isAdmin.
+        if (isAdmin || !myDbId) return claims;
         // Relevant to me = I created it or I'm the assigned responsible.
         return claims.filter(c => c.backCreatedBy === myDbId || c.assignedTo === myDbId);
-    }, [claims, currentUser, myDbId]);
+    }, [claims, currentUser, isAdmin, myDbId]);
 
     // MEMOIZED: Portfolio Calculations
     const portfolioStats = useMemo(() => {
@@ -107,7 +112,7 @@ export default function Dashboard() {
         <div className="space-y-8 animate-fade-in relative z-10">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900 font-display">Painel Operacional {currentUser?.role !== 'ADMIN' && `| ${currentUser?.company}`}</h1>
+                    <h1 className="text-3xl font-bold text-gray-900 font-display">Painel Operacional {!isAdmin && `| ${currentUser?.company}`}</h1>
                     <p className="text-gray-500">Olá, <span className="font-bold text-gray-700">{currentUser?.name}</span>. Resumo da sua carteira hoje.</p>
                 </div>
                 <div className="flex items-center gap-3">
