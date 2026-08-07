@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { UserPlus, Shield, Mail, MoreHorizontal, Building2, Search, ArrowLeft, Activity, Copy, ExternalLink, RefreshCw, UserX, ChevronDown } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
+import { usePermissions } from '../context/PermissionsContext';
 
 // Maps backend role (viewer/contributor/manager/admin) to the PT-BR label used in the UI.
 const BACK_TO_UI_ROLE = {
@@ -40,7 +41,10 @@ const STATUS_CONFIG = {
 export default function UserManagement() {
     const { currentUser, backendUsers, usersLoading, refreshUsers, inviteUser, updateUserRole, deactivateUser, resendInvite } = useClaims();
     const navigate = useNavigate();
-    const isAdmin = currentUser?.backRole === 'admin';
+    // Deliberately isAdmin and not can('usuario.listar'): this is the screen
+    // where a broken IAM configuration gets fixed, so it must not be gated by
+    // the data it edits. Same anti-lockout reasoning as ProtectedRoute.
+    const { isAdmin } = usePermissions();
 
     const [searchTerm, setSearchTerm] = useState('');
     const [openMenuId, setOpenMenuId] = useState(null);

@@ -719,7 +719,10 @@ export const ClaimsProvider = ({ children }) => {
 
     const refreshUsers = useCallback(async () => {
         if (isMockEnabled() || !getToken()) return;
-        // GET /users requires manager+; gracefully degrade for viewer/contributor.
+        // GET /users now requires usuario.listar, which in v1 only the admin
+        // holds. This cannot ask usePermissions — PermissionsProvider is mounted
+        // inside this one — so it stays a cheap pre-filter on the legacy role and
+        // a 403 degrades gracefully anyway. It goes with backRole in step 12.
         if (currentUser?.backRole !== 'manager' && currentUser?.backRole !== 'admin') return;
         setUsersLoading(true);
         try {
