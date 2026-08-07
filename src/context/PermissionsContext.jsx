@@ -52,7 +52,10 @@ export function clearPermissionsCache() {
 
 export function PermissionsProvider({ children }) {
     const { currentUser } = useClaims();
-    const isAdmin = currentUser?.backRole === 'admin';
+    // isAdmin comes straight from the Zitadel claim. The backRole comparison is
+    // the fallback for a session opened before the callback started setting the
+    // flag, and for the mock login; it goes away with backRole in step 12.
+    const isAdmin = currentUser?.isAdmin ?? currentUser?.backRole === 'admin';
 
     // Read once: this is the entry the session started with, and every later
     // render should be reading state, not storage.

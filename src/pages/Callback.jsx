@@ -21,17 +21,27 @@ export default function Callback() {
                 return;
             }
 
+            // The claim now answers exactly one question: is this person the
+            // tenant admin? Everything else comes from GET /me/permissions, which
+            // is the authority. Asking the claim by key beats picking "the first
+            // role that is not backoffice" — that heuristic depended on the order
+            // the claim happened to arrive in.
             const roles = oidcUser.profile['urn:zitadel:iam:org:project:roles'] || {};
             const roleKeys = Object.keys(roles);
+            const isAdmin = roleKeys.includes('admin');
+
+            // backRole and role are the legacy pair, still read by the screens
+            // that have not moved to can() yet and by the permission shim when
+            // the API cannot answer. Both leave in step 12.
             const backRole = roleKeys.find((r) => r !== 'backoffice') || 'viewer';
-            const uiRole = uiRoleFor(backRole);
 
             setToken(oidcUser.access_token);
             setCurrentUser({
                 id: oidcUser.profile.sub,
                 email: oidcUser.profile.email,
                 name: oidcUser.profile.name || oidcUser.profile.email,
-                role: uiRole,
+                isAdmin,
+                role: uiRoleFor(backRole),
                 backRole,
             });
             navigate('/');
