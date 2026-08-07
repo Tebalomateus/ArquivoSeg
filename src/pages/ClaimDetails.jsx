@@ -35,6 +35,7 @@ import {
 import ChecklistPanel from '../components/ChecklistPanel';
 import KanbanBoard from '../components/KanbanBoard';
 import { useClaims, VALID_NEXT_STATUS } from '../context/ClaimsContext';
+import { useCan } from '../context/PermissionsContext';
 import { actorLabelFromDbId } from '../api/auth';
 import { formatBytes, mimeShortLabel } from '../api/files';
 
@@ -260,7 +261,8 @@ export default function ClaimDetails() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id, claimMissing]);
 
-    const canReadAudit = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
+    const can = useCan();
+    const canReadAudit = can('auditoria.listar');
 
     useEffect(() => {
         if (id && fetchAudit && canReadAudit) fetchAudit(id);
@@ -269,7 +271,7 @@ export default function ClaimDetails() {
 
     const auditEntries = auditByClaim?.[id];
 
-    const canManageShares = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
+    const canManageShares = can('compartilhamento.listar');
     const allFiles = (claim?.folders || []).flatMap(f => f.documents || []).filter(d => d.backFileVerId);
 
     const refreshShares = async () => {
@@ -321,12 +323,12 @@ export default function ClaimDetails() {
         }
     };
 
-    const canTransitionStatus = currentUser?.backRole === 'contributor' || currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
-    const canArchive = currentUser?.backRole === 'admin';
+    const canTransitionStatus = can('processo.alterarStatus');
+    const canArchive = can('processo.arquivar');
     const nextStatuses = (claim?.backStatus && VALID_NEXT_STATUS[claim.backStatus]) || [];
-    const canDeleteFile = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
-    const canEditAnnotation = currentUser?.backRole === 'contributor' || currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
-    const canEditClaimMeta = canEditAnnotation; // contributor+
+    const canDeleteFile = can('arquivo.excluir');
+    const canEditAnnotation = can('comentario.editarProprio');
+    const canEditClaimMeta = can('processo.editar');
 
     const [editClaimModal, setEditClaimModal] = useState({ open: false, title: '', description: '' });
     const openEditClaim = () => setEditClaimModal({
@@ -435,16 +437,18 @@ export default function ClaimDetails() {
     // Verificações de segurança para evitar crash
     if (!currentUser) return null;
 
-    const isAdminOrInternal = currentUser?.role === 'ADMIN' || currentUser?.role === 'ANALISTA' || currentUser?.role === 'PERITO';
-    const isManager = currentUser?.role === 'CORRETOR';
-    const isAuditor = currentUser?.role === 'AUDITOR';
-    const canManageDocuments = isAdminOrInternal || isManager;
+    const canManageDocuments = can('arquivo.subir');
 
-    // Regra Reunião 3: Tipo 1 (Corretor) não vê "Gerencial". Auditor vê tudo para segurança mas não precisa de conteúdo.
+    // Regra Reunião 3: o corretor não vê a pasta "Gerencial".
+    //
+    // Isto continua olhando o papel legado de propósito: é uma regra de persona
+    // (que conteúdo interno o corretor enxerga), não uma permissão — não existe
+    // ação equivalente no catálogo e inventar uma seria pior do que deixar a
+    // exceção à vista. Precisa de decisão de produto antes do passo 12, quando o
+    // papel legado sai.
+    const isBroker = currentUser?.role === 'CORRETOR';
     const visibleFolders = claim.folders.filter(f => {
-        if (f.category === 'gerencial') {
-            return isAdminOrInternal || isAuditor;
-        }
+        if (f.category === 'gerencial') return !isBroker;
         return true;
     });
 
@@ -467,9 +471,6 @@ export default function ClaimDetails() {
     };
 
     const handleViewDoc = async (doc) => {
-        if (isAuditor) {
-            return alert('Auditor: O conteúdo dos documentos é restrito para integridade de dados. Acesso negado pelo protocolo de compliance.');
-        }
         if (!doc?.backFileVerId) return;
         // Backend's GET /files/:id/download requires a Bearer token and 302s to a
         // presigned MinIO URL — a plain window.open() never attaches Authorization,
@@ -489,7 +490,7 @@ export default function ClaimDetails() {
     };
 
     const toggleChecklistItem = (itemId, received) => {
-        if (isAuditor) return;
+        if (!can('checklist.atualizarEstado')) return;
         // Marking as received is a claim ("this document arrived") — require an explicit
         // confirmation so a stray click doesn't silently give a document a false pass.
         // Unmarking is always safe to reverse and stays instant.
@@ -498,7 +499,7 @@ export default function ClaimDetails() {
     };
 
     const handleToggleDeadline = () => {
-        if (!isAdminOrInternal) return alert('Acesso negado: Somente administradores podem alterar prazos.');
+        if (!canEditClaimMeta) return alert('Acesso negado: você não tem permissão para alterar prazos.');
         const reason = claim.deadline.isSuspended ? '' : prompt('Motivo da suspensão (SLA Art. 86):');
         if (!claim.deadline.isSuspended && !reason) return;
         toggleDeadline(claim.id, reason);
@@ -552,7 +553,7 @@ export default function ClaimDetails() {
                         >
                             Decks
                         </button>
-                        {(canManageDocuments || isAuditor) && (
+                        {canManageDocuments && (
                             <button
                                 onClick={() => setViewMode('management')}
                                 className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'management' ? 'bg-white shadow-md text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
@@ -603,7 +604,7 @@ export default function ClaimDetails() {
                             {claim.deadline?.remainingDays || 30} dias {claim.deadline?.isSuspended && '(Suspenso)'}
                         </p>
                     </div>
-                    {isAdminOrInternal && (
+                    {canEditClaimMeta && (
                         <button
                             onClick={handleToggleDeadline}
                             className={`ml-2 w-10 h-10 rounded-xl flex items-center justify-center transition-all ${claim.deadline?.isSuspended ? 'bg-green-600 text-white shadow-lg shadow-green-100' : 'bg-amber-100 text-amber-700 border border-amber-200'}`}
@@ -1233,7 +1234,7 @@ export default function ClaimDetails() {
                                     <div className="flex items-center gap-4 bg-white p-2 px-4 rounded-xl shadow-sm border border-purple-100">
                                         <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Complexidade (Art. 86)</span>
                                         <button
-                                            onClick={() => isAdminOrInternal && setComplexStatus(claim.id, !claim.isComplex)}
+                                            onClick={() => canEditClaimMeta && setComplexStatus(claim.id, !claim.isComplex)}
                                             className={`w-12 h-6 rounded-full transition-all relative ${claim.isComplex ? 'bg-purple-600' : 'bg-gray-200'}`}
                                         >
                                             <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${claim.isComplex ? 'right-1' : 'left-1'}`}></div>
