@@ -5,6 +5,7 @@ import { uploadFile, formatBytes, openDocument } from '../api/files';
 import { isMockEnabled, getToken } from '../api/client';
 import * as deckApi from '../api/decks';
 import * as board from '../api/deckBoard';
+import { useCan } from '../context/PermissionsContext';
 
 const { STATUS } = board;
 
@@ -51,13 +52,16 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
     const [hotDeck, setHotDeck] = useState(null);
     const [hotCol, setHotCol] = useState(false);
 
+    const can = useCan();
     const online = !isMockEnabled() && !!getToken();
     const actor = currentUser?.name || currentUser?.email || '';
-    // Analyst capability comes from the session role; the demo switch is flag-gated.
-    const roleIsAnalyst = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
+    // Reviewing a deck is a permission now, not a rung on the role ladder: a
+    // tenant can hand deck.analisar to whoever it wants. The demo switch stays
+    // flag-gated and still simulates the two sides of that permission.
+    const canAnalyse = can('deck.analisar');
     const demoSwitch = import.meta.env.VITE_DEMO_ROLE_SWITCH === 'true';
-    const [demoRole, setDemoRole] = useState(roleIsAnalyst ? 'analista' : 'perito');
-    const isAnalyst = demoSwitch ? demoRole === 'analista' : roleIsAnalyst;
+    const [demoRole, setDemoRole] = useState(canAnalyse ? 'analista' : 'perito');
+    const isAnalyst = demoSwitch ? demoRole === 'analista' : canAnalyse;
 
     // ── Groups = repository folders (driven by the left sidebar in ClaimDetails).
     // One group per folder; tasks come from that folder's checklist.
