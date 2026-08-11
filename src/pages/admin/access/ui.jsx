@@ -52,6 +52,9 @@ export function Modal({ open, title, subtitle, onClose, children, wide = false }
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
             <div
+                role="dialog"
+                aria-modal="true"
+                aria-label={title}
                 className={`bg-white rounded-3xl shadow-2xl w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[88vh] flex flex-col`}
             >
                 <div className="flex items-start justify-between gap-4 p-6 border-b border-slate-100">

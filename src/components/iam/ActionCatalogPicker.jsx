@@ -61,6 +61,7 @@ export default function ActionCatalogPicker({ catalog, value, onChange, disabled
                 return (
                     <div
                         key={group.group}
+                        data-testid={`group-${group.group}`}
                         className={`rounded-2xl border overflow-hidden transition-colors ${
                             wildcard ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200 bg-white'
                         }`}
@@ -78,6 +79,7 @@ export default function ActionCatalogPicker({ catalog, value, onChange, disabled
                                 <button
                                     type="button"
                                     disabled={disabled}
+                                    data-testid={`toggle-all-${group.group}`}
                                     onClick={() => toggleAllInGroup(group)}
                                     className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 disabled:opacity-40"
                                 >
@@ -86,6 +88,7 @@ export default function ActionCatalogPicker({ catalog, value, onChange, disabled
                                 <button
                                     type="button"
                                     disabled={disabled}
+                                    data-testid={`wildcard-${group.group}`}
                                     onClick={() => toggleWildcard(group)}
                                     className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors disabled:opacity-40 ${
                                         wildcard
@@ -113,7 +116,10 @@ export default function ActionCatalogPicker({ catalog, value, onChange, disabled
                             <ul className="divide-y divide-slate-100">
                                 {group.actions.map((action) => (
                                     <li key={action.name}>
-                                        <label className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors">
+                                        <label
+                                            data-testid={`action-${action.name}`}
+                                            className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors"
+                                        >
                                             <input
                                                 type="checkbox"
                                                 disabled={disabled}

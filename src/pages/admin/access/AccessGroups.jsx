@@ -183,6 +183,7 @@ export default function AccessGroups() {
                     {groups.map((group) => (
                         <div
                             key={group.id}
+                            data-testid={`group-row-${group.key}`}
                             className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-slate-200 hover:border-slate-300 transition-colors"
                         >
                             <div className="w-11 h-11 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">

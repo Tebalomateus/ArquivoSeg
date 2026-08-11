@@ -148,6 +148,7 @@ export default function AccessRoles() {
                     {roles.map((role) => (
                         <div
                             key={role.id}
+                            data-testid={`role-${role.key}`}
                             className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-slate-200 hover:border-slate-300 transition-colors"
                         >
                             <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
