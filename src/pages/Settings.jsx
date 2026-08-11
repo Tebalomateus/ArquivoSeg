@@ -140,7 +140,7 @@ export default function Settings() {
                                         <p className="text-sm font-bold text-gray-900">{currentUser?.email || '—'}</p>
                                     </div>
                                     <div className="p-5 rounded-2xl border-2 border-gray-100 bg-gray-50/30">
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Papel</p>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Conta</p>
                                         <p className="text-sm font-bold text-gray-900">{currentUser?.role || '—'}</p>
                                     </div>
                                 </div>

@@ -175,6 +175,8 @@ function handle(state, method, seg, params, body) {
     if (a === 'me' && b === 'permissions' && method === 'GET') {
         const eff = effectiveView(state, SELF_ID);
         return ok({
+            user_id: SELF_ID,
+            is_admin: true,
             permissions: eff.permissions.filter((p) => p.effect === 'allow').map((p) => p.action),
             policy_version: eff.policy_version,
         });

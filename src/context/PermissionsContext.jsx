@@ -65,6 +65,10 @@ export function PermissionsProvider({ children }) {
     const [permissions, setPermissions] = useState(() => new Set(cached?.permissions || []));
     const [policyVersion, setPolicyVersion] = useState(cached?.policyVersion ?? null);
     const [source, setSource] = useState(cached?.source || SOURCE_NONE);
+    // The internal users.id, which only the API knows — the session carries the
+    // Zitadel subject. A screen needs it to tell "this is your own access" from
+    // "this is someone else's".
+    const [accountId, setAccountId] = useState(cached?.accountId ?? null);
     const [loading, setLoading] = useState(false);
 
     // No backend to ask: the demo personas carry their own set. Not cached —
@@ -72,6 +76,7 @@ export function PermissionsProvider({ children }) {
     const applyMock = useCallback((user) => {
         setPermissions(permissionsForMockUser(user));
         setPolicyVersion(null);
+        setAccountId(user?.id ?? null);
         setSource(SOURCE_MOCK);
         clearPermissionsCache();
     }, []);
@@ -90,11 +95,13 @@ export function PermissionsProvider({ children }) {
             const next = new Set(data.permissions || []);
             setPermissions(next);
             setPolicyVersion(data.policy_version ?? null);
+            setAccountId(data.user_id ?? null);
             setSource(SOURCE_API);
             writeCache({
                 permissions: [...next],
                 policyVersion: data.policy_version ?? null,
                 source: SOURCE_API,
+                accountId: data.user_id ?? null,
                 userId: currentUser.id,
             });
         } catch {
@@ -130,8 +137,8 @@ export function PermissionsProvider({ children }) {
         // anti-lockout guarantee: a mistake in the tenant's own IAM data must
         // never shut the admin out of the screen that fixes it.
         const can = (action) => isAdmin || permissions.has(action);
-        return { permissions, isAdmin, policyVersion, source, loading, can, refresh };
-    }, [permissions, isAdmin, policyVersion, source, loading, refresh]);
+        return { permissions, isAdmin, accountId, policyVersion, source, loading, can, refresh };
+    }, [permissions, isAdmin, accountId, policyVersion, source, loading, refresh]);
 
     return <PermissionsContext.Provider value={value}>{children}</PermissionsContext.Provider>;
 }

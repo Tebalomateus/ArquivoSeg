@@ -34,8 +34,8 @@ const CONFIRMABLE = {
 
 export default function AccessUserDetail() {
     const { id } = useParams();
-    const { backendUsers, currentUser } = useClaims();
-    const { refresh: refreshMyPermissions } = usePermissions();
+    const { backendUsers } = useClaims();
+    const { accountId, refresh: refreshMyPermissions } = usePermissions();
 
     const [access, setAccess] = useState(null);
     const [effective, setEffective] = useState(null);
@@ -51,14 +51,10 @@ export default function AccessUserDetail() {
 
     const user = useMemo(() => (backendUsers || []).find((u) => u.id === id), [backendUsers, id]);
 
-    // currentUser.id is the Zitadel subject, not the internal users.id — the only
-    // bridge between the two is the e-mail, the same one ClaimsContext uses.
-    const isSelf = useMemo(() => {
-        const mine = (backendUsers || []).find(
-            (u) => u.email?.toLowerCase() === currentUser?.email?.toLowerCase(),
-        );
-        return !!mine && mine.id === id;
-    }, [backendUsers, currentUser, id]);
+    // GET /me/permissions answers with the internal users.id; the session only
+    // carries the Zitadel subject. This used to be bridged by matching e-mails
+    // against the user list, which needed that list to be loaded to be right.
+    const isSelf = accountId != null && accountId === id;
 
     const load = useCallback(async () => {
         setError(null);
