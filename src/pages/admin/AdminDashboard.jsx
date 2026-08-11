@@ -284,13 +284,13 @@ export default function AdminDashboard() {
                                     </div>
                                 )}
                                 {stats.inactiveUsers > 0 && (
-                                    <Link to="/admin/usuarios" className="flex gap-4 hover:opacity-80 transition-opacity">
+                                    <Link to="/admin/acessos/usuarios" className="flex gap-4 hover:opacity-80 transition-opacity">
                                         <div className="shrink-0 w-8 h-8 rounded-lg bg-blue-500/20 text-blue-500 flex items-center justify-center">
                                             <Bell size={16} />
                                         </div>
                                         <div className="flex flex-col">
                                             <p className="text-xs font-bold leading-tight">{stats.inactiveUsers} usuários sem atividade (7d)</p>
-                                            <span className="text-[9px] text-slate-500 font-black uppercase mt-1">Gestão de Usuários</span>
+                                            <span className="text-[9px] text-slate-500 font-black uppercase mt-1">Usuários e Acessos</span>
                                         </div>
                                     </Link>
                                 )}

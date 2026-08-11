@@ -9,6 +9,11 @@ import {
     Ban,
     Search,
     AlertTriangle,
+    UserCog,
+    Mail,
+    Copy,
+    Activity,
+    UserX,
 } from 'lucide-react';
 import {
     getUserAccess,
@@ -34,7 +39,7 @@ const CONFIRMABLE = {
 
 export default function AccessUserDetail() {
     const { id } = useParams();
-    const { backendUsers } = useClaims();
+    const { backendUsers, refreshUsers, deactivateUser, resendInvite } = useClaims();
     const { accountId, refresh: refreshMyPermissions } = usePermissions();
 
     const [access, setAccess] = useState(null);
@@ -48,6 +53,13 @@ export default function AccessUserDetail() {
     const [term, setTerm] = useState('');
     const [onlyGranted, setOnlyGranted] = useState(true);
     const [permEditor, setPermEditor] = useState(null);
+
+    // Account lifecycle — invite, access recovery, deactivation. This used to be
+    // a row menu in Gestão de Usuários, one screen away from the access it
+    // decides; here it sits next to the answer for "o que essa pessoa pode".
+    const [accountBusy, setAccountBusy] = useState(false);
+    const [accountNotice, setAccountNotice] = useState('');
+    const [confirmDeactivate, setConfirmDeactivate] = useState(false);
 
     const user = useMemo(() => (backendUsers || []).find((u) => u.id === id), [backendUsers, id]);
 
@@ -118,6 +130,26 @@ export default function AccessUserDetail() {
         saveIndividual(effect ? [...rest, { action, effect }] : rest);
     };
 
+    useEffect(() => {
+        if (!accountNotice) return;
+        const t = setTimeout(() => setAccountNotice(''), 5000);
+        return () => clearTimeout(t);
+    }, [accountNotice]);
+
+    const runAccountAction = async (fn, done) => {
+        setAccountBusy(true);
+        setError(null);
+        try {
+            await fn();
+            await refreshUsers?.();
+            setAccountNotice(done);
+        } catch (err) {
+            setError(err);
+        } finally {
+            setAccountBusy(false);
+        }
+    };
+
     const permissions = useMemo(() => {
         const list = effective?.permissions || [];
         const q = term.trim().toLowerCase();
@@ -162,6 +194,68 @@ export default function AccessUserDetail() {
                             </div>
                         </div>
                     </div>
+
+                    {accountNotice && (
+                        <p className="px-4 py-3 rounded-2xl bg-green-50 border border-green-100 text-green-800 text-xs font-bold">
+                            {accountNotice}
+                        </p>
+                    )}
+
+                    {/* Conta — o que existe antes de qualquer permissão */}
+                    <section className="p-6 bg-white rounded-3xl border border-slate-200">
+                        <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-500">
+                            <UserCog size={14} /> Conta
+                        </h2>
+                        <p className="text-xs text-slate-400 mt-1">
+                            O acesso à plataforma em si. Uma conta desativada não entra, por mais papéis que tenha.
+                        </p>
+                        <div className="flex items-center gap-2 mt-4 flex-wrap">
+                            {user?.status !== 'inactive' && (
+                                <button
+                                    type="button"
+                                    disabled={accountBusy}
+                                    onClick={() =>
+                                        runAccountAction(
+                                            () => resendInvite(id),
+                                            user?.status === 'invited'
+                                                ? 'Convite reenviado.'
+                                                : 'E-mail de recuperação de acesso enviado.',
+                                        )
+                                    }
+                                    className="flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                                >
+                                    <Mail size={13} />
+                                    {user?.status === 'invited' ? 'Reenviar convite' : 'Recuperar acesso'}
+                                </button>
+                            )}
+                            <Link
+                                to={`/admin/audit?actor_user_id=${id}`}
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50"
+                            >
+                                <Activity size={13} /> Ver atividade
+                            </Link>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    navigator.clipboard?.writeText(id);
+                                    setAccountNotice('UUID copiado.');
+                                }}
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50"
+                            >
+                                <Copy size={13} /> Copiar UUID
+                            </button>
+                            {user?.status !== 'inactive' && !isSelf && (
+                                <button
+                                    type="button"
+                                    disabled={accountBusy}
+                                    onClick={() => setConfirmDeactivate(true)}
+                                    className="flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-red-200 text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-50 disabled:opacity-40"
+                                >
+                                    <UserX size={13} /> Desativar conta
+                                </button>
+                            )}
+                        </div>
+                    </section>
 
                     {access.is_admin && (
                         <div className="flex items-start gap-3 p-4 rounded-2xl bg-purple-50 border border-purple-100 text-purple-800">
@@ -434,6 +528,40 @@ export default function AccessUserDetail() {
                         </div>
                     </div>
                 )}
+            </Modal>
+
+            <Modal
+                open={confirmDeactivate}
+                title="Desativar esta conta"
+                subtitle={user?.email}
+                onClose={() => setConfirmDeactivate(false)}
+            >
+                <div className="p-6 space-y-4">
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                        A pessoa deixa de conseguir entrar imediatamente. Papéis, grupos e permissões continuam como
+                        estão — reativar devolve o mesmo acesso, sem reconfigurar nada.
+                    </p>
+                    <div className="flex items-center justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setConfirmDeactivate(false)}
+                            className="px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="button"
+                            disabled={accountBusy}
+                            onClick={async () => {
+                                await runAccountAction(() => deactivateUser(id), 'Conta desativada.');
+                                setConfirmDeactivate(false);
+                            }}
+                            className="px-6 py-3 rounded-2xl bg-red-600 text-white text-xs font-black uppercase tracking-widest hover:bg-red-700 disabled:opacity-40"
+                        >
+                            Desativar
+                        </button>
+                    </div>
+                </div>
             </Modal>
 
             <Modal

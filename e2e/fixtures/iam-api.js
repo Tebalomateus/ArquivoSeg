@@ -263,11 +263,39 @@ function handle(state, method, seg, params, body) {
 
     if (a === 'users') {
         if (!b && method === 'GET') return ok(state.users);
+
+        // Account lifecycle. The real handlers also talk to Zitadel; here only
+        // the tenant-side effect is modelled, which is what the screen shows.
+        if (b === 'invite' && method === 'POST') {
+            if (state.users.some((u) => u.email === body.email)) {
+                return fail(409, 'CONFLICT', 'Já existe um usuário com este e-mail.');
+            }
+            const created = {
+                id: `u-${state.nextId++}`,
+                email: body.email,
+                role: 'user',
+                status: 'invited',
+            };
+            state.users.push(created);
+            state.userRoles[created.id] = body.role_ids || [];
+            return ok(created);
+        }
+
         const user = state.users.find((u) => u.id === b);
         if (!user) return fail(404, 'NOT_FOUND', 'Usuário não encontrado.');
 
         if (!c && method === 'GET') return ok(accessView(state, user.id));
         if (c === 'effective-permissions' && method === 'GET') return ok(effectiveView(state, user.id));
+
+        if (c === 'resend-invite' && method === 'POST') return ok({ sent: true });
+
+        if (!c && method === 'DELETE') {
+            if (isAdminUser(state, user.id) && adminCount(state) === 1) {
+                return fail(409, 'LAST_ADMIN', 'Este é o último admin do tenant.');
+            }
+            user.status = 'inactive';
+            return noContent();
+        }
 
         if (c === 'roles' && method === 'PUT') {
             const next = body.role_ids || [];

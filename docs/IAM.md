@@ -20,12 +20,17 @@ ações que é a fonte de verdade:
 Resumo do que muda aqui: `PermissionsContext` + `useCan()` + `<Can action="...">` no
 lugar de todo `currentUser.role === 'ADMIN'`; `src/api/auth.js` perde o mapa
 `ADMIN`/`CORRETOR`/`PERITO`/`ANALISTA`; e entra a área `/admin/acessos`, com abas de
-usuários e de grupos/papéis, evoluindo `src/pages/UserManagement.jsx`.
+usuários e de grupos/papéis, absorvendo `src/pages/UserManagement.jsx`.
 
 Concluído. O que sobrou de `currentUser.role` é o **tipo da conta** (`ADMIN` |
 `USUÁRIO`), lido do claim do Zitadel e usado como rótulo — não como permissão.
 `PATCH /users/{id}/role` não existe mais: quem muda acesso vai para
 `/admin/acessos/usuarios/{id}`, e o convite manda `role_ids` do próprio tenant.
+
+`/admin/usuarios` foi absorvida: era a mesma lista de pessoas em outra tela, e duas
+telas sobre a mesma lista divergem. Convite fica na aba Usuários; reenviar convite,
+recuperar acesso e desativar conta ficam na tela da pessoa, ao lado do acesso que
+essas ações decidem. A rota antiga redireciona para `/admin/acessos/usuarios`.
 
 Toda a gestão de acessos fica **neste app** — o `backoffice/` não recebe nada. É a única
 área gated por `isAdmin` (papel `admin` do Zitadel, lido do claim) em vez de por

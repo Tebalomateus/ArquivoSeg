@@ -4,7 +4,6 @@ import Dashboard from './pages/Dashboard';
 import ClaimsList from './pages/ClaimsList';
 import ClaimDetails from './pages/ClaimDetails';
 import NewClaim from './pages/NewClaim';
-import UserManagement from './pages/UserManagement';
 import Settings from './pages/Settings';
 import PublicShare from './pages/PublicShare';
 import Login from './pages/Login';
@@ -82,7 +81,10 @@ function App() {
                 <Route path="sinistros/:id" element={<ClaimDetails />} />
                 <Route path="clientes" element={<ClientManagement />} />
                 <Route path="links" element={<PublicLinks />} />
-                <Route path="usuarios" element={<UserManagement />} />
+                {/* Gestão de Usuários virou a aba Usuários de Acessos: era a mesma
+                    lista de pessoas em duas telas. O redirect fica porque o caminho
+                    antigo está em links salvos e em e-mails já enviados. */}
+                <Route path="usuarios" element={<Navigate to="/admin/acessos/usuarios" replace />} />
                 <Route path="acessos" element={<AccessLayout />}>
                     <Route path="usuarios" element={<AccessUsers />} />
                     <Route path="usuarios/:id" element={<AccessUserDetail />} />
