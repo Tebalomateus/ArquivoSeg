@@ -15,7 +15,7 @@ import { Asterisk, Info } from 'lucide-react';
 export default function ActionCatalogPicker({ catalog, value, onChange, disabled = false }) {
     const selected = useMemo(() => new Set(value || []), [value]);
 
-    const isWildcard = (group) => selected.has(`${group}.*`);
+    const isWildcard = (group) => selected.has(`${group.group}.*`);
 
     const groupActions = (group) => group.actions.map((a) => a.name);
 
