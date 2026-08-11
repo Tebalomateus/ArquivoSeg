@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { zitadel } from '../api/zitadel';
-import { uiRoleFor, logoutSession } from '../api/auth';
+import { logoutSession } from '../api/auth';
 import { setToken } from '../api/client';
 import { useClaims } from '../context/ClaimsContext';
 
@@ -27,13 +27,7 @@ export default function Callback() {
             // role that is not backoffice" — that heuristic depended on the order
             // the claim happened to arrive in.
             const roles = oidcUser.profile['urn:zitadel:iam:org:project:roles'] || {};
-            const roleKeys = Object.keys(roles);
-            const isAdmin = roleKeys.includes('admin');
-
-            // backRole and role are the legacy pair, still read by the screens
-            // that have not moved to can() yet and by the permission shim when
-            // the API cannot answer. Both leave in step 12.
-            const backRole = roleKeys.find((r) => r !== 'backoffice') || 'viewer';
+            const isAdmin = Object.keys(roles).includes('admin');
 
             setToken(oidcUser.access_token);
             setCurrentUser({
@@ -41,8 +35,9 @@ export default function Callback() {
                 email: oidcUser.profile.email,
                 name: oidcUser.profile.name || oidcUser.profile.email,
                 isAdmin,
-                role: uiRoleFor(backRole),
-                backRole,
+                // The account type, shown as a badge. It is not what the user
+                // can do — that is GET /me/permissions, and only that.
+                role: isAdmin ? 'ADMIN' : 'USUÁRIO',
             });
             navigate('/');
         }).catch(() => {

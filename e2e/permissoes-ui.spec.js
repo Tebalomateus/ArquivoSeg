@@ -5,11 +5,10 @@ import { signIn } from './fixtures/session.js';
  * O gating visto de fora: com um conjunto de permissões restrito, os controles
  * somem — e a rota também, porque esconder o botão sem fechar a URL é decoração.
  *
- * Roda no modo mock, onde o conjunto vem do shim de papéis legados
- * (src/context/legacyPermissions.js). Quando o shim sair no passo 12, estas
- * specs passam a exercitar o conjunto que a API serve, sem mudar de asserção:
- * o que se afirma é "quem pode processo.criar vê Novo Sinistro", não de onde a
- * permissão veio.
+ * Roda no modo mock, onde o conjunto vem das personas de demonstração
+ * (src/context/mockPermissions.js) porque não há backend a quem perguntar. A
+ * asserção não depende disso: o que se afirma é "quem pode processo.criar vê
+ * Novo Sinistro", não de onde a permissão veio.
  */
 
 test('viewer não vê "Novo Sinistro" — e nem chega na rota pela URL', async ({ page }) => {

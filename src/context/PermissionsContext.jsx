@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getMyPermissions } from '../api/iam';
 import { getToken, isMockEnabled } from '../api/client';
-import { permissionsForLegacyRole } from './legacyPermissions';
+import { permissionsForMockUser } from './mockPermissions';
 import { useClaims } from './ClaimsContext';
 
 /**
@@ -9,18 +9,21 @@ import { useClaims } from './ClaimsContext';
  *
  * UI gating is not access control — the backend is the authority. Hiding a
  * button only saves the user a click into a 403; forcing the route still gets
- * one. That is why nothing here fails closed in a way that locks the app: when
- * the API cannot be reached the legacy role shim answers instead, which is what
- * the app did before permissions existed.
+ * one. So when the API cannot answer, this keeps whatever it last knew and
+ * grants nothing new: showing a control the server will refuse is a worse
+ * failure than showing one control too few, and the admin is never locked out
+ * either way — isAdmin comes from the token, not from here.
  */
 const PermissionsContext = createContext(null);
 
 const CACHE_KEY = 'arquivoseg_permissions';
 
-// Where the answer came from, so screens can say so and so step 12 can find
-// what still depends on the shim.
+// Where the answer came from, so screens can say so.
 export const SOURCE_API = 'api';
-export const SOURCE_LEGACY = 'legacy';
+export const SOURCE_MOCK = 'mock';
+// Nothing answered yet, or the last attempt failed: whatever is in `permissions`
+// is a leftover, never an authorization.
+export const SOURCE_NONE = 'none';
 
 function readCache() {
     try {
@@ -52,32 +55,31 @@ export function clearPermissionsCache() {
 
 export function PermissionsProvider({ children }) {
     const { currentUser } = useClaims();
-    // isAdmin comes straight from the Zitadel claim. The backRole comparison is
-    // the fallback for a session opened before the callback started setting the
-    // flag, and for the mock login; it goes away with backRole in step 12.
-    const isAdmin = currentUser?.isAdmin ?? currentUser?.backRole === 'admin';
+    // Straight from the Zitadel claim, never from the IAM tables: a mistake in
+    // the tenant's own permission data must not be able to shut the admin out.
+    const isAdmin = currentUser?.isAdmin === true;
 
     // Read once: this is the entry the session started with, and every later
     // render should be reading state, not storage.
     const cached = useRef(readCache()).current;
     const [permissions, setPermissions] = useState(() => new Set(cached?.permissions || []));
     const [policyVersion, setPolicyVersion] = useState(cached?.policyVersion ?? null);
-    const [source, setSource] = useState(cached?.source || SOURCE_LEGACY);
+    const [source, setSource] = useState(cached?.source || SOURCE_NONE);
     const [loading, setLoading] = useState(false);
 
-    // The shim is the starting point and the fallback, never an override: once
-    // the API answers, its set replaces this one wholesale.
-    const applyLegacy = useCallback((backRole) => {
-        setPermissions(permissionsForLegacyRole(backRole));
+    // No backend to ask: the demo personas carry their own set. Not cached —
+    // it is derived, and caching it would only create a second copy to expire.
+    const applyMock = useCallback((user) => {
+        setPermissions(permissionsForMockUser(user));
         setPolicyVersion(null);
-        setSource(SOURCE_LEGACY);
+        setSource(SOURCE_MOCK);
         clearPermissionsCache();
     }, []);
 
     const refresh = useCallback(async () => {
         if (!currentUser) return;
         if (isMockEnabled() || !getToken()) {
-            applyLegacy(currentUser.backRole);
+            applyMock(currentUser);
             return;
         }
 
@@ -96,20 +98,21 @@ export function PermissionsProvider({ children }) {
                 userId: currentUser.id,
             });
         } catch {
-            // A backend that predates this endpoint, or a transient failure.
-            // Falling back to the legacy role keeps the app usable and keeps the
-            // decision where it belongs — with the API, on every request.
-            applyLegacy(currentUser.backRole);
+            // A transient failure. Whatever the session already had stays — it
+            // came from this same API — but it stops counting as an answer, so
+            // a screen that cares can say the set may be stale. Nothing is
+            // granted here that the API did not already grant.
+            setSource(SOURCE_NONE);
         } finally {
             setLoading(false);
         }
-    }, [currentUser, applyLegacy]);
+    }, [currentUser, applyMock]);
 
     useEffect(() => {
         if (!currentUser) {
             setPermissions(new Set());
             setPolicyVersion(null);
-            setSource(SOURCE_LEGACY);
+            setSource(SOURCE_NONE);
             clearPermissionsCache();
             return;
         }

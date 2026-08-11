@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, KeyRound, Lock, Mail, ShieldCheck, X } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { INITIAL_USERS } from '../constants/initialData';
-import { backRoleFor } from '../api/auth';
 import { isMockEnabled } from '../api/client';
 import { zitadel } from '../api/zitadel';
 
@@ -28,8 +27,7 @@ export default function Login() {
                 setIsLoading(false);
                 return;
             }
-            const backRole = backRoleFor(user.role);
-            setCurrentUser({ ...user, backRole });
+            setCurrentUser({ ...user, isAdmin: user.role === 'ADMIN' });
             localStorage.setItem('arquivoseg_authenticated', 'true');
             navigate('/');
             setIsLoading(false);
