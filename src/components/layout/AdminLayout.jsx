@@ -13,6 +13,7 @@ import {
     Building2,
     History,
     FileText,
+    ShieldHalf,
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 import NotificationBell from '../NotificationBell';
@@ -63,6 +64,7 @@ export default function AdminLayout() {
         { icon: Building2, label: 'Gestão de Clientes', path: '/admin/clientes' },
         { icon: LinkIcon, label: 'Rastreamento de Links', path: '/admin/links' },
         { icon: Users, label: 'Gestão de Usuários', path: '/admin/usuarios' },
+        { icon: ShieldHalf, label: 'Acessos', path: '/admin/acessos' },
         { icon: History, label: 'Auditoria Global', path: '/admin/audit' },
         { icon: Database, label: 'Compliance Data Center', path: '/admin/compliance' },
         { icon: SettingsIcon, label: 'Configurações do Sistema', path: '/admin/configuracoes' },

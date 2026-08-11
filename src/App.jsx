@@ -18,6 +18,11 @@ import LinkTracker from './pages/admin/LinkTracker';
 import ClientManagement from './pages/admin/ClientManagement';
 import AuditLog from './pages/admin/AuditLog';
 import ComplianceDataCenter from './pages/admin/ComplianceDataCenter';
+import AccessLayout from './pages/admin/access/AccessLayout';
+import AccessUsers from './pages/admin/access/AccessUsers';
+import AccessUserDetail from './pages/admin/access/AccessUserDetail';
+import AccessRoles from './pages/admin/access/AccessRoles';
+import AccessGroups from './pages/admin/access/AccessGroups';
 import Notifications from './pages/Notifications';
 
 /**
@@ -78,6 +83,12 @@ function App() {
                 <Route path="clientes" element={<ClientManagement />} />
                 <Route path="links" element={<LinkTracker />} />
                 <Route path="usuarios" element={<UserManagement />} />
+                <Route path="acessos" element={<AccessLayout />}>
+                    <Route path="usuarios" element={<AccessUsers />} />
+                    <Route path="usuarios/:id" element={<AccessUserDetail />} />
+                    <Route path="papeis" element={<AccessRoles />} />
+                    <Route path="grupos" element={<AccessGroups />} />
+                </Route>
                 <Route path="configuracoes" element={<Settings />} />
                 <Route path="compliance" element={<ComplianceDataCenter />} />
                 <Route path="audit" element={<AuditLog />} />
