@@ -25,7 +25,7 @@ import {
 } from '../../../api/iam';
 import { useClaims } from '../../../context/ClaimsContext';
 import { usePermissions } from '../../../context/PermissionsContext';
-import { Spinner, ErrorNote, Empty, Modal, Chip } from './ui';
+import { Spinner, ErrorNote, Empty, Modal, Chip, RolePicker } from './ui';
 
 // The two refusals this screen has to explain rather than swallow. Both are
 // answered by asking again with confirm=true, and only after the admin has read
@@ -274,29 +274,13 @@ export default function AccessUserDetail() {
                             <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-500 mb-4">
                                 <KeyRound size={14} /> Papéis diretos
                             </h2>
-                            <div className="space-y-1.5">
-                                {roles.map((role) => {
-                                    const held = (access.roles || []).some((r) => r.id === role.id);
-                                    return (
-                                        <label
-                                            key={role.id}
-                                            className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors"
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={held}
-                                                disabled={saving}
-                                                onChange={() => toggleRole(role.id)}
-                                                className="w-4 h-4 rounded accent-blue-600"
-                                            />
-                                            <span className="text-sm font-bold text-slate-700 flex-1">{role.name}</span>
-                                            <span className="text-[10px] text-slate-400">
-                                                {(role.permissions || []).length} perms
-                                            </span>
-                                        </label>
-                                    );
-                                })}
-                            </div>
+                            <RolePicker
+                                roles={roles}
+                                selected={(access.roles || []).map((r) => r.id)}
+                                onToggle={toggleRole}
+                                disabled={saving}
+                                meta={(role) => `${(role.permissions || []).length} perms`}
+                            />
                         </section>
 
                         {/* Groups — read only */}

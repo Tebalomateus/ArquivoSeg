@@ -29,7 +29,10 @@ test('convidar alguém já com papel, sem sair da tela de acessos', async ({ pag
     expect(state.userRoles[criado.id]).toEqual(['r-leitor']);
 
     // E aparece na lista, com o convite pendente à vista.
-    await expect(page.getByRole('link', { name: /novo\.perito@arquivoseg\.com\.br/ })).toContainText('invited');
+    const linha = page.getByRole('link', { name: /novo\.perito@arquivoseg\.com\.br/ });
+    await expect(linha).toContainText('convidado');
+    // E o papel escolhido no convite já aparece, sem recarregar a tela.
+    await expect(linha).toContainText('Leitor');
 });
 
 test('quem foi convidado recebe reenvio; quem já entrou, recuperação de acesso', async ({ page }) => {

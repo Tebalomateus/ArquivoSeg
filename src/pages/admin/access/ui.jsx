@@ -1,4 +1,5 @@
-import { Loader2, AlertTriangle, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Loader2, AlertTriangle, X, Search } from 'lucide-react';
 
 // Small shared pieces for the four access screens. They exist so the tabs look
 // like one feature instead of four, and so a loading or error state is never
@@ -71,6 +72,78 @@ export function Modal({ open, title, subtitle, onClose, children, wide = false }
                     </button>
                 </div>
                 <div className="flex-1 overflow-y-auto">{children}</div>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * RolePicker is the "quais papéis" control, shared by the invite modal and the
+ * per-person screen so that both stay usable as the tenant's role list grows.
+ *
+ * The filter only appears past FILTER_FROM roles: with five, a search box is
+ * noise; with forty, scrolling is. What is already checked always renders,
+ * filter or not — a control that hides the selection while you type is how a
+ * role gets removed without anyone meaning to.
+ */
+const FILTER_FROM = 8;
+
+export function RolePicker({ roles, selected, onToggle, disabled = false, meta }) {
+    const [term, setTerm] = useState('');
+    const withFilter = roles.length >= FILTER_FROM;
+
+    const visible = useMemo(() => {
+        const q = term.trim().toLowerCase();
+        if (!q) return roles;
+        return roles.filter(
+            (r) =>
+                selected.includes(r.id) ||
+                `${r.name} ${r.key || ''} ${r.description || ''}`.toLowerCase().includes(q),
+        );
+    }, [roles, term, selected]);
+
+    return (
+        <div className="space-y-2">
+            {withFilter && (
+                <div className="relative">
+                    <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                        value={term}
+                        onChange={(e) => setTerm(e.target.value)}
+                        placeholder={`Filtrar ${roles.length} papéis`}
+                        className="pl-9 pr-3 py-2 w-full bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                </div>
+            )}
+            <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
+                {visible.map((role) => (
+                    <label
+                        key={role.id}
+                        className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50"
+                    >
+                        <input
+                            type="checkbox"
+                            checked={selected.includes(role.id)}
+                            disabled={disabled}
+                            onChange={() => onToggle(role.id)}
+                            className="w-4 h-4 rounded accent-blue-600 shrink-0"
+                        />
+                        <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-bold text-slate-700 truncate">{role.name}</span>
+                            {role.description && (
+                                <span className="block text-[10px] text-slate-400 truncate">{role.description}</span>
+                            )}
+                        </span>
+                        {meta && <span className="text-[10px] text-slate-400 shrink-0">{meta(role)}</span>}
+                    </label>
+                ))}
+                {visible.length === 0 && (
+                    <p className="px-4 py-3 text-[10px] font-bold text-slate-400">
+                        {roles.length === 0
+                            ? 'Nenhum papel cadastrado ainda. Crie um na aba Papéis.'
+                            : 'Nenhum papel com esse nome.'}
+                    </p>
+                )}
             </div>
         </div>
     );

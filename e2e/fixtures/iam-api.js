@@ -91,8 +91,15 @@ function holders(state, roleId) {
     return direct + viaGroups;
 }
 
+/** Quem tem o papel diretamente — o que o servidor manda em member_ids. */
+function directHolders(state, roleId) {
+    return Object.entries(state.userRoles)
+        .filter(([, ids]) => ids.includes(roleId))
+        .map(([userId]) => userId);
+}
+
 function roleView(state, role) {
-    return { ...role, members_count: holders(state, role.id) };
+    return { ...role, members_count: holders(state, role.id), member_ids: directHolders(state, role.id) };
 }
 
 function groupsOf(state, userId) {
