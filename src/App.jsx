@@ -14,7 +14,7 @@ import { usePermissions } from './context/PermissionsContext';
 
 import AdminLayout from './components/layout/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
-import LinkTracker from './pages/admin/LinkTracker';
+import PublicLinks from './pages/admin/PublicLinks';
 import ClientManagement from './pages/admin/ClientManagement';
 import AuditLog from './pages/admin/AuditLog';
 import ComplianceDataCenter from './pages/admin/ComplianceDataCenter';
@@ -81,7 +81,7 @@ function App() {
                 <Route path="sinistros/novo" element={<NewClaim />} />
                 <Route path="sinistros/:id" element={<ClaimDetails />} />
                 <Route path="clientes" element={<ClientManagement />} />
-                <Route path="links" element={<LinkTracker />} />
+                <Route path="links" element={<PublicLinks />} />
                 <Route path="usuarios" element={<UserManagement />} />
                 <Route path="acessos" element={<AccessLayout />}>
                     <Route path="usuarios" element={<AccessUsers />} />

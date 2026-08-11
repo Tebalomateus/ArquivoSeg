@@ -15,7 +15,7 @@ import {
 import { useClaims } from '../../context/ClaimsContext';
 import { actorLabelFromDbId } from '../../api/auth';
 
-export default function LinkTracker() {
+export default function PublicLinks() {
     const {
         claims,
         listFileShares,
