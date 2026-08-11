@@ -22,6 +22,11 @@ lugar de todo `currentUser.role === 'ADMIN'`; `src/api/auth.js` perde o mapa
 `ADMIN`/`CORRETOR`/`PERITO`/`ANALISTA`; e entra a área `/admin/acessos`, com abas de
 usuários e de grupos/papéis, evoluindo `src/pages/UserManagement.jsx`.
 
+Concluído. O que sobrou de `currentUser.role` é o **tipo da conta** (`ADMIN` |
+`USUÁRIO`), lido do claim do Zitadel e usado como rótulo — não como permissão.
+`PATCH /users/{id}/role` não existe mais: quem muda acesso vai para
+`/admin/acessos/usuarios/{id}`, e o convite manda `role_ids` do próprio tenant.
+
 Toda a gestão de acessos fica **neste app** — o `backoffice/` não recebe nada. É a única
 área gated por `isAdmin` (papel `admin` do Zitadel, lido do claim) em vez de por
 permissão, para que um erro de configuração de IAM nunca tranque o admin para fora da
@@ -48,6 +53,7 @@ Contra o stack real: `E2E_LIVE=1 npm run test:e2e:acessos`, com `VITE_API_BASE_U
 apontando para o backend e o seed aplicado. A fixture sai da frente e as mesmas specs
 exercitam os 409 de verdade.
 
-Enquanto o shim de papéis legados existir (`src/context/legacyPermissions.js`), o perfil
-`mock` exercita o conjunto que ele devolve. As asserções não mudam quando ele sair: o que
-elas afirmam é "quem pode `processo.criar` vê Novo Sinistro", não de onde a permissão veio.
+No perfil `mock` o conjunto vem das personas de demonstração
+(`src/context/mockPermissions.js`), que é o que existe quando não há backend a quem
+perguntar. As asserções não dependem disso: o que elas afirmam é "quem pode
+`processo.criar` vê Novo Sinistro", não de onde a permissão veio.
