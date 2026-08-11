@@ -80,9 +80,6 @@ const realService = {
     inviteUser(data) {
         return usersApi.inviteUser(data);
     },
-    updateUserRole(id, role) {
-        return usersApi.updateUserRole(id, role);
-    },
     deactivateUser(id) {
         return usersApi.deactivateUser(id);
     },

@@ -1,32 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { UserPlus, Shield, Mail, MoreHorizontal, Building2, Search, ArrowLeft, Activity, Copy, ExternalLink, RefreshCw, UserX, ChevronDown } from 'lucide-react';
+import { UserPlus, Shield, Mail, MoreHorizontal, Building2, Search, ArrowLeft, Activity, Copy, ExternalLink, RefreshCw, UserX, KeyRound } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { usePermissions } from '../context/PermissionsContext';
+import { listRoles } from '../api/iam';
+import { isMockEnabled } from '../api/client';
 
-// Maps backend role (viewer/contributor/manager/admin) to the PT-BR label used in the UI.
-const BACK_TO_UI_ROLE = {
-    admin: 'ADMIN',
-    manager: 'CORRETOR',
-    contributor: 'PERITO',
-    viewer: 'ANALISTA',
-};
-
-
-const ROLE_OPTIONS = [
-    { value: 'admin', label: 'Admin da Conta' },
-    { value: 'manager', label: 'Admin do Sinistro (Corretor)' },
-    { value: 'contributor', label: 'Tipo 2 Técnico (Perito)' },
-    { value: 'viewer', label: 'Tipo 1 Externo (Analista)' },
-];
+// users.role is the account type, not a permission: `admin` or `user`. What a
+// person can actually do lives in the IAM roles, edited in /admin/acessos.
+const ACCOUNT_ROLE_LABEL = { admin: 'ADMIN', user: 'USUÁRIO' };
 
 const adaptBackendUser = (u) => ({
     id: u.id,
     name: u.email?.split('@')[0] || 'Usuário',
     email: u.email,
     company: u.email?.split('@')[1] || '-',
-    role: BACK_TO_UI_ROLE[u.role] || u.role.toUpperCase(),
-    backRole: u.role,
+    role: ACCOUNT_ROLE_LABEL[u.role] || String(u.role || '').toUpperCase(),
+    isAdmin: u.role === 'admin',
     status: u.status || 'active',
     zitadelSub: u.zitadel_sub,
     createdAt: u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : null,
@@ -39,7 +29,7 @@ const STATUS_CONFIG = {
 };
 
 export default function UserManagement() {
-    const { currentUser, backendUsers, usersLoading, refreshUsers, inviteUser, updateUserRole, deactivateUser, resendInvite } = useClaims();
+    const { currentUser, backendUsers, usersLoading, refreshUsers, inviteUser, deactivateUser, resendInvite } = useClaims();
     const navigate = useNavigate();
     // Deliberately isAdmin and not can('usuario.listar'): this is the screen
     // where a broken IAM configuration gets fixed, so it must not be gated by
@@ -52,15 +42,14 @@ export default function UserManagement() {
 
     // Invite modal state
     const [inviteOpen, setInviteOpen] = useState(false);
-    const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', role: 'viewer' });
+    const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', role_ids: [] });
     const [inviteError, setInviteError] = useState('');
     const [inviteSubmitting, setInviteSubmitting] = useState(false);
 
-    // Role change modal state
-    const [roleModal, setRoleModal] = useState(null); // { userId, currentRole }
-    const [newRole, setNewRole] = useState('');
-    const [roleError, setRoleError] = useState('');
-    const [roleSubmitting, setRoleSubmitting] = useState(false);
+    // The tenant's own IAM roles: what the invite offers and what the cards
+    // describe. There is no fixed catalog to hardcode any more.
+    const [roles, setRoles] = useState([]);
+    const [rolesError, setRolesError] = useState('');
 
     // Action feedback
     const [actionMsg, setActionMsg] = useState(null); // { type: 'success'|'error', text }
@@ -71,6 +60,17 @@ export default function UserManagement() {
         document.addEventListener('mousedown', onClick);
         return () => document.removeEventListener('mousedown', onClick);
     }, [openMenuId]);
+
+    useEffect(() => {
+        if (!isAdmin || isMockEnabled()) return;
+        let alive = true;
+        listRoles()
+            .then((res) => { if (alive) setRoles(res?.data || []); })
+            .catch((err) => {
+                if (alive) setRolesError(err?.body?.error?.message || 'Não foi possível carregar os papéis.');
+            });
+        return () => { alive = false; };
+    }, [isAdmin]);
 
     useEffect(() => {
         if (!actionMsg) return;
@@ -97,10 +97,15 @@ export default function UserManagement() {
 
     // ── Invite ─────────────────────────────────────────────────────────────
     const openInvite = () => {
-        setInviteForm({ email: '', first_name: '', last_name: '', role: 'viewer' });
+        setInviteForm({ email: '', first_name: '', last_name: '', role_ids: [] });
         setInviteError('');
         setInviteOpen(true);
     };
+
+    const toggleInviteRole = (id) => setInviteForm((f) => ({
+        ...f,
+        role_ids: f.role_ids.includes(id) ? f.role_ids.filter((r) => r !== id) : [...f.role_ids, id],
+    }));
 
     const handleInviteSubmit = async (e) => {
         e.preventDefault();
@@ -115,29 +120,6 @@ export default function UserManagement() {
             setInviteError(err?.body?.error?.message || err?.message || 'Erro ao convidar usuário.');
         } finally {
             setInviteSubmitting(false);
-        }
-    };
-
-    // ── Role change ─────────────────────────────────────────────────────────
-    const openRoleModal = (user) => {
-        setOpenMenuId(null);
-        setNewRole(user.backRole);
-        setRoleError('');
-        setRoleModal({ userId: user.id, userName: user.email });
-    };
-
-    const handleRoleSubmit = async (e) => {
-        e.preventDefault();
-        setRoleSubmitting(true);
-        setRoleError('');
-        try {
-            await updateUserRole(roleModal.userId, newRole);
-            setRoleModal(null);
-            setActionMsg({ type: 'success', text: 'Papel atualizado com sucesso.' });
-        } catch (err) {
-            setRoleError(err?.body?.error?.message || err?.message || 'Erro ao atualizar papel.');
-        } finally {
-            setRoleSubmitting(false);
         }
     };
 
@@ -164,14 +146,6 @@ export default function UserManagement() {
         }
     };
 
-    const roles = [
-        { name: 'Admin da Conta', desc: 'Dono da conta. Gestão de faturamento, usuários e logs totais.', color: 'border-purple-200 bg-purple-50 text-purple-700' },
-        { name: 'Admin do Sinistro', desc: 'Gestão operacional de processos, SLAs e documentação.', color: 'border-blue-200 bg-blue-50 text-blue-700' },
-        { name: 'Tipo 1 (Externo)', desc: 'Corretores e Segurados. Upload de documentos e acompanhamento.', color: 'border-green-200 bg-green-50 text-green-700' },
-        { name: 'Tipo 2 (Técnico)', desc: 'Peritos e Reguladores. Acesso total a pastas técnicas e sigilosas.', color: 'border-amber-200 bg-amber-50 text-amber-700' },
-        { name: 'Auditor de Sistema', desc: 'Foco em integridade e auditoria (Tokio Marine). Sem acesso a conteúdo.', color: 'border-slate-200 bg-slate-50 text-slate-700' },
-    ];
-
     return (
         <div className="space-y-8 animate-fade-in relative z-10">
             {/* Header */}
@@ -182,7 +156,10 @@ export default function UserManagement() {
                         Voltar ao Dashboard
                     </Link>
                     <h1 className="text-3xl font-bold text-gray-900 font-display">Gestão de Usuários</h1>
-                    <p className="text-gray-500 font-medium">Controle permissões e acessos por papel (RBAC).</p>
+                    <p className="text-gray-500 font-medium">
+                        Contas da conta corporativa. Permissões são definidas em{' '}
+                        <Link to="/admin/acessos/papeis" className="font-bold text-blue-600 hover:underline">Acessos</Link>.
+                    </p>
                 </div>
                 <div className="flex items-center gap-3">
                     {usersLoading && <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Carregando...</span>}
@@ -208,18 +185,29 @@ export default function UserManagement() {
                 </div>
             )}
 
-            {/* Role descriptions */}
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                {roles.map((role) => (
-                    <div key={role.name} className={`p-4 rounded-2xl border-2 ${role.color} h-full flex flex-col shadow-sm transition-all hover:scale-[1.02] cursor-default`}>
-                        <div className="flex items-center gap-2 mb-2">
-                            <Shield size={14} />
-                            <h4 className="font-bold text-[10px] uppercase tracking-tighter">{role.name}</h4>
-                        </div>
-                        <p className="text-[10px] opacity-80 leading-relaxed font-bold">{role.desc}</p>
-                    </div>
-                ))}
-            </div>
+            {/* The tenant's roles, as they actually exist */}
+            {roles.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    {roles.map((role) => (
+                        <Link
+                            key={role.id}
+                            to="/admin/acessos/papeis"
+                            className="p-4 rounded-2xl border-2 border-slate-200 bg-slate-50 text-slate-700 h-full flex flex-col shadow-sm transition-all hover:scale-[1.02] hover:border-blue-200"
+                        >
+                            <div className="flex items-center gap-2 mb-2">
+                                <Shield size={14} />
+                                <h4 className="font-bold text-[10px] uppercase tracking-tighter">{role.name}</h4>
+                            </div>
+                            <p className="text-[10px] opacity-80 leading-relaxed font-bold">
+                                {role.description || `${role.permissions?.length ?? 0} permissões`}
+                            </p>
+                        </Link>
+                    ))}
+                </div>
+            )}
+            {rolesError && (
+                <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600">{rolesError}</p>
+            )}
 
             {/* Users table */}
             <div className="card">
@@ -242,7 +230,7 @@ export default function UserManagement() {
                             <tr className="text-left border-b border-gray-100">
                                 <th className="pb-5 font-bold text-gray-400 text-[10px] uppercase tracking-widest pl-2">Usuário</th>
                                 <th className="pb-5 font-bold text-gray-400 text-[10px] uppercase tracking-widest">Empresa</th>
-                                <th className="pb-5 font-bold text-gray-400 text-[10px] uppercase tracking-widest">Papel</th>
+                                <th className="pb-5 font-bold text-gray-400 text-[10px] uppercase tracking-widest">Conta</th>
                                 <th className="pb-5 font-bold text-gray-400 text-[10px] uppercase tracking-widest">Status</th>
                                 <th className="pb-5 text-right pr-2"></th>
                             </tr>
@@ -272,13 +260,15 @@ export default function UserManagement() {
                                             </div>
                                         </td>
                                         <td className="py-5">
-                                            <span className={`text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' :
-                                                user.role === 'PERITO' ? 'bg-amber-100 text-amber-700' :
-                                                    user.role === 'AUDITOR' ? 'bg-slate-100 text-slate-700' :
-                                                        'bg-blue-100 text-blue-700'
-                                                }`}>
+                                            <span className={`text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${user.isAdmin ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
                                                 {user.role}
                                             </span>
+                                            <Link
+                                                to={`/admin/acessos/usuarios/${user.id}`}
+                                                className="block text-[9px] font-bold uppercase tracking-widest text-gray-400 hover:text-blue-600 mt-1"
+                                            >
+                                                Ver permissões
+                                            </Link>
                                         </td>
                                         <td className="py-5">
                                             <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full w-fit ring-4 ${statusCfg.badge}`}>
@@ -320,14 +310,14 @@ export default function UserManagement() {
                                                         </button>
                                                         {isAdmin && (
                                                             <>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => openRoleModal(user)}
+                                                                <Link
+                                                                    to={`/admin/acessos/usuarios/${user.id}`}
+                                                                    onClick={() => setOpenMenuId(null)}
                                                                     className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors border-t border-slate-50"
                                                                 >
-                                                                    <ChevronDown size={14} className="text-blue-500" />
-                                                                    <span className="text-xs font-bold text-slate-700">Alterar papel</span>
-                                                                </button>
+                                                                    <KeyRound size={14} className="text-blue-500" />
+                                                                    <span className="text-xs font-bold text-slate-700">Gerenciar acessos</span>
+                                                                </Link>
                                                                 {(user.status === 'invited' || user.status === 'inactive') && (
                                                                     <button
                                                                         type="button"
@@ -432,19 +422,34 @@ export default function UserManagement() {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Papel *</label>
-                                <select
-                                    value={inviteForm.role}
-                                    onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))}
-                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-300 bg-white"
-                                >
-                                    {ROLE_OPTIONS.map(o => (
-                                        <option key={o.value} value={o.value}>{o.label}</option>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Papéis</label>
+                                <div className="max-h-48 overflow-y-auto rounded-xl border border-gray-200 divide-y divide-gray-50">
+                                    {roles.map((role) => (
+                                        <label key={role.id} className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50">
+                                            <input
+                                                type="checkbox"
+                                                checked={inviteForm.role_ids.includes(role.id)}
+                                                onChange={() => toggleInviteRole(role.id)}
+                                                className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            <span>
+                                                <span className="block text-sm font-bold text-gray-900">{role.name}</span>
+                                                {role.description && (
+                                                    <span className="block text-[10px] text-gray-400 font-bold">{role.description}</span>
+                                                )}
+                                            </span>
+                                        </label>
                                     ))}
-                                </select>
+                                    {roles.length === 0 && (
+                                        <p className="px-4 py-3 text-[10px] font-bold text-gray-400">
+                                            Nenhum papel cadastrado. Crie um em Acessos › Papéis.
+                                        </p>
+                                    )}
+                                </div>
                             </div>
                             <p className="text-[10px] text-gray-400 font-bold leading-relaxed">
                                 O usuário receberá um email com um link para definir sua senha e registrar autenticação de dois fatores.
+                                Sem nenhum papel, a conta entra sem acesso a nada — os papéis podem ser ajustados depois em Acessos.
                             </p>
                             <div className="flex gap-2 pt-2">
                                 <button
@@ -467,51 +472,6 @@ export default function UserManagement() {
                 </div>
             )}
 
-            {/* Role change modal */}
-            {roleModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setRoleModal(null)}>
-                    <div className="bg-white rounded-2xl p-8 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-xl font-bold text-gray-900 mb-1">Alterar Papel</h3>
-                        <p className="text-xs text-gray-400 font-bold mb-6">{roleModal.userName}</p>
-                        {roleError && (
-                            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm font-bold text-red-700">{roleError}</div>
-                        )}
-                        <form onSubmit={handleRoleSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Novo Papel</label>
-                                <select
-                                    value={newRole}
-                                    onChange={e => setNewRole(e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-300 bg-white"
-                                >
-                                    {ROLE_OPTIONS.map(o => (
-                                        <option key={o.value} value={o.value}>{o.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <p className="text-[10px] text-gray-400 font-bold leading-relaxed">
-                                A alteração é aplicada no Zitadel. O novo papel será refletido no próximo login do usuário.
-                            </p>
-                            <div className="flex gap-2 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setRoleModal(null)}
-                                    className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={roleSubmitting}
-                                    className="flex-1 px-4 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
-                                >
-                                    {roleSubmitting ? 'Salvando...' : 'Salvar'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
