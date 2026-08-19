@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Save, X, Plus, Trash2, Shield, Info, Link as LinkIcon, Share2, Building2, User, FileText, Calendar, MapPin, Briefcase, ArrowLeft, ListChecks } from 'lucide-react';
+import { Save, X, Plus, Trash2, Shield, Info, Link as LinkIcon, Share2, Building2, User, FileText, Calendar, MapPin, Briefcase, ArrowLeft, ListChecks, AlertCircle } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { GENERAL_CHECKLIST } from '../constants/config';
 import { listChecklistTypes } from '../api/checklist';
@@ -107,10 +107,20 @@ const INSURERS_CONFIG = {
     },
 };
 
+const br = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
+
+// A mensagem embaixo do campo. Erro impede criar; aviso é o que se ganha em
+// preencher, e some sozinho quando o campo é preenchido.
+function FieldNote({ error, warning }) {
+    if (error) return <p className="text-[11px] font-bold text-red-600 mt-1 flex items-start gap-1"><AlertCircle size={12} className="mt-px shrink-0" />{error}</p>;
+    if (warning) return <p className="text-[10px] text-amber-600 mt-1">{warning}</p>;
+    return null;
+}
+
 export default function NewClaim() {
     const navigate = useNavigate();
     const ask = useConfirm();
-    const { addClaim, clients } = useClaims();
+    const { addClaim, claims, clients } = useClaims();
 
     // Combine hardcoded config (which provides modality templates) with the
     // tenant's registered insurers/brokers from the backend clients API.
@@ -185,7 +195,9 @@ export default function NewClaim() {
             cancelLabel: 'Continuar preenchendo',
             tone: 'warning',
         })) return;
-        navigate('/sinistros');
+        // ".." sozinho sobe um nível de *rota*, e "sinistros/novo" é um
+        // segmento só: daria em /app. O destino é a lista, e ela fica ao lado.
+        navigate('../sinistros');
     };
 
     const isCustomInsurer = insurer === '__other__';
@@ -199,6 +211,80 @@ export default function NewClaim() {
 
     const isCustomModality = modality === '__other__';
     const effectiveModality = isCustomModality ? customModality : modality;
+
+    // ── Conferências do formulário ──────────────────────────────────────────
+    //
+    // Um sinistro entra aqui com dados que vêm de fora — do aviso da
+    // seguradora, do e-mail da corretora — e sai daqui como a verdade do
+    // processo inteiro. Erro de digitação em data de vigência não aparece hoje:
+    // aparece na hora de decidir se o caso é coberto, com o processo já montado.
+    //
+    // A separação abaixo é a que importa: `erros` impede a criação porque o
+    // dado está errado; `avisos` deixa criar porque o dado está apenas
+    // faltando, e faltar é normal no primeiro aviso do sinistro.
+    const hoje = new Date().toISOString().slice(0, 10);
+
+    // `faltando` são os erros de campo vazio: existem, mas não se mostram antes
+    // da primeira tentativa — reclamar de um campo que ainda não chegou a vez é
+    // ruído, e o formulário abre inteiro em branco.
+    const { erros, faltando } = useMemo(() => {
+        const e = {};
+        const f = new Set();
+        if (!claimNumber.trim()) { e.claimNumber = 'Informe o número do sinistro.'; f.add('claimNumber'); }
+        else if (claims?.some(c => (c.number || '').trim().toLowerCase() === claimNumber.trim().toLowerCase())) {
+            e.claimNumber = 'Já existe um sinistro com este número.';
+        }
+        if (!effectiveInsurer.trim()) { e.insurer = 'Selecione ou digite a seguradora.'; f.add('insurer'); }
+        if (!insuredName.trim()) { e.insuredName = 'Informe o nome do segurado.'; f.add('insuredName'); }
+
+        if (policyStartDate && policyEndDate && policyEndDate < policyStartDate) {
+            e.policyEndDate = 'O fim da vigência é anterior ao início.';
+        }
+        // A retroativa é o quanto a apólice enxerga para trás; depois do início
+        // ela não retroage nada, é só uma data trocada de campo.
+        if (retroactiveDate && policyStartDate && retroactiveDate > policyStartDate) {
+            e.retroactiveDate = 'A retroativa é anterior ao início da vigência, não posterior.';
+        }
+
+        if (occurrenceDate && occurrenceDate > hoje) {
+            e.occurrenceDate = 'A ocorrência não pode estar no futuro.';
+        } else if (occurrenceDate && policyEndDate && occurrenceDate > policyEndDate) {
+            e.occurrenceDate = `A ocorrência é posterior ao fim da vigência (${br(policyEndDate)}).`;
+        } else if (occurrenceDate && policyStartDate && occurrenceDate < policyStartDate) {
+            // Antes do início só passa se a retroativa cobrir — é para isso que
+            // ela existe, e o texto tem de dizer qual das duas datas mandou.
+            if (!retroactiveDate) {
+                e.occurrenceDate = `A ocorrência é anterior ao início da vigência (${br(policyStartDate)}). Se a apólice tem retroativa, informe a data.`;
+            } else if (occurrenceDate < retroactiveDate) {
+                e.occurrenceDate = `A ocorrência é anterior à retroativa (${br(retroactiveDate)}) e fica fora da cobertura.`;
+            }
+        }
+
+        if (checklist.some(item => !item.name.trim())) {
+            e.checklist = 'Há documento sem nome na lista. Dê um nome ou remova a linha.';
+        }
+        return { erros: e, faltando: f };
+    }, [claimNumber, claims, effectiveInsurer, insuredName, policyStartDate, policyEndDate,
+        retroactiveDate, occurrenceDate, checklist, hoje]);
+
+    const avisos = useMemo(() => {
+        const a = {};
+        if (!policyNumber.trim()) a.policyNumber = 'Sem o número da apólice a cobrança de documentos fica só pelo sinistro.';
+        if (!policyStartDate || !policyEndDate) a.policyEndDate = 'Sem a vigência não dá para conferir se a ocorrência está coberta.';
+        if (!occurrenceDate) a.occurrenceDate = 'A data da ocorrência é o que amarra o sinistro à vigência.';
+        // Coberta pela retroativa é um caso legítimo, mas raro o bastante para
+        // valer um segundo olhar antes de criar.
+        if (occurrenceDate && policyStartDate && occurrenceDate < policyStartDate && retroactiveDate && occurrenceDate >= retroactiveDate) {
+            a.occurrenceDate = `Fora da vigência, coberta pela retroativa de ${br(retroactiveDate)}.`;
+        }
+        return a;
+    }, [policyNumber, policyStartDate, policyEndDate, occurrenceDate, retroactiveDate]);
+
+    // Antes da primeira tentativa, campo vazio não é erro — é campo que ainda
+    // não chegou a vez. Depois dela, o formulário confere a cada tecla.
+    const [tentou, setTentou] = useState(false);
+    const primeiroSemNome = checklist.findIndex(item => !item.name.trim());
+    const erroDe = (campo) => (tentou || !faltando.has(campo) ? erros[campo] : undefined);
 
     // Quando seguradora ou modalidade mudam, atualizar checklist
     const handleInsurerChange = (value) => {
@@ -235,25 +321,13 @@ export default function NewClaim() {
     };
 
     const handleSave = () => {
-        if (!claimNumber) {
-            alert('O número do sinistro é obrigatório!');
-            return;
-        }
-        if (!effectiveInsurer) {
-            alert('Selecione ou digite uma seguradora!');
-            return;
-        }
-        if (!insuredName) {
-            alert('O nome do segurado é obrigatório!');
-            return;
-        }
-        if (policyStartDate && policyEndDate && policyEndDate < policyStartDate) {
-            alert('O término de vigência da apólice não pode ser anterior ao início!');
-            return;
-        }
-        const today = new Date().toISOString().slice(0, 10);
-        if (occurrenceDate && occurrenceDate > today) {
-            alert('A data do sinistro não pode ser uma data futura!');
+        setTentou(true);
+        const primeiro = Object.keys(erros)[0];
+        if (primeiro) {
+            // Levar até o campo em vez de descrever o problema numa caixa que
+            // some ao ser fechada: o erro fica escrito embaixo do campo errado.
+            document.getElementById(`campo-${primeiro}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            document.getElementById(`campo-${primeiro}`)?.focus?.();
             return;
         }
 
@@ -278,8 +352,9 @@ export default function NewClaim() {
             claimType: claimType || null,
         });
 
-        // Relative navigation works under both /app/sinistros/novo and /admin/sinistros/novo.
-        navigate(`../${newClaimId}`);
+        // Relativo funciona sob /app e /admin — mas contra a rota, não contra a
+        // URL: "sinistros/novo" é um segmento só, então ".." é /app.
+        navigate(`../sinistros/${newClaimId}`);
     };
 
     return (
@@ -332,21 +407,27 @@ export default function NewClaim() {
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Nº do Sinistro *</label>
                         <input
+                            id="campo-claimNumber"
                             type="text"
                             value={claimNumber}
                             onChange={(e) => setClaimNumber(e.target.value)}
                             placeholder="Ex: 2024-001"
-                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-gray-300 font-bold text-lg"
+                            aria-invalid={!!erroDe('claimNumber')}
+                            className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none transition-all placeholder:text-gray-300 font-bold text-lg ${erroDe('claimNumber') ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500'}`}
                         />
-                        <p className="text-[10px] text-gray-400 mt-1">Número fornecido pela seguradora</p>
+                        {erroDe('claimNumber')
+                            ? <FieldNote error={erroDe('claimNumber')} />
+                            : <p className="text-[10px] text-gray-400 mt-1">Número fornecido pela seguradora</p>}
                     </div>
 
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Seguradora *</label>
                         <select
+                            id="campo-insurer"
                             value={insurer}
                             onChange={(e) => handleInsurerChange(e.target.value)}
-                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white"
+                            aria-invalid={!!erroDe('insurer')}
+                            className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none transition-all bg-white ${erroDe('insurer') ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500'}`}
                         >
                             <option value="">Selecione...</option>
                             {insurerOptions.map(ins => (
@@ -364,6 +445,7 @@ export default function NewClaim() {
                                 autoFocus
                             />
                         )}
+                        <FieldNote error={erroDe('insurer')} />
                     </div>
 
                     <div>
@@ -408,18 +490,21 @@ export default function NewClaim() {
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Nº da Apólice</label>
                         <input
+                            id="campo-policyNumber"
                             type="text"
                             value={policyNumber}
                             onChange={(e) => setPolicyNumber(e.target.value)}
                             placeholder="Ex: 123456789"
                             className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-gray-300"
                         />
+                        <FieldNote warning={avisos.policyNumber} />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Vigência Início</label>
                             <input
+                                id="campo-policyStartDate"
                                 type="date"
                                 value={policyStartDate}
                                 onChange={(e) => setPolicyStartDate(e.target.value)}
@@ -429,23 +514,32 @@ export default function NewClaim() {
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Vigência Fim</label>
                             <input
+                                id="campo-policyEndDate"
                                 type="date"
                                 value={policyEndDate}
                                 onChange={(e) => setPolicyEndDate(e.target.value)}
-                                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"
+                                aria-invalid={!!erroDe('policyEndDate')}
+                                className={`w-full px-3 py-2.5 border rounded-xl focus:ring-2 outline-none transition-all text-sm ${erroDe('policyEndDate') ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500'}`}
                             />
+                        </div>
+                        <div className="col-span-2">
+                            <FieldNote error={erroDe('policyEndDate')} warning={avisos.policyEndDate} />
                         </div>
                     </div>
 
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Vigência Retroativa</label>
                         <input
+                            id="campo-retroactiveDate"
                             type="date"
                             value={retroactiveDate}
                             onChange={(e) => setRetroactiveDate(e.target.value)}
-                            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"
+                            aria-invalid={!!erroDe('retroactiveDate')}
+                            className={`w-full px-3 py-2.5 border rounded-xl focus:ring-2 outline-none transition-all text-sm ${erroDe('retroactiveDate') ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500'}`}
                         />
-                        <p className="text-[10px] text-gray-400 mt-1">Para casos ambientais/RC</p>
+                        {erroDe('retroactiveDate')
+                            ? <FieldNote error={erroDe('retroactiveDate')} />
+                            : <p className="text-[10px] text-gray-400 mt-1">Cobre ocorrências anteriores ao início da vigência. Para casos ambientais/RC.</p>}
                     </div>
                 </div>
 
@@ -461,12 +555,15 @@ export default function NewClaim() {
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Nome do Segurado *</label>
                             <input
+                                id="campo-insuredName"
                                 type="text"
                                 value={insuredName}
                                 onChange={(e) => setInsuredName(e.target.value)}
                                 placeholder="Nome completo ou razão social"
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-gray-300"
+                                aria-invalid={!!erroDe('insuredName')}
+                                className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none transition-all placeholder:text-gray-300 ${erroDe('insuredName') ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500'}`}
                             />
+                            <FieldNote error={erroDe('insuredName')} />
                         </div>
                     </div>
 
@@ -553,11 +650,15 @@ export default function NewClaim() {
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Data da Ocorrência</label>
                             <input
+                                id="campo-occurrenceDate"
                                 type="date"
                                 value={occurrenceDate}
                                 onChange={(e) => setOccurrenceDate(e.target.value)}
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                max={hoje}
+                                aria-invalid={!!erroDe('occurrenceDate')}
+                                className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none transition-all ${erroDe('occurrenceDate') ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500'}`}
                             />
+                            <FieldNote error={erroDe('occurrenceDate')} warning={avisos.occurrenceDate} />
                         </div>
 
                         <div>
@@ -625,6 +726,12 @@ export default function NewClaim() {
                     </button>
                 </div>
 
+                {erroDe('checklist') && (
+                    <div className="mb-4">
+                        <FieldNote error={erroDe('checklist')} />
+                    </div>
+                )}
+
                 {checklist.length === 0 ? (
                     <div className="py-12 text-center border-2 border-dashed border-gray-200 rounded-xl">
                         <FileText size={40} className="mx-auto text-gray-300 mb-3" />
@@ -649,6 +756,7 @@ export default function NewClaim() {
                                 </div>
                                 <div className="col-span-6">
                                     <input
+                                        id={idx === primeiroSemNome ? 'campo-checklist' : undefined}
                                         type="text"
                                         value={item.name}
                                         onChange={(e) => {
@@ -657,7 +765,8 @@ export default function NewClaim() {
                                             setChecklist(next);
                                         }}
                                         placeholder="Nome do documento..."
-                                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                                        aria-invalid={tentou && !item.name.trim()}
+                                        className={`w-full px-3 py-2 bg-white border rounded-lg outline-none focus:ring-1 text-sm ${tentou && !item.name.trim() ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500'}`}
                                     />
                                 </div>
                                 <div className="col-span-3">
@@ -700,6 +809,22 @@ export default function NewClaim() {
                     </div>
                 )}
             </div>
+
+            {/* O botão continua clicável de propósito: desabilitado, ele não conta
+                o que falta, e a pessoa fica clicando num botão morto. */}
+            {tentou && Object.keys(erros).length > 0 && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3" role="alert">
+                    <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-600" />
+                    <div>
+                        <p className="text-sm font-bold text-red-700">
+                            {Object.keys(erros).length === 1 ? 'Falta acertar um campo antes de criar o sinistro.' : `Faltam acertar ${Object.keys(erros).length} campos antes de criar o sinistro.`}
+                        </p>
+                        <ul className="mt-1 space-y-0.5 text-xs text-red-600">
+                            {Object.values(erros).map((msg) => <li key={msg}>{msg}</li>)}
+                        </ul>
+                    </div>
+                </div>
+            )}
 
             {/* Actions */}
             <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
