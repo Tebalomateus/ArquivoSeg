@@ -53,13 +53,16 @@ test('excluir um papel em uso mostra quantas atribuições vão junto', async ({
     await page.goto('/admin/acessos/papeis');
 
     // r-leitor está com a Ana e com o grupo (que tem um membro): duas atribuições.
+    // O primeiro Excluir tenta sem força; a recusa do servidor é que vira a
+    // segunda pergunta, e só ela apaga junto com as atribuições.
     await page.getByTestId('role-leitor').getByRole('button', { name: 'Excluir' }).click();
-    const dialog = page.getByRole('dialog');
+    const dialog = page.getByTestId('confirm-dialog');
     await dialog.getByRole('button', { name: 'Excluir', exact: true }).click();
 
-    await expect(dialog.getByText('a 2 atribuição(ões)')).toBeVisible();
+    const forcado = page.getByTestId('confirm-dialog');
+    await expect(forcado.getByText('a 2 atribuição(ões)')).toBeVisible();
 
-    await dialog.getByRole('button', { name: 'Excluir mesmo assim' }).click();
+    await forcado.getByRole('button', { name: 'Excluir mesmo assim' }).click();
     await expect(page.getByTestId('role-leitor')).toHaveCount(0);
     expect(state.roles.some((r) => r.key === 'leitor')).toBe(false);
 });

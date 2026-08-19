@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openBoard, seedDeck, TASK } from './fixtures/deck-api.js';
+import { confirmar, openBoard, seedDeck, TASK } from './fixtures/deck-api.js';
 
 /**
  * O board de decks, pelo caminho que o perito e o analista realmente fazem:
@@ -63,6 +63,9 @@ test('desanexar a última tarefa descarta o deck e devolve a tarefa para pendent
 
     const pendente = page.getByTestId('column-pendente');
     await pendente.getByTestId('deck-DECK-01').getByRole('button', { name: 'Desanexar tarefa' }).click();
+    // Era a única tarefa: o diálogo avisa que o deck inteiro se desfaz.
+    await expect(page.getByTestId('confirm-dialog')).toContainText('Sem tarefa o deck deixa de existir');
+    await confirmar(page, 'Desfazer deck');
 
     await expect(pendente.getByTestId('deck-DECK-01')).toHaveCount(0);
     await expect(pendente.getByTestId(`task-${TASK.bo}`)).toBeVisible();
@@ -80,6 +83,7 @@ test('deck enviado sai de pendente e o perito só espera', async ({ page }) => {
     });
 
     await page.getByTestId('column-pendente').getByTestId('deck-DECK-01').getByRole('button', { name: 'Enviar deck' }).click();
+    await confirmar(page, 'Enviar deck');
 
     const enviado = page.getByTestId('column-enviado');
     await expect(enviado.getByTestId('deck-DECK-01')).toContainText('Aguardando análise');

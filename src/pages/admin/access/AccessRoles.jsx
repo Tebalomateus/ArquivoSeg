@@ -9,6 +9,7 @@ import {
 } from '../../../api/iam';
 import ActionCatalogPicker from '../../../components/iam/ActionCatalogPicker';
 import { Spinner, ErrorNote, Empty, Modal, Chip } from './ui';
+import { useConfirm } from '../../../components/ConfirmDialog';
 
 // A key is the stable identifier a policy refers to; the name is what people
 // read. Deriving one from the other on the way in saves the admin from typing
@@ -49,7 +50,7 @@ export default function AccessRoles() {
     const [error, setError] = useState(null);
 
     const [editor, setEditor] = useState(null); // { role|null, form, saving, error }
-    const [confirmDelete, setConfirmDelete] = useState(null); // { role, inUse, count }
+    const ask = useConfirm();
 
     const load = useCallback(async () => {
         setError(null);
@@ -128,20 +129,39 @@ export default function AccessRoles() {
         }
     };
 
-    const remove = async (role, force) => {
-        try {
-            await deleteRole(role.id, { force });
-            setConfirmDelete(null);
-            await load();
-        } catch (err) {
-            // The API refuses a role somebody still holds and says how many —
-            // that count is the blast radius, and showing it beats asking the
-            // admin to guess what force would break.
-            if (err.code === 'ROLE_IN_USE') {
-                setConfirmDelete({ role, inUse: true, count: err.body?.error?.details?.assignments ?? null });
-                return;
+    const remove = async (role) => {
+        // Duas perguntas, não uma. A API recusa um papel que alguém ainda tem e
+        // diz quantas atribuições cairiam junto; esse número é o estrago, e
+        // mostrá-lo é melhor do que pedir ao admin que adivinhe o que o force
+        // quebra. Só a segunda pergunta é a que apaga com força.
+        let force = false;
+        let count = null;
+        for (;;) {
+            let escalate = false;
+            const done = await ask({
+                title: `Excluir ${role.name}?`,
+                message: force
+                    ? `Este papel ainda está atribuído${count !== null ? ` a ${count} atribuição(ões)` : ''}. Excluir agora remove essas atribuições junto — as pessoas afetadas perdem as permissões que só vinham daqui.`
+                    : 'O papel some e deixa de valer para quem o tiver.',
+                detail: role.name,
+                confirmLabel: force ? 'Excluir mesmo assim' : 'Excluir',
+                tone: force ? 'warning' : 'danger',
+                onConfirm: async () => {
+                    try {
+                        await deleteRole(role.id, { force });
+                    } catch (err) {
+                        if (err.code !== 'ROLE_IN_USE') throw err;
+                        count = err.body?.error?.details?.assignments ?? null;
+                        escalate = true;
+                    }
+                },
+            });
+            if (escalate) {
+                force = true;
+                continue;
             }
-            setConfirmDelete({ role, error: err });
+            if (done) await load();
+            return;
         }
     };
 
@@ -214,7 +234,7 @@ export default function AccessRoles() {
                                 <button
                                     type="button"
                                     disabled={role.is_system}
-                                    onClick={() => setConfirmDelete({ role })}
+                                    onClick={() => remove(role)}
                                     className="p-2.5 rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400"
                                     title={role.is_system ? 'Papéis de sistema não podem ser excluídos' : 'Excluir'}
                                 >
@@ -325,46 +345,6 @@ export default function AccessRoles() {
                             </div>
                         </div>
                     </form>
-                )}
-            </Modal>
-
-            <Modal
-                open={!!confirmDelete}
-                title={`Excluir ${confirmDelete?.role?.name || ''}?`}
-                onClose={() => setConfirmDelete(null)}
-            >
-                {confirmDelete && (
-                    <div className="p-6 space-y-4">
-                        <ErrorNote error={confirmDelete.error} />
-                        {confirmDelete.inUse ? (
-                            <p className="text-sm text-slate-600 leading-relaxed">
-                                Este papel ainda está atribuído
-                                {confirmDelete.count !== null ? ` a ${confirmDelete.count} atribuição(ões)` : ''}. Excluir
-                                agora remove essas atribuições junto — as pessoas afetadas perdem as permissões que só
-                                vinham daqui.
-                            </p>
-                        ) : (
-                            <p className="text-sm text-slate-600 leading-relaxed">
-                                O papel some e deixa de valer para quem o tiver.
-                            </p>
-                        )}
-                        <div className="flex items-center justify-end gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setConfirmDelete(null)}
-                                className="px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => remove(confirmDelete.role, confirmDelete.inUse)}
-                                className="px-6 py-3 rounded-2xl bg-red-600 text-white text-xs font-black uppercase tracking-widest hover:bg-red-700"
-                            >
-                                {confirmDelete.inUse ? 'Excluir mesmo assim' : 'Excluir'}
-                            </button>
-                        </div>
-                    </div>
                 )}
             </Modal>
         </div>

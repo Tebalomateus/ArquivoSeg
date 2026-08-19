@@ -36,6 +36,7 @@ import ChecklistPanel from '../components/ChecklistPanel';
 import KanbanBoard from '../components/KanbanBoard';
 import { useClaims, VALID_NEXT_STATUS } from '../context/ClaimsContext';
 import { useCan } from '../context/PermissionsContext';
+import { useConfirm } from '../components/ConfirmDialog';
 import { actorLabelFromDbId } from '../api/auth';
 import { formatBytes, mimeShortLabel } from '../api/files';
 
@@ -262,6 +263,7 @@ export default function ClaimDetails() {
     }, [id, claimMissing]);
 
     const can = useCan();
+    const ask = useConfirm();
     const canReadAudit = can('auditoria.listar');
 
     useEffect(() => {
@@ -314,7 +316,11 @@ export default function ClaimDetails() {
     };
 
     const handleRevokeShare = async (tokenId) => {
-        if (!confirm('Revogar este link? O acesso público será imediatamente bloqueado.')) return;
+        if (!await ask({
+            title: 'Revogar este link público?',
+            message: 'Quem estiver com o endereço perde o acesso na hora. Não dá para reativar o mesmo link — só gerar outro.',
+            confirmLabel: 'Revogar link', tone: 'danger',
+        })) return;
         try {
             await revokeFileShare(tokenId);
             await refreshShares();
@@ -370,14 +376,22 @@ export default function ClaimDetails() {
 
     const handleDeleteAnnotation = async (doc) => {
         if (!doc.commentId) return;
-        if (!confirm('Remover esta anotação? O arquivo continua, mas a contextualização será apagada.')) return;
+        if (!await ask({
+            title: 'Remover esta anotação?',
+            message: 'O arquivo continua no sinistro. O que se perde é a explicação de por que ele está aqui.',
+            confirmLabel: 'Remover anotação', tone: 'danger',
+        })) return;
         try { await deleteAnnotation(claim.id, doc.commentId); }
         catch (err) { console.error(err); }
     };
 
     const handleDeleteFile = async (doc) => {
         if (!doc?.backFileVerId) return;
-        if (!confirm(`Excluir o documento "${doc.name}"? Essa ação é definitiva.`)) return;
+        if (!await ask({
+            title: 'Excluir este documento?',
+            message: 'Some do sinistro e não volta. Se ele foi enviado por engano, prefira substituir por uma nova versão.',
+            detail: doc.name, confirmLabel: 'Excluir documento', tone: 'danger',
+        })) return;
         try { await deleteDocument(claim.id, doc.backFileVerId); }
         catch (err) { console.error(err); }
     };
@@ -401,7 +415,11 @@ export default function ClaimDetails() {
     const handleTransition = async (next) => {
         if (next === 'archived') {
             if (!canArchive) return alert('Apenas admin pode arquivar.');
-            if (!confirm(`Arquivar sinistro #${claim.number}? Essa ação é definitiva.`)) return;
+            if (!await ask({
+                title: `Arquivar o sinistro #${claim.number}?`,
+                message: 'O sinistro sai do fluxo de trabalho e deixa de aceitar movimentação.',
+                confirmLabel: 'Arquivar sinistro', tone: 'warning',
+            })) return;
             await archiveClaim(claim.id);
         } else {
             await transitionStatus(claim.id, next);
@@ -489,12 +507,16 @@ export default function ClaimDetails() {
         alert('Observações salvas com sucesso!');
     };
 
-    const toggleChecklistItem = (itemId, received) => {
+    const toggleChecklistItem = async (itemId, received) => {
         if (!can('checklist.atualizarEstado')) return;
         // Marking as received is a claim ("this document arrived") — require an explicit
         // confirmation so a stray click doesn't silently give a document a false pass.
         // Unmarking is always safe to reverse and stays instant.
-        if (!received && !confirm('Confirma que este item foi recebido/conferido?')) return;
+        if (!received && !await ask({
+            title: 'Marcar como recebido?',
+            message: 'Isto afirma que o documento chegou e foi conferido — é o que o resto do time vai ler como verdade.',
+            confirmLabel: 'Confirmar recebimento',
+        })) return;
         updateChecklistStatus(claim.id, currentFolderId, itemId, !received);
     };
 

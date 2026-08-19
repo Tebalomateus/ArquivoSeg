@@ -10,6 +10,7 @@ import {
 } from '../../../api/iam';
 import { useClaims } from '../../../context/ClaimsContext';
 import { Spinner, ErrorNote, Empty, Modal, Chip } from './ui';
+import { useConfirm } from '../../../components/ConfirmDialog';
 
 // The key is the stable slug the API stores; the server accepts lowercase
 // letters, digits and hyphens only, so derive one that already fits.
@@ -48,7 +49,7 @@ export default function AccessGroups() {
 
     const [editor, setEditor] = useState(null);
     const [members, setMembers] = useState(null); // { group, selected:Set, saving, error }
-    const [confirmDelete, setConfirmDelete] = useState(null);
+    const ask = useConfirm();
 
     const load = useCallback(async () => {
         setError(null);
@@ -170,13 +171,17 @@ export default function AccessGroups() {
     };
 
     const remove = async (group) => {
-        try {
-            await deleteGroup(group.id);
-            setConfirmDelete(null);
-            await load();
-        } catch (err) {
-            setConfirmDelete({ group, error: err });
-        }
+        // O onConfirm mantém o diálogo aberto até o servidor responder: uma
+        // recusa aparece dentro dele, que é onde a pessoa ainda está olhando.
+        const done = await ask({
+            title: `Excluir ${group.name}?`,
+            message: 'Os membros perdem os papéis que vinham por este grupo. Papéis atribuídos diretamente a cada pessoa não são afetados.',
+            detail: group.name,
+            confirmLabel: 'Excluir',
+            tone: 'danger',
+            onConfirm: () => deleteGroup(group.id),
+        });
+        if (done) await load();
     };
 
     if (groups === null) return <Spinner label="Carregando grupos" />;
@@ -256,7 +261,7 @@ export default function AccessGroups() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setConfirmDelete({ group })}
+                                    onClick={() => remove(group)}
                                     className="p-2.5 rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
                                     title="Excluir"
                                 >
@@ -435,38 +440,6 @@ export default function AccessGroups() {
                             </div>
                         </div>
                     </>
-                )}
-            </Modal>
-
-            <Modal
-                open={!!confirmDelete}
-                title={`Excluir ${confirmDelete?.group?.name || ''}?`}
-                onClose={() => setConfirmDelete(null)}
-            >
-                {confirmDelete && (
-                    <div className="p-6 space-y-4">
-                        <ErrorNote error={confirmDelete.error} />
-                        <p className="text-sm text-slate-600 leading-relaxed">
-                            Os membros perdem os papéis que vinham por este grupo. Papéis atribuídos
-                            diretamente a cada pessoa não são afetados.
-                        </p>
-                        <div className="flex items-center justify-end gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setConfirmDelete(null)}
-                                className="px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => remove(confirmDelete.group)}
-                                className="px-6 py-3 rounded-2xl bg-red-600 text-white text-xs font-black uppercase tracking-widest hover:bg-red-700"
-                            >
-                                Excluir
-                            </button>
-                        </div>
-                    </div>
                 )}
             </Modal>
         </div>

@@ -6,6 +6,7 @@ import { isMockEnabled, getToken } from '../api/client';
 import * as deckApi from '../api/decks';
 import * as board from '../api/deckBoard';
 import { useCan } from '../context/PermissionsContext';
+import { useConfirm } from '../components/ConfirmDialog';
 
 const { STATUS } = board;
 
@@ -69,6 +70,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     const [hotCol, setHotCol] = useState(false);
 
     const can = useCan();
+    const ask = useConfirm();
     const online = !isMockEnabled() && !!getToken();
     const actor = currentUser?.name || currentUser?.email || '';
     // Reviewing a deck is a permission now, not a rung on the role ladder: a
@@ -331,20 +333,71 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
         () => deckApi.attachTasks(claim.id, deckId, [taskKey]),
     );
 
-    const detachTask = (deckId, key) => run(
-        () => board.detachTask(state, deckId, key),
-        () => deckApi.detachTask(claim.id, deckId, key),
-    );
+    // Desanexar a última tarefa desfaz o deck: um deck sem tarefa não existe, e
+    // os arquivos voltam a ser avulsos. Quem clica no x de uma linha não espera
+    // perder o deck inteiro, então o aviso muda de texto nesse caso.
+    const detachTask = async (deckId, key) => {
+        const deck = state.decks.find(d => d.id === deckId);
+        const last = (deck?.tarefaIds.length ?? 0) <= 1;
+        const ok = await ask({
+            title: last ? 'Desfazer o deck?' : 'Tirar a tarefa deste deck?',
+            message: last
+                ? 'É a única tarefa do deck. Sem tarefa o deck deixa de existir, e os arquivos voltam para o painel de avulsos.'
+                : 'A tarefa volta para Pendente. Os arquivos do deck continuam onde estão.',
+            detail: labelFor(key),
+            confirmLabel: last ? 'Desfazer deck' : 'Tirar do deck',
+            tone: last ? 'danger' : 'warning',
+        });
+        if (!ok) return;
+        run(
+            () => board.detachTask(state, deckId, key),
+            () => deckApi.detachTask(claim.id, deckId, key),
+        );
+    };
 
-    const removeFile = (deckId, fileVerId) => run(
-        () => board.removeFile(state, deckId, fileVerId),
-        () => deckApi.removeDeckFile(claim.id, deckId, fileVerId),
-    );
+    const removeFile = async (deckId, fileVerId) => {
+        const deck = state.decks.find(d => d.id === deckId);
+        const file = deck?.arquivos.find(f => f.fileVerId === fileVerId);
+        const ok = await ask({
+            title: 'Remover o arquivo do deck?',
+            message: 'O arquivo sai do deck e volta para o painel de avulsos. Para tirá-lo do sinistro de vez, use a aba de documentos.',
+            detail: file?.nome,
+            confirmLabel: 'Remover do deck',
+            tone: 'danger',
+        });
+        if (!ok) return;
+        run(
+            () => board.removeFile(state, deckId, fileVerId),
+            () => deckApi.removeDeckFile(claim.id, deckId, fileVerId),
+        );
+    };
 
-    const submit = (deckId) => run(
-        () => board.submitDeck(state, deckId),
-        () => deckApi.submitDeck(claim.id, deckId),
-    );
+    // Enviar é a única ação do board que sai das mãos de quem sobe o documento:
+    // depois dela o deck espera análise e não aceita mais arquivo nem tarefa.
+    // E dá para disparar arrastando, que é fácil de fazer sem querer.
+    const submit = async (deckId) => {
+        const deck = state.decks.find(d => d.id === deckId);
+        // Um deck vazio nem chega a ser uma pergunta: o board recusa, e é ele
+        // quem diz por quê.
+        if (deck && deck.arquivos.length === 0) {
+            run(
+                () => board.submitDeck(state, deckId),
+                () => deckApi.submitDeck(claim.id, deckId),
+            );
+            return;
+        }
+        const ok = await ask({
+            title: 'Enviar o deck para análise?',
+            message: 'Depois de enviado o deck não aceita mais arquivos nem tarefas. Quem analisa decide o que atende e o que volta para pendente.',
+            detail: deck ? `${deck.codigo} · ${plural(deck.tarefaIds.length, 'tarefa', 'tarefas')} · ${plural(deck.arquivos.length, 'arquivo', 'arquivos')}` : undefined,
+            confirmLabel: 'Enviar deck',
+        });
+        if (!ok) return;
+        run(
+            () => board.submitDeck(state, deckId),
+            () => deckApi.submitDeck(claim.id, deckId),
+        );
+    };
 
     // Open a deck file: session object-URL in mock, presigned download in prod.
     const viewFile = useCallback(async (f) => {

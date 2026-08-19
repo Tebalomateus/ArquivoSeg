@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openBoard, seedDeck, PROCESS_ID, TASK } from './fixtures/deck-api.js';
+import { confirmar, openBoard, seedDeck, PROCESS_ID, TASK } from './fixtures/deck-api.js';
 
 /**
  * O upload de arquivos do board.
@@ -73,6 +73,7 @@ test('remover um arquivo do deck tira a referência no servidor', async ({ page 
 
     const deck = page.getByTestId('deck-DECK-01');
     await deck.getByRole('button', { name: 'Remover arquivo' }).first().click();
+    await confirmar(page, 'Remover do deck');
 
     await expect(deck).toContainText('1 tarefa · 1 arquivo');
     await expect(deck).not.toContainText('laudo.pdf');
@@ -132,10 +133,13 @@ test('um deck sem arquivo nenhum não vai para análise', async ({ page }) => {
 
     const deck = page.getByTestId('deck-DECK-01');
     await deck.getByRole('button', { name: 'Remover arquivo' }).click();
+    await confirmar(page, 'Remover do deck');
 
+    // Deck vazio nem chega a perguntar se pode enviar: a recusa vem direto.
     const recusa = page.waitForEvent('dialog').then(async (d) => { const m = d.message(); await d.dismiss(); return m; });
     await deck.getByRole('button', { name: 'Enviar deck' }).click();
     expect(await recusa).toContain('Anexe ao menos um arquivo');
+    await expect(page.getByTestId('confirm-dialog')).toHaveCount(0);
 
     await expect(page.getByTestId('column-enviado').getByTestId('deck-DECK-01')).toHaveCount(0);
     expect(state.board.decks[0].status).toBe('pendente');

@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Save, X, Plus, Trash2, Shield, Info, Link as LinkIcon, Share2, Building2, User, FileText, Calendar, MapPin, Briefcase, ArrowLeft, ListChecks } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { GENERAL_CHECKLIST } from '../constants/config';
 import { listChecklistTypes } from '../api/checklist';
 import { isMockEnabled } from '../api/client';
+import { useConfirm, useUnsavedGuard } from '../components/ConfirmDialog';
 
 // Configuração de Seguradoras e Modalidades com suas listas de documentos padrão
 const INSURERS_CONFIG = {
@@ -108,6 +109,7 @@ const INSURERS_CONFIG = {
 
 export default function NewClaim() {
     const navigate = useNavigate();
+    const ask = useConfirm();
     const { addClaim, clients } = useClaims();
 
     // Combine hardcoded config (which provides modality templates) with the
@@ -162,6 +164,29 @@ export default function NewClaim() {
 
     // Checklist dinâmico
     const [checklist, setChecklist] = useState([]);
+
+    // Sair daqui joga fora tudo: o formulário não tem rascunho, e nada do que foi
+    // digitado existe em outro lugar até o Criar Sinistro. Vale para as três
+    // saídas — o X, o Cancelar e o voltar do navegador.
+    const dirty = [
+        claimType, claimNumber, insurer, customInsurer, policyNumber, policyStartDate,
+        policyEndDate, retroactiveDate, modality, customModality, insuredName, brokerName,
+        brokerClaimId, adjusterName, adjusterClaimId, title, occurrenceDate,
+        occurrenceLocation, description,
+    ].some(v => (v || '').trim() !== '');
+
+    useUnsavedGuard(dirty);
+
+    const leave = async () => {
+        if (dirty && !await ask({
+            title: 'Sair sem criar o sinistro?',
+            message: 'O que você preencheu não é salvo em rascunho: ao sair, os dados se perdem.',
+            confirmLabel: 'Sair e descartar',
+            cancelLabel: 'Continuar preenchendo',
+            tone: 'warning',
+        })) return;
+        navigate('/sinistros');
+    };
 
     const isCustomInsurer = insurer === '__other__';
     const effectiveInsurer = isCustomInsurer ? customInsurer : insurer;
@@ -261,15 +286,15 @@ export default function NewClaim() {
         <div className="max-w-5xl mx-auto space-y-8 animate-fade-in pb-20 relative z-10">
             <div className="flex items-center justify-between">
                 <div>
-                    <Link to=".." className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 hover:text-blue-600 transition-all mb-2 tracking-widest">
+                    <button type="button" onClick={leave} className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 hover:text-blue-600 transition-all mb-2 tracking-widest">
                         <ArrowLeft size={16} />
                         Voltar para Sinistros
-                    </Link>
+                    </button>
                     <h1 className="text-3xl font-bold text-gray-900 font-display">Abrir Novo Sinistro</h1>
                     <p className="text-gray-500">Cadastre os dados do sinistro conforme informações da seguradora.</p>
                 </div>
                 <button
-                    onClick={() => navigate('..')}
+                    onClick={leave}
                     className="p-2 hover:bg-white rounded-full text-gray-400 hover:text-gray-600 transition-all border border-transparent hover:border-gray-200"
                 >
                     <X size={24} />
@@ -680,7 +705,7 @@ export default function NewClaim() {
             <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
                 <button
                     className="px-8 py-2.5 text-gray-500 font-medium hover:bg-gray-100 rounded-lg transition-colors"
-                    onClick={() => navigate('/sinistros')}
+                    onClick={leave}
                 >
                     Cancelar
                 </button>

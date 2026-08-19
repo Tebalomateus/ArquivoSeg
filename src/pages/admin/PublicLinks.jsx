@@ -14,8 +14,10 @@ import {
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 import { actorLabelFromDbId } from '../../api/auth';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 export default function PublicLinks() {
+    const ask = useConfirm();
     const {
         claims,
         listFileShares,
@@ -81,7 +83,11 @@ export default function PublicLinks() {
     }, [shares, searchTerm]);
 
     const handleRevoke = async (id) => {
-        if (!confirm('Revogar este link? O acesso público será imediatamente bloqueado.')) return;
+        if (!await ask({
+            title: 'Revogar este link público?',
+            message: 'Quem estiver com o endereço perde o acesso na hora. Não dá para reativar o mesmo link — só gerar outro.',
+            confirmLabel: 'Revogar link', tone: 'danger',
+        })) return;
         await revokeFileShare(id);
         await refreshShares();
     };

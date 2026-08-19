@@ -201,6 +201,15 @@ function archiveNames(files) {
 }
 
 /** Um zip store-method de verdade, montado à mão para não trazer dependência. */
+// Toda ação destrutiva do board passa pelo diálogo comum. Confirmar é parte do
+// caminho, então os testes fazem isso por aqui em vez de repetir o seletor.
+export async function confirmar(page, label) {
+    const dialog = page.getByTestId('confirm-dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: label }).click();
+    await expect(dialog).toHaveCount(0);
+}
+
 export function zipStore(entries) {
     const locals = [];
     const central = [];
