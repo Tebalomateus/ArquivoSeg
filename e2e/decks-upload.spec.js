@@ -95,6 +95,37 @@ test('upload que o servidor recusa não deixa deck fantasma no board', async ({ 
     expect(state.requests.some((r) => r.method === 'POST' && r.path.endsWith('/decks'))).toBe(false);
 });
 
+test('depois do primeiro upload a tela conta que dá para juntar tarefas', async ({ page }) => {
+    // Subir pela tarefa é o caminho que todo mundo acha sozinho, e ele produz um
+    // deck de uma tarefa só. Nada na tela dizia que as outras podiam ir juntas.
+    await openBoard(page);
+
+    await uploadNaTarefa(page, TASK.bo, pdf('bo.pdf', 'boletim'));
+
+    const hint = page.getByTestId('join-hint');
+    await expect(hint).toContainText('várias tarefas num deck só');
+    await hint.getByRole('button', { name: 'Fechar aviso' }).click();
+    await expect(hint).toHaveCount(0);
+});
+
+test('quem já subiu por seleção não recebe a dica', async ({ page }) => {
+    // Ensinar a juntar tarefas a quem acabou de juntar duas é ruído.
+    await openBoard(page);
+
+    const pendente = page.getByTestId('column-pendente');
+    for (const key of [TASK.bo, TASK.laudo]) {
+        await pendente.getByTestId(`task-${key}`).getByRole('button', { name: 'Selecionar tarefa' }).click();
+    }
+    await pendente.getByRole('button', { name: 'Juntar num deck' }).click();
+
+    const modal = page.getByTestId('upload-modal');
+    await modal.locator('input[type=file]').setInputFiles(pdf('processo.pdf', 'os dois'));
+    await modal.getByRole('button', { name: 'Confirmar' }).click();
+
+    await expect(page.getByTestId('deck-DECK-01')).toContainText('2 tarefas');
+    await expect(page.getByTestId('join-hint')).toHaveCount(0);
+});
+
 test('um deck sem arquivo nenhum não vai para análise', async ({ page }) => {
     // Só dá para chegar aqui removendo o último arquivo de um deck pendente.
     const state = await openBoard(page, { mutate: (s) => seedDeck(s, { tarefaIds: [TASK.bo] }) });

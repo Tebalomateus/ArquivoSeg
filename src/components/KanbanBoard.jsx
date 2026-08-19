@@ -43,7 +43,8 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
     const [loading, setLoading] = useState(true);
 
     const [sel, setSel] = useState({});         // taskKey -> true (loose tasks only)
-    const [upload, setUpload] = useState(null); // { title, onFiles }
+    const [upload, setUpload] = useState(null); // { title, onFiles, joinHint }
+    const [joinHint, setJoinHint] = useState(false);
     const [reviewId, setReviewId] = useState(null);
     const [busy, setBusy] = useState(false);
     const [zipping, setZipping] = useState(null); // deckId whose archive is downloading
@@ -183,6 +184,11 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
 
     const openUploadForTask = (taskKey) => setUpload({
         title: labelFor(taskKey),
+        // Subir por uma tarefa é o caminho que todo mundo acha sozinho, e ele
+        // cria um deck de uma tarefa só. Quem para por aí acaba com quatro decks
+        // de um documento cada, quando o analista queria um. A dica é lançada
+        // daqui — o momento em que a pessoa acabou de fazer exatamente isso.
+        joinHint: looseTasks.length > 1,
         onFiles: async (files) => {
             const arquivos = await toRefs(files);
             await run(
@@ -459,15 +465,57 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
                 {upload && (
                     <UploadModal title={upload.title} busy={busy}
                         onClose={() => setUpload(null)}
-                        onConfirm={async (files) => { await upload.onFiles(files); setUpload(null); }} />
+                        onConfirm={async (files) => {
+                            // Quem já juntou tarefas alguma vez não precisa da
+                            // dica: para essa pessoa ela é só uma caixa piscando.
+                            const hint = upload.joinHint && !state.decks.some(d => d.tarefaIds.length > 1);
+                            await upload.onFiles(files);
+                            setUpload(null);
+                            if (hint) setJoinHint(true);
+                        }} />
                 )}
                 {reviewDeck && (
                     <AnalysisModal deck={reviewDeck} labelFor={labelFor} accentOf={grupoAccent(tabs, reviewDeck.grupo)}
                         onView={viewFile} onClose={() => setReviewId(null)} onConfirm={(dev, motivo) => analyze(reviewDeck.id, dev, motivo)}
                         onDownloadAll={canDownloadArchive ? () => downloadArchive(reviewDeck) : null} downloading={zipping === reviewDeck.id} />
                 )}
+                {joinHint && <JoinHintToast onClose={() => setJoinHint(false)} />}
             </AnimatePresence>
         </div>
+    );
+}
+
+// A dica de juntar tarefas, dita logo depois de alguém criar um deck de uma
+// tarefa só. Ela se apaga sozinha: é um aviso, não mais uma coisa para fechar.
+function JoinHintToast({ onClose }) {
+    useEffect(() => {
+        const timer = setTimeout(onClose, 9000);
+        return () => clearTimeout(timer);
+    }, [onClose]);
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.18 }}
+            data-testid="join-hint"
+            role="status"
+            className="fixed bottom-6 right-6 z-50 flex max-w-[360px] items-start gap-3 rounded-[16px] bg-[#0F172A] p-4 shadow-[0_24px_48px_-24px_rgba(15,23,42,.9)]"
+        >
+            <span className="mt-[2px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-[#12A08B] text-white">
+                <Plus size={13} />
+            </span>
+            <div className="flex-1">
+                <p className="text-[12px] font-extrabold text-white">Documento enviado</p>
+                <p className="mt-1 text-[11.5px] font-semibold leading-relaxed text-slate-300">
+                    Dá para mandar várias tarefas num deck só: marque as que faltam aqui em Pendente,
+                    ou arraste uma até um deck que já existe.
+                </p>
+            </div>
+            <button type="button" onClick={onClose} aria-label="Fechar aviso"
+                className="shrink-0 rounded-[7px] p-1 text-slate-400 transition-colors hover:bg-white/10 hover:text-white">
+                <X size={14} />
+            </button>
+        </motion.div>
     );
 }
 
