@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, X, Upload, ArrowRight, Loader2, Plus, Eye, Download } from 'lucide-react';
-import { uploadFile, formatBytes, openDocument } from '../api/files';
+import { Check, X, Upload, ArrowRight, Loader2, Plus, Eye, Download, Link2, FolderInput } from 'lucide-react';
+import { uploadFile, listFiles, formatBytes, openDocument, parseFolderFromFileName } from '../api/files';
 import { isMockEnabled, getToken } from '../api/client';
 import * as deckApi from '../api/decks';
 import * as board from '../api/deckBoard';
@@ -30,13 +30,23 @@ function extBadge(name) {
 }
 
 const persistKey = (claimId) => `deckboard_${claimId}`;
+const filesKey = (claimId) => `deckfiles_${claimId}`;
+
+// O arquivo do processo, como o board precisa dele. O nome vem do servidor com o
+// prefixo de pasta que o upload embute ("causa__laudo.pdf"); quem lê a tela quer
+// o nome do documento.
+const toFileRef = (fv) => ({
+    fileVerId: fv.id || fv.ID,
+    nome: parseFolderFromFileName(fv.file_name || fv.fileName || '').name,
+    tamanho: fv.size_bytes ?? fv.sizeBytes,
+});
 
 /**
  * Kanban de Comprovação Documental (Decks de Arquivos).
  * A deck groups N files × N checklist tasks and moves Pendente → Enviado → Atendido.
  * Rendered as a view-mode inside ClaimDetails, scoped to a single process.
  */
-export default function KanbanBoard({ claim, currentUser, folderId }) {
+export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask }) {
     const [tabs, setTabs] = useState([]);       // [{ id, title, tasks: [{key,label}] }] — one per repository folder
     const [tab, setTab] = useState(folderId || null);
     const [state, setState] = useState(board.emptyBoard());
@@ -47,6 +57,10 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
     const [joinHint, setJoinHint] = useState(false);
     const [reviewId, setReviewId] = useState(null);
     const [busy, setBusy] = useState(false);
+    const [processFiles, setProcessFiles] = useState([]); // todo arquivo do processo, com deck ou sem
+    const [linking, setLinking] = useState(null);         // arquivo avulso escolhido para vincular
+    const [newTask, setNewTask] = useState('');           // rascunho do nome da tarefa avulsa
+    const [addingTask, setAddingTask] = useState(false);
     const [zipping, setZipping] = useState(null); // deckId whose archive is downloading
 
     // Drag state (discriminated by kind, per the handoff).
@@ -112,6 +126,30 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
         }
     }, [state, online, loading, claim.id]);
 
+    // ── Arquivos do processo ────────────────────────────────────────────────────
+    // O que sobra depois de tirar o que já está em algum deck é o avulso. Guardar
+    // uma lista própria de "soltos" seria uma segunda verdade sobre os mesmos
+    // arquivos, e as duas divergiriam no primeiro erro de rede.
+    useEffect(() => {
+        let cancelled = false;
+        if (online) {
+            listFiles(claim.id)
+                .then(res => { if (!cancelled) setProcessFiles((Array.isArray(res?.data) ? res.data : res || []).map(toFileRef)); })
+                .catch(() => { /* sem arquivo.listar o painel fica vazio, e é o correto */ });
+        } else {
+            let stored = null;
+            try { stored = JSON.parse(sessionStorage.getItem(filesKey(claim.id)) || 'null'); } catch { /* ignore */ }
+            if (!cancelled) setProcessFiles(Array.isArray(stored) ? stored : []);
+        }
+        return () => { cancelled = true; };
+    }, [claim.id, online]);
+
+    useEffect(() => {
+        if (!online && !loading) {
+            try { sessionStorage.setItem(filesKey(claim.id), JSON.stringify(processFiles)); } catch { /* ignore */ }
+        }
+    }, [processFiles, online, loading, claim.id]);
+
     // Changing tab clears the ephemeral selection and any open review modal.
     useEffect(() => { setSel({}); setReviewId(null); }, [tab]);
 
@@ -127,6 +165,15 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
     }, [state.decks]);
 
     const looseTasks = (activeTab?.tasks || []).filter(t => !inDeck.has(t.key));
+
+    // Arquivo avulso: está no processo e nenhum deck o referencia. Vale para o
+    // sinistro inteiro, não para a pasta aberta — quem sobe um documento antes de
+    // saber a que tarefa ele responde normalmente ainda não escolheu a pasta.
+    const looseFiles = useMemo(() => {
+        const used = new Set();
+        state.decks.forEach(d => { d.arquivos.forEach(f => { used.add(f.fileVerId); }); });
+        return processFiles.filter(f => f.fileVerId && !used.has(f.fileVerId));
+    }, [processFiles, state.decks]);
     const tabDecks = state.decks.filter(d => d.grupo === tab);
     const pendingDecks = tabDecks.filter(d => d.status === STATUS.PENDENTE);
     const sentDecks = tabDecks.filter(d => d.status === STATUS.ENVIADO);
@@ -223,6 +270,52 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
             );
         },
     });
+
+    // Subir sem tarefa nenhuma. O documento chega antes da conversa sobre a qual
+    // item ele responde — e obrigar a escolher agora faz a pessoa chutar, o que
+    // custa mais caro do que deixá-lo esperando aqui.
+    const openUploadLoose = () => setUpload({
+        title: 'Documentos avulsos',
+        note: 'Ficam guardados no sinistro sem comprovar nada até você vinculá-los a uma tarefa.',
+        onFiles: async (files) => {
+            const arquivos = await toRefs(files);
+            setProcessFiles(prev => [...prev, ...arquivos]);
+        },
+    });
+
+    // Vincular um avulso: a um deck que já existe, ou a uma tarefa ainda solta —
+    // aí o deck nasce com ele dentro.
+    const linkFileToDeck = (file, deckId) => {
+        setLinking(null);
+        run(
+            () => board.addFiles(state, deckId, [file]),
+            () => deckApi.addDeckFiles(claim.id, deckId, [file]),
+        );
+    };
+
+    const linkFileToTask = (file, taskKey) => {
+        setLinking(null);
+        run(
+            () => board.createDeck(state, { tarefaIds: [taskKey], arquivos: [file] }, actor),
+            () => deckApi.createDeck(claim.id, { tarefaIds: [taskKey], arquivos: [file] }),
+        );
+    };
+
+    // Tarefa que o checklist do tipo de sinistro não previu. Ela nasce solta em
+    // Pendente, na pasta aberta, e daí em diante é uma tarefa como as outras.
+    const submitNewTask = async () => {
+        const name = newTask.trim();
+        if (!name || !tab || addingTask) return;
+        setAddingTask(true);
+        try {
+            await onCreateTask(tab, name);
+            setNewTask('');
+        } catch (err) {
+            alert(err?.message || 'Não foi possível criar a tarefa.');
+        } finally {
+            setAddingTask(false);
+        }
+    };
 
     const attachSelectionTo = (deckId) => {
         const keys = Object.keys(sel);
@@ -395,6 +488,11 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
                 </div>
             </div>
 
+            {/* Documentos avulsos: no sinistro, fora de qualquer tarefa */}
+            {can('arquivo.subir') && (
+                <LoosePanel files={looseFiles} onUpload={openUploadLoose} onLink={setLinking} onView={viewFile} />
+            )}
+
             {/* Board: 3 columns (the active group is driven by the folder sidebar) */}
             <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-3">
                 {/* Pendente */}
@@ -431,6 +529,23 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
                     ))}
 
                     {pendingDecks.length === 0 && looseTasks.length === 0 && <Empty>Nada pendente por aqui.</Empty>}
+
+                    {/* Tarefa que o checklist do tipo não previu */}
+                    {onCreateTask && (
+                        <div className="flex items-center gap-2 rounded-[14px] border-[1.5px] border-dashed border-[#D7E0EC] bg-white p-[10px_11px]">
+                            <Plus size={14} className="shrink-0 text-slate-400" />
+                            <input value={newTask} onChange={(e) => setNewTask(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') submitNewTask(); if (e.key === 'Escape') setNewTask(''); }}
+                                placeholder="Pedir outro documento…" aria-label="Nova tarefa"
+                                className="min-w-0 flex-1 text-[12.5px] font-semibold text-slate-700 outline-none placeholder:font-medium placeholder:text-slate-400" />
+                            {newTask.trim() && (
+                                <button type="button" onClick={submitNewTask} disabled={addingTask}
+                                    style={{ background: TEAL_GRAD }} className="shrink-0 rounded-[9px] px-3 py-[7px] text-[11px] font-extrabold text-white disabled:opacity-50">
+                                    {addingTask ? '…' : 'Criar'}
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </Column>
 
                 {/* Enviado */}
@@ -463,7 +578,7 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
             {/* Modals */}
             <AnimatePresence>
                 {upload && (
-                    <UploadModal title={upload.title} busy={busy}
+                    <UploadModal title={upload.title} note={upload.note} busy={busy}
                         onClose={() => setUpload(null)}
                         onConfirm={async (files) => {
                             // Quem já juntou tarefas alguma vez não precisa da
@@ -479,9 +594,127 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
                         onView={viewFile} onClose={() => setReviewId(null)} onConfirm={(dev, motivo) => analyze(reviewDeck.id, dev, motivo)}
                         onDownloadAll={canDownloadArchive ? () => downloadArchive(reviewDeck) : null} downloading={zipping === reviewDeck.id} />
                 )}
+                {linking && (
+                    <LinkFileModal file={linking} decks={pendingDecks} tasks={looseTasks} labelFor={labelFor}
+                        onClose={() => setLinking(null)}
+                        onDeck={(deckId) => linkFileToDeck(linking, deckId)}
+                        onTask={(taskKey) => linkFileToTask(linking, taskKey)} />
+                )}
                 {joinHint && <JoinHintToast onClose={() => setJoinHint(false)} />}
             </AnimatePresence>
         </div>
+    );
+}
+
+// ── Documentos avulsos ──────────────────────────────────────────────────────────
+// O documento chega quando chega, e nem sempre com a tarefa junto: o segurado
+// manda uma foto no WhatsApp, o corretor encaminha o e-mail da oficina. Ter de
+// escolher a tarefa na hora do upload fazia a pessoa chutar uma — e um chute
+// dentro de um deck é mais caro de desfazer do que um arquivo esperando aqui.
+function LoosePanel({ files, onUpload, onLink, onView }) {
+    return (
+        <div data-testid="loose-panel" className="rounded-[18px] border border-[#E4EAF3] bg-white p-[14px_16px]">
+            <div className="flex flex-wrap items-center gap-3">
+                <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[10px] bg-[#F1F5F9] text-slate-500">
+                    <FolderInput size={16} />
+                </span>
+                <div className="flex-1">
+                    <p className="text-[12.5px] font-extrabold text-slate-800">Documentos avulsos</p>
+                    <p className="text-[11.5px] font-semibold text-slate-400">
+                        {files.length === 0
+                            ? 'Suba um documento agora e diga depois a qual tarefa ele responde.'
+                            : `${plural(files.length, 'documento à espera', 'documentos à espera')} de uma tarefa.`}
+                    </p>
+                </div>
+                <button type="button" onClick={onUpload} data-testid="loose-upload"
+                    className="rounded-[10px] border border-[#D7E0EC] bg-white px-[13px] py-[8px] text-[11.5px] font-extrabold text-slate-700 hover:border-[#12A08B] hover:text-[#0E8A78]">
+                    Enviar sem tarefa
+                </button>
+            </div>
+
+            {files.length > 0 && (
+                <div className="mt-3 space-y-1.5">
+                    {files.map(f => (
+                        <div key={f.fileVerId} data-testid={`loose-file-${f.fileVerId}`}
+                            className="flex items-center gap-2 rounded-[10px] border border-[#E4EBF6] bg-[#F7FAFF] p-[7px_9px]">
+                            <span className="flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-[9px] bg-white text-[8.5px] font-extrabold text-slate-600">{extBadge(f.nome)}</span>
+                            <span className="flex-1 truncate text-[12px] font-bold text-slate-700">{f.nome}</span>
+                            <span className="text-[10.5px] font-bold text-slate-400">{typeof f.tamanho === 'number' ? formatBytes(f.tamanho) : f.tamanho}</span>
+                            <button type="button" onClick={() => onView(f)} className="flex items-center gap-1 text-[11px] font-extrabold text-slate-400 hover:text-[#2563EB]">
+                                <Eye size={12} /> Ver
+                            </button>
+                            <button type="button" onClick={() => onLink(f)} className="flex items-center gap-1 text-[11px] font-extrabold text-[#2563EB] hover:underline">
+                                <Link2 size={12} /> Vincular
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// Onde o avulso vai parar: dentro de um deck que já existe, ou numa tarefa ainda
+// solta — e aí o deck nasce com ele. São as duas únicas coisas que se pode fazer
+// com um arquivo aqui, então a escolha é a tela inteira.
+function LinkFileModal({ file, decks, tasks, labelFor, onClose, onDeck, onTask }) {
+    const nada = decks.length === 0 && tasks.length === 0;
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}
+            onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,.42)] p-4 backdrop-blur-[3px]">
+            <motion.div initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.99 }}
+                transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }} onClick={(e) => e.stopPropagation()}
+                role="dialog" aria-label="Vincular documento avulso" data-testid="link-modal"
+                className="flex max-h-[80vh] w-full max-w-[520px] flex-col rounded-[20px] bg-white p-6 shadow-[0_40px_80px_-30px_rgba(15,23,42,.5)]">
+                <p className="text-[10px] font-extrabold tracking-[0.14em] text-slate-400 uppercase">Documento avulso</p>
+                <h3 className="mt-1 truncate text-[19px] font-extrabold text-slate-900">{file.nome}</h3>
+                <p className="mt-1 text-[12.5px] text-slate-500">Escolha o que este documento comprova.</p>
+
+                <div className="mt-4 overflow-y-auto">
+                    {nada && (
+                        <p className="rounded-[12px] border border-dashed border-[#D7E0EC] p-4 text-center text-[12px] font-semibold text-slate-400">
+                            Não há tarefa solta nem deck pendente nesta pasta. Troque de pasta na lateral ou crie a tarefa em Pendente.
+                        </p>
+                    )}
+
+                    {decks.length > 0 && (
+                        <>
+                            <p className="text-[9.5px] font-extrabold tracking-[0.12em] text-slate-400 uppercase">Juntar a um deck pendente</p>
+                            <div className="mt-1.5 space-y-1.5">
+                                {decks.map(d => (
+                                    <button key={d.id} type="button" onClick={() => onDeck(d.id)}
+                                        className="flex w-full items-center gap-2 rounded-[10px] border border-[#E4EBF6] bg-white p-[9px_11px] text-left hover:border-[#2563EB]">
+                                        <span className="rounded-lg bg-[#2563EB] px-[9px] py-[5px] text-[10px] font-extrabold uppercase tracking-wider text-white">{d.codigo}</span>
+                                        <span className="flex-1 truncate text-[12.5px] font-bold text-slate-700">{d.tarefaIds.map(labelFor).join(', ')}</span>
+                                        <ArrowRight size={14} className="text-slate-300" />
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
+                    {tasks.length > 0 && (
+                        <>
+                            <p className={`text-[9.5px] font-extrabold tracking-[0.12em] text-slate-400 uppercase ${decks.length > 0 ? 'mt-4' : ''}`}>Abrir um deck para a tarefa</p>
+                            <div className="mt-1.5 space-y-1.5">
+                                {tasks.map(t => (
+                                    <button key={t.key} type="button" onClick={() => onTask(t.key)}
+                                        className="flex w-full items-center gap-2 rounded-[10px] border border-[#E4EBF6] bg-white p-[9px_11px] text-left hover:border-[#12A08B]">
+                                        <span className="h-2 w-2 rounded-full bg-[#12A08B]" />
+                                        <span className="flex-1 truncate text-[12.5px] font-bold text-slate-700">{t.label}</span>
+                                        <ArrowRight size={14} className="text-slate-300" />
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                <div className="mt-5 flex justify-end border-t border-[#E9EEF5] pt-4">
+                    <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-xs font-extrabold text-slate-500 hover:bg-slate-100">Cancelar</button>
+                </div>
+            </motion.div>
+        </motion.div>
     );
 }
 
@@ -682,7 +915,7 @@ function DeckCard({ deck, accentOf, labelFor, taskReturns, role, hot, selCount =
 }
 
 // ── Upload modal ────────────────────────────────────────────────────────────────
-function UploadModal({ title, busy, onClose, onConfirm }) {
+function UploadModal({ title, note, busy, onClose, onConfirm }) {
     const [files, setFiles] = useState([]);
     const inputRef = useRef(null);
     const [working, setWorking] = useState(false);
@@ -702,7 +935,7 @@ function UploadModal({ title, busy, onClose, onConfirm }) {
                 className="w-full max-w-[520px] rounded-[20px] bg-white p-6 shadow-[0_40px_80px_-30px_rgba(15,23,42,.5)]">
                 <p className="text-[10px] font-extrabold tracking-[0.14em] text-slate-400 uppercase">Upload seguro</p>
                 <h3 className="mt-1 text-[19px] font-extrabold text-slate-900">{title}</h3>
-                <p className="mt-1 text-[12.5px] text-slate-500">O arquivo passa a comprovar esta tarefa. Depois você pode arrastar outras tarefas para o mesmo deck.</p>
+                <p className="mt-1 text-[12.5px] text-slate-500">{note || 'O arquivo passa a comprovar esta tarefa. Depois você pode arrastar outras tarefas para o mesmo deck.'}</p>
 
                 <div className="mt-4 rounded-[14px] border-[1.5px] border-dashed border-[#C9DDFF] bg-[#F7FAFF] p-[22px] text-center">
                     <input ref={inputRef} type="file" multiple hidden onChange={(e) => setFiles(Array.from(e.target.files || []))} />

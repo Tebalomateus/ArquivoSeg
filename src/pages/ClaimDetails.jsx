@@ -734,7 +734,8 @@ export default function ClaimDetails() {
                 {/* Content Area */}
                 <div className="lg:col-span-3 space-y-6">
                     {viewMode === 'decks' ? (
-                        <KanbanBoard claim={claim} currentUser={currentUser} folderId={currentFolderId} />
+                        <KanbanBoard claim={claim} currentUser={currentUser} folderId={currentFolderId}
+                            onCreateTask={canEditClaimMeta ? (fid, name) => addChecklistItem(claim.id, fid, name) : null} />
                     ) : viewMode === 'checklist' ? (
                         <ChecklistPanel claim={claim} />
                     ) : viewMode === 'interaction' ? (
