@@ -360,7 +360,7 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <p className="text-[10.5px] font-bold tracking-[0.14em] text-slate-400 uppercase">Checklist de comprovação</p>
-                    <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Board de Decks</h2>
+                    <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Relação de documentos</h2>
                 </div>
                 <div className="flex items-center gap-4">
                     {demoSwitch && (

@@ -503,7 +503,7 @@ export async function openBoard(page, { persona = 'contributor', mutate } = {}) 
     await signIn(page, persona, { token: 'e2e-token' });
     const state = await installDeckApi(page, mutate);
     await page.goto(`/app/sinistros/${PROCESS_ID}`);
-    await expect(page.getByRole('heading', { name: 'Board de Decks' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Relação de documentos' })).toBeVisible();
     return state;
 }
 
