@@ -19,9 +19,26 @@ function keyFrom(name) {
         .normalize('NFD')
         .replace(/[̀-ͯ]/g, '')
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '')
-        .slice(0, 40);
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^[^a-z]+/, '')
+        .replace(/-+$/, '')
+        .slice(0, 50);
+}
+
+// The server's slug rule, mirrored here so a bad key is caught before the round
+// trip instead of coming back as an opaque error.
+const KEY_PATTERN = /^[a-z][a-z0-9-]{0,49}$/;
+
+// Typing is sanitised, not slugified: trimming a trailing hyphen mid-keystroke
+// would make "regulador-senior" impossible to type by hand.
+function sanitizeKeyInput(value) {
+    return value
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^[^a-z]+/, '')
+        .slice(0, 50);
 }
 
 const EMPTY = { key: '', name: '', description: '', permissions: [] };
@@ -81,6 +98,16 @@ export default function AccessRoles() {
         const { role, form } = editor;
         if (!form.name.trim() || !form.key.trim()) {
             setEditor((s) => ({ ...s, error: { message: 'Nome e chave são obrigatórios.' } }));
+            return;
+        }
+        if (!role && !KEY_PATTERN.test(form.key)) {
+            setEditor((s) => ({
+                ...s,
+                error: {
+                    message:
+                        'A chave aceita apenas letras minúsculas, números e hifens, começando por uma letra. Ex.: regulador-senior',
+                },
+            }));
             return;
         }
         setEditor((s) => ({ ...s, saving: true, error: null }));
@@ -236,12 +263,12 @@ export default function AccessRoles() {
                                             setEditor((s) => ({
                                                 ...s,
                                                 keyTouched: true,
-                                                form: { ...s.form, key: e.target.value },
+                                                form: { ...s.form, key: sanitizeKeyInput(e.target.value) },
                                             }))
                                         }
                                         disabled={!!editor.role}
                                         className="mt-1 w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
-                                        placeholder="regulador_senior"
+                                        placeholder="regulador-senior"
                                     />
                                     {editor.role && (
                                         <span className="text-[10px] text-slate-400 mt-1 block">

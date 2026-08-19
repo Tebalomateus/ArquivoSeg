@@ -16,7 +16,7 @@ test('admin cria um papel, marca permissões e ele aparece na lista', async ({ p
 
     // A chave se deriva do nome enquanto ninguém a tocou — é o que poupa o admin
     // de digitar as duas coisas.
-    await expect(dialog.getByLabel('Chave')).toHaveValue('e2e_regulador');
+    await expect(dialog.getByLabel('Chave')).toHaveValue('e2e-regulador');
 
     await dialog.getByTestId('action-processo.listar').locator('input').check();
     await dialog.getByTestId('action-processo.ver').locator('input').check();
@@ -24,13 +24,13 @@ test('admin cria um papel, marca permissões e ele aparece na lista', async ({ p
 
     await dialog.getByRole('button', { name: 'Salvar' }).click();
 
-    const row = page.getByTestId('role-e2e_regulador');
+    const row = page.getByTestId('role-e2e-regulador');
     await expect(row).toBeVisible();
     await expect(row).toContainText('2 permissões');
 
     // O que o servidor guardou é a asserção que importa: a tela pode desenhar
     // qualquer coisa, o papel vale pelo que foi persistido.
-    const saved = state.roles.find((r) => r.key === 'e2e_regulador');
+    const saved = state.roles.find((r) => r.key === 'e2e-regulador');
     expect(saved.permissions.sort()).toEqual(['processo.listar', 'processo.ver']);
 });
 

@@ -52,7 +52,7 @@ export function initialState() {
         groups: [
             {
                 id: 'g-regulacao',
-                key: 'equipe_regulacao',
+                key: 'equipe-regulacao',
                 name: 'Equipe de Regulação',
                 description: 'Quem regula sinistros.',
                 role_ids: ['r-leitor'],
@@ -327,7 +327,7 @@ function handle(state, method, seg, params, body) {
             if (
                 isAdminUser(state, user.id) &&
                 adminCount(state) === 1 &&
-                addedDenies.some((g) => matches(g.action, 'iam.atribuir') || matches(g.action, 'iam.gerenciarPapeis'))
+                addedDenies.some((g) => matches(g.action, 'iam.usuario.atribuirPapel') || matches(g.action, 'iam.papel.criar'))
             ) {
                 return fail(409, 'LAST_ADMIN', 'Este é o último admin do tenant: o acesso de IAM não pode ser removido.');
             }

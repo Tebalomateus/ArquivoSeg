@@ -11,14 +11,31 @@ import {
 import { useClaims } from '../../../context/ClaimsContext';
 import { Spinner, ErrorNote, Empty, Modal, Chip } from './ui';
 
+// The key is the stable slug the API stores; the server accepts lowercase
+// letters, digits and hyphens only, so derive one that already fits.
 function keyFrom(name) {
     return name
         .normalize('NFD')
         .replace(/[̀-ͯ]/g, '')
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '')
-        .slice(0, 40);
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^[^a-z]+/, '')
+        .replace(/-+$/, '')
+        .slice(0, 50);
+}
+
+const KEY_PATTERN = /^[a-z][a-z0-9-]{0,49}$/;
+
+// Typing is sanitised, not slugified: trimming a trailing hyphen mid-keystroke
+// would make "equipe-regulacao" impossible to type by hand.
+function sanitizeKeyInput(value) {
+    return value
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^[^a-z]+/, '')
+        .slice(0, 50);
 }
 
 const EMPTY = { key: '', name: '', description: '', role_ids: [] };
@@ -92,6 +109,16 @@ export default function AccessGroups() {
         const { group, form } = editor;
         if (!form.name.trim() || !form.key.trim()) {
             setEditor((s) => ({ ...s, error: { message: 'Nome e chave são obrigatórios.' } }));
+            return;
+        }
+        if (!group && !KEY_PATTERN.test(form.key)) {
+            setEditor((s) => ({
+                ...s,
+                error: {
+                    message:
+                        'A chave aceita apenas letras minúsculas, números e hifens, começando por uma letra. Ex.: equipe-regulacao',
+                },
+            }));
             return;
         }
         setEditor((s) => ({ ...s, saving: true, error: null }));
@@ -272,12 +299,12 @@ export default function AccessGroups() {
                                             setEditor((s) => ({
                                                 ...s,
                                                 keyTouched: true,
-                                                form: { ...s.form, key: e.target.value },
+                                                form: { ...s.form, key: sanitizeKeyInput(e.target.value) },
                                             }))
                                         }
                                         disabled={!!editor.group}
                                         className="mt-1 w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
-                                        placeholder="equipe_regulacao"
+                                        placeholder="equipe-regulacao"
                                     />
                                 </label>
                             </div>
