@@ -68,7 +68,7 @@ test('o curinga aparece como curinga, não como a ação que ele expandiu', asyn
     await installIamApi(page, (s) => {
         s.roles.push({
             id: 'r-curinga',
-            key: 'e2e_curinga',
+            key: 'e2e-curinga',
             name: 'Curinga de processos',
             description: '',
             is_system: false,

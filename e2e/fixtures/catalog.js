@@ -9,7 +9,12 @@
  */
 export const CATALOG = [
     {
-        group: 'processo',
+        // `group` is the human label the API sends and `prefix` is the action
+        // namespace. They are deliberately different here: the fixture used to
+        // set both to the namespace, which let a bug ship where the UI built
+        // wildcards out of the label and the API rejected them.
+        group: 'Processos',
+        prefix: 'processo',
         actions: [
             { name: 'processo.listar', label: 'Listar sinistros', description: 'Ver a lista de sinistros do tenant.' },
             { name: 'processo.ver', label: 'Ver sinistro', description: 'Abrir um sinistro e seus dados.' },
@@ -19,7 +24,8 @@ export const CATALOG = [
         ],
     },
     {
-        group: 'arquivo',
+        group: 'Documentos',
+        prefix: 'arquivo',
         actions: [
             { name: 'arquivo.listar', label: 'Listar arquivos', description: 'Ver os documentos de um sinistro.' },
             { name: 'arquivo.subir', label: 'Subir arquivo', description: 'Anexar documentos a um sinistro.' },
@@ -27,19 +33,25 @@ export const CATALOG = [
         ],
     },
     {
-        group: 'auditoria',
+        group: 'Auditoria',
+        prefix: 'auditoria',
         actions: [
             { name: 'auditoria.listar', label: 'Listar auditoria', description: 'Ler a trilha de auditoria do tenant.' },
             { name: 'auditoria.ver', label: 'Ver evento', description: 'Abrir um evento de auditoria.' },
         ],
     },
     {
-        group: 'iam',
+        group: 'Acessos',
+        prefix: 'iam',
         actions: [
-            { name: 'iam.listarPapeis', label: 'Listar papéis', description: 'Ver os papéis do tenant.' },
-            { name: 'iam.gerenciarPapeis', label: 'Gerenciar papéis', description: 'Criar, editar e excluir papéis.' },
-            { name: 'iam.gerenciarGrupos', label: 'Gerenciar grupos', description: 'Criar, editar e excluir grupos.' },
-            { name: 'iam.atribuir', label: 'Atribuir acessos', description: 'Dar e tirar papéis e permissões de pessoas.' },
+            { name: 'iam.papel.listar', label: 'Listar papéis', description: 'Ver os papéis do tenant.' },
+            { name: 'iam.papel.criar', label: 'Criar papel', description: 'Criar um papel e escolher as permissões.' },
+            { name: 'iam.grupo.criar', label: 'Criar grupo', description: 'Criar um grupo que reúne papéis.' },
+            {
+                name: 'iam.usuario.atribuirPapel',
+                label: 'Atribuir papéis a um usuário',
+                description: 'Definir quais papéis um usuário possui diretamente.',
+            },
         ],
     },
 ];
