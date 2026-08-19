@@ -12,6 +12,13 @@ export function createDeck(processId, { tarefaIds, arquivos }) {
     return api.post(`/api/v1/processes/${processId}/decks`, { tarefaIds, arquivos });
 }
 
+// The server assembles the zip while it sends it — nothing is stored packed, so
+// there is no "prepare" step to poll and the archive always reflects the deck as
+// it is right now.
+export function downloadDeckArchive(processId, deckId) {
+    return api.download(`/api/v1/processes/${processId}/decks/${deckId}/arquivos.zip`);
+}
+
 export function addDeckFiles(processId, deckId, arquivos) {
     return api.post(`/api/v1/processes/${processId}/decks/${deckId}/arquivos`, { arquivos });
 }

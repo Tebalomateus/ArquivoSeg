@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, X, Upload, ArrowRight, Loader2, Plus, Eye } from 'lucide-react';
+import { Check, X, Upload, ArrowRight, Loader2, Plus, Eye, Download } from 'lucide-react';
 import { uploadFile, formatBytes, openDocument } from '../api/files';
 import { isMockEnabled, getToken } from '../api/client';
 import * as deckApi from '../api/decks';
@@ -46,6 +46,7 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
     const [upload, setUpload] = useState(null); // { title, onFiles }
     const [reviewId, setReviewId] = useState(null);
     const [busy, setBusy] = useState(false);
+    const [zipping, setZipping] = useState(null); // deckId whose archive is downloading
 
     // Drag state (discriminated by kind, per the handoff).
     const drag = useRef({ kind: null, id: null });
@@ -257,6 +258,36 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
         alert('Pré-visualização indisponível para este arquivo (envie novamente nesta sessão ou use o backend real).');
     }, [online]);
 
+    // Baixar o deck inteiro. O servidor monta o zip enquanto responde — não há
+    // "preparando o arquivo" para esperar nem nada empacotado guardado no S3, o
+    // que também significa que o que chega é o deck como ele está agora.
+    //
+    // O <a download> tem de ser criado aqui porque a rota exige o Bearer: um href
+    // direto sai sem cabeçalho nenhum e volta 401.
+    const canDownloadArchive = online && can('deck.baixarArquivos');
+
+    const downloadArchive = useCallback(async (deck) => {
+        if (!online || zipping) return;
+        setZipping(deck.id);
+        try {
+            const { blob, fileName } = await deckApi.downloadDeckArchive(claim.id, deck.id);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName || `${deck.codigo || 'deck'}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            // Revogar no próximo tick: revogar em seguida ao click chega a vencer
+            // o download em alguns navegadores, e o arquivo sai vazio.
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+        } catch (err) {
+            alert(`Falha ao baixar os arquivos do deck: ${err?.message || err}`);
+        } finally {
+            setZipping(null);
+        }
+    }, [claim.id, online, zipping]);
+
     const analyze = (deckId, devolvidas, motivo) => {
         run(
             () => board.analyzeDeck(state, deckId, devolvidas, motivo, actor),
@@ -383,7 +414,8 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
                             onDragOver={(e) => onDeckDragOver(e, d.id)} onDrop={(e) => onDeckDrop(e, d.id)}
                             onAddFile={() => openUploadForDeck(d.id)} onSubmit={() => submit(d.id)}
                             onDetach={(k) => detachTask(d.id, k)} onRemoveFile={(f) => removeFile(d.id, f)}
-                            onJoinSelection={() => attachSelectionTo(d.id)} />
+                            onJoinSelection={() => attachSelectionTo(d.id)}
+                            onDownloadAll={canDownloadArchive ? () => downloadArchive(d) : null} downloading={zipping === d.id} />
                     ))}
 
                     {looseTasks.map(t => (
@@ -405,7 +437,8 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
                     )}
                     {sentDecks.map(d => (
                         <DeckCard key={d.id} deck={d} accentOf={grupoAccent(tabs, d.grupo)} labelFor={labelFor} taskReturns={state.taskReturns}
-                            role={isAnalyst ? 'analista' : 'perito'} onAnalyze={() => setReviewId(d.id)} />
+                            role={isAnalyst ? 'analista' : 'perito'} onAnalyze={() => setReviewId(d.id)}
+                            onDownloadAll={canDownloadArchive ? () => downloadArchive(d) : null} downloading={zipping === d.id} />
                     ))}
                     {sentDecks.length === 0 && <Empty>Nenhum deck em análise.<br />Envie um deck da coluna pendente.</Empty>}
                 </Column>
@@ -414,7 +447,8 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
                 <Column title="Atendido" dot="#16A34A" count={doneDecks.length}
                     onDragOver={(e) => { if (drag.current.kind) e.preventDefault(); }} onDrop={endDrag}>
                     {doneDecks.map(d => (
-                        <DeckCard key={d.id} deck={d} accentOf={grupoAccent(tabs, d.grupo)} labelFor={labelFor} taskReturns={state.taskReturns} role="done" />
+                        <DeckCard key={d.id} deck={d} accentOf={grupoAccent(tabs, d.grupo)} labelFor={labelFor} taskReturns={state.taskReturns} role="done"
+                            onDownloadAll={canDownloadArchive ? () => downloadArchive(d) : null} downloading={zipping === d.id} />
                     ))}
                     {doneDecks.length === 0 && <Empty>Decks aprovados pelo analista aparecem aqui.</Empty>}
                 </Column>
@@ -429,7 +463,8 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
                 )}
                 {reviewDeck && (
                     <AnalysisModal deck={reviewDeck} labelFor={labelFor} accentOf={grupoAccent(tabs, reviewDeck.grupo)}
-                        onView={viewFile} onClose={() => setReviewId(null)} onConfirm={(dev, motivo) => analyze(reviewDeck.id, dev, motivo)} />
+                        onView={viewFile} onClose={() => setReviewId(null)} onConfirm={(dev, motivo) => analyze(reviewDeck.id, dev, motivo)}
+                        onDownloadAll={canDownloadArchive ? () => downloadArchive(reviewDeck) : null} downloading={zipping === reviewDeck.id} />
                 )}
             </AnimatePresence>
         </div>
@@ -445,7 +480,7 @@ function grupoAccent(tabs, grupoId) {
 // ── Column ──────────────────────────────────────────────────────────────────────
 function Column({ title, dot, count, children, hot, ...dnd }) {
     return (
-        <div {...dnd} className={`flex flex-col gap-3 rounded-[18px] border bg-[#EEF2F8] p-[14px] min-h-[520px] ${hot ? 'border-[#2563EB]' : 'border-[#E4EAF3]'}`}>
+        <div {...dnd} data-testid={`column-${title.toLowerCase()}`} className={`flex flex-col gap-3 rounded-[18px] border bg-[#EEF2F8] p-[14px] min-h-[520px] ${hot ? 'border-[#2563EB]' : 'border-[#E4EAF3]'}`}>
             <div className="flex items-center gap-2">
                 <span className="h-[9px] w-[9px] rounded-full" style={{ background: dot }} />
                 <span className="text-[11.5px] font-extrabold tracking-[0.12em] text-slate-600 uppercase">{title}</span>
@@ -463,7 +498,7 @@ function Empty({ children }) {
 // ── Task card ─────────────────────────────────────────────────────────────────
 function TaskCard({ task, accent, selected, devolucao, onToggle, onClick, onDragStart, onDragEnd }) {
     return (
-        <div draggable onDragStart={onDragStart} onDragEnd={onDragEnd} onClick={onClick}
+        <div draggable onDragStart={onDragStart} onDragEnd={onDragEnd} onClick={onClick} data-testid={`task-${task.key}`}
             className={`cursor-grab rounded-[14px] border-[1.5px] bg-white p-[12px_13px] shadow-[0_1px_2px_rgba(15,23,42,.04)] transition-all hover:-translate-y-px ${selected ? 'border-[#12A08B] shadow-[0_10px_22px_-16px_rgba(18,160,139,.9)]' : 'border-[#E9EEF5] hover:border-[#B9CDF3]'}`}>
             <div className="flex items-center gap-2">
                 <button onClick={(e) => { e.stopPropagation(); onToggle(); }} aria-label={selected ? 'Desmarcar tarefa' : 'Selecionar tarefa'}
@@ -488,14 +523,15 @@ function TaskCard({ task, accent, selected, devolucao, onToggle, onClick, onDrag
 
 // ── Deck card ─────────────────────────────────────────────────────────────────
 function DeckCard({ deck, accentOf, labelFor, taskReturns, role, hot, selCount = 0,
-    onDragStart, onDragEnd, onDragOver, onDrop, onAddFile, onSubmit, onDetach, onRemoveFile, onJoinSelection, onAnalyze }) {
+    onDragStart, onDragEnd, onDragOver, onDrop, onAddFile, onSubmit, onDetach, onRemoveFile, onJoinSelection, onAnalyze,
+    onDownloadAll, downloading }) {
     const done = deck.status === STATUS.ATENDIDO;
     const sent = deck.status === STATUS.ENVIADO;
     const draggable = deck.status === STATUS.PENDENTE;
     const badgeBg = done ? '#16A34A' : '#2563EB';
     return (
         <div draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragOver={onDragOver} onDrop={onDrop}
-            className="relative mt-[9px]">
+            data-testid={`deck-${deck.codigo}`} className="relative mt-[9px]">
             {/* stacked "sheet" behind the card */}
             <span className="pointer-events-none absolute left-[10px] right-[10px] top-[-7px] z-0 h-[14px] rounded-t-[14px] border-[1.5px] border-b-0"
                 style={{ background: done ? '#D6EEDE' : '#fff', borderColor: done ? '#BFE9CE' : '#DCE7F9' }} />
@@ -535,7 +571,16 @@ function DeckCard({ deck, accentOf, labelFor, taskReturns, role, hot, selCount =
                 {/* files */}
                 {deck.arquivos.length > 0 && (
                     <>
-                        <p className="mt-3 text-[9.5px] font-extrabold tracking-[0.12em] text-slate-400 uppercase">Arquivos do deck</p>
+                        <div className="mt-3 flex items-center gap-2">
+                            <p className="text-[9.5px] font-extrabold tracking-[0.12em] text-slate-400 uppercase">Arquivos do deck</p>
+                            {onDownloadAll && (
+                                <button type="button" onClick={onDownloadAll} disabled={downloading}
+                                    className="ml-auto flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-[#2563EB] hover:underline disabled:text-slate-300 disabled:no-underline">
+                                    {downloading ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                                    {downloading ? 'Baixando' : 'Baixar todos'}
+                                </button>
+                            )}
+                        </div>
                         <div className="mt-1.5 space-y-1.5">
                             {deck.arquivos.map(f => (
                                 <div key={f.fileVerId} className="flex items-center gap-2 rounded-[10px] border border-[#E4EBF6] bg-white p-[7px_9px]">
@@ -605,6 +650,7 @@ function UploadModal({ title, busy, onClose, onConfirm }) {
             onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,.42)] p-4 backdrop-blur-[3px]">
             <motion.div initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.99 }}
                 transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }} onClick={(e) => e.stopPropagation()}
+                role="dialog" aria-label="Upload de arquivos do deck" data-testid="upload-modal"
                 className="w-full max-w-[520px] rounded-[20px] bg-white p-6 shadow-[0_40px_80px_-30px_rgba(15,23,42,.5)]">
                 <p className="text-[10px] font-extrabold tracking-[0.14em] text-slate-400 uppercase">Upload seguro</p>
                 <h3 className="mt-1 text-[19px] font-extrabold text-slate-900">{title}</h3>
@@ -641,7 +687,7 @@ function UploadModal({ title, busy, onClose, onConfirm }) {
 }
 
 // ── Analysis modal ──────────────────────────────────────────────────────────────
-function AnalysisModal({ deck, labelFor, accentOf, onView, onClose, onConfirm }) {
+function AnalysisModal({ deck, labelFor, accentOf, onView, onClose, onConfirm, onDownloadAll, downloading }) {
     const [returns, setReturns] = useState({}); // key -> true (devolver)
     const [note, setNote] = useState('');
     const devolvidas = Object.keys(returns).filter(k => returns[k]);
@@ -661,6 +707,7 @@ function AnalysisModal({ deck, labelFor, accentOf, onView, onClose, onConfirm })
             onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,.42)] p-4 backdrop-blur-[3px]">
             <motion.div initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.99 }}
                 transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }} onClick={(e) => e.stopPropagation()}
+                role="dialog" aria-label="Análise do deck" data-testid="analysis-modal"
                 className="flex max-h-[88vh] w-full max-w-[620px] flex-col rounded-[20px] bg-white p-6 shadow-[0_40px_80px_-30px_rgba(15,23,42,.5)]">
                 <div className="flex items-center gap-2">
                     <p className="text-[10px] font-extrabold tracking-[0.14em] text-slate-400 uppercase">Análise do deck</p>
@@ -671,7 +718,16 @@ function AnalysisModal({ deck, labelFor, accentOf, onView, onClose, onConfirm })
                 <div className="mt-4 overflow-y-auto">
                     {deck.arquivos.length > 0 && (
                         <>
-                            <p className="text-[9.5px] font-extrabold tracking-[0.12em] text-slate-400 uppercase">Arquivos anexados</p>
+                            <div className="flex items-center gap-2">
+                                <p className="text-[9.5px] font-extrabold tracking-[0.12em] text-slate-400 uppercase">Arquivos anexados</p>
+                                {onDownloadAll && (
+                                    <button type="button" onClick={onDownloadAll} disabled={downloading}
+                                        className="ml-auto flex items-center gap-1.5 rounded-[9px] border border-[#C9DDFF] bg-[#EAF1FE] px-[11px] py-[6px] text-[11px] font-extrabold text-[#2563EB] hover:border-[#2563EB] disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400">
+                                        {downloading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                                        {downloading ? 'Preparando o download…' : 'Baixar todos os arquivos'}
+                                    </button>
+                                )}
+                            </div>
                             <div className="mt-1.5 space-y-1.5">
                                 {deck.arquivos.map(f => (
                                     <div key={f.fileVerId} className="flex items-center gap-2 rounded-[10px] border border-[#E4EBF6] bg-white p-[7px_9px]">

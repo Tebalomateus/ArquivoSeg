@@ -19,6 +19,7 @@ const ANALISTA = [
     'checklist.listarTipos',
     'checklist.verDefinicao',
     'deck.listar',
+    'deck.baixarArquivos',
     'compartilhamento.acessarInterno',
     'cliente.listar',
     'cliente.ver',
