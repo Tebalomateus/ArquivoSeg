@@ -60,8 +60,12 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
     // flag-gated and still simulates the two sides of that permission.
     const canAnalyse = can('deck.analisar');
     const demoSwitch = import.meta.env.VITE_DEMO_ROLE_SWITCH === 'true';
-    const [demoRole, setDemoRole] = useState(canAnalyse ? 'analista' : 'perito');
-    const isAnalyst = demoSwitch ? demoRole === 'analista' : canAnalyse;
+    // null = ninguém tocou no interruptor, então ele segue a permissão. Guardar
+    // canAnalyse no estado inicial congelava o lado errado: as permissões chegam
+    // por HTTP, e na primeira renderização elas ainda não chegaram.
+    const [demoRole, setDemoRole] = useState(null);
+    const effectiveDemoRole = demoRole ?? (canAnalyse ? 'analista' : 'perito');
+    const isAnalyst = demoSwitch ? effectiveDemoRole === 'analista' : canAnalyse;
 
     // ── Groups = repository folders (driven by the left sidebar in ClaimDetails).
     // One group per folder; tasks come from that folder's checklist.
@@ -332,7 +336,7 @@ export default function KanbanBoard({ claim, currentUser, folderId }) {
                         <div className="flex rounded-xl border border-[#E9EEF5] bg-[#F4F7FB] p-1">
                             {['perito', 'analista'].map(rl => (
                                 <button key={rl} onClick={() => setDemoRole(rl)}
-                                    className={`rounded-[9px] px-3 py-2 text-[10px] font-extrabold uppercase tracking-wider transition-all ${demoRole === rl ? 'bg-white text-[#0E8A78] shadow' : 'text-slate-400'}`}>
+                                    className={`rounded-[9px] px-3 py-2 text-[10px] font-extrabold uppercase tracking-wider transition-all ${effectiveDemoRole === rl ? 'bg-white text-[#0E8A78] shadow' : 'text-slate-400'}`}>
                                     {rl}
                                 </button>
                             ))}
