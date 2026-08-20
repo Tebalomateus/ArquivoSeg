@@ -283,6 +283,10 @@ export default function NewClaim() {
     // Antes da primeira tentativa, campo vazio não é erro — é campo que ainda
     // não chegou a vez. Depois dela, o formulário confere a cada tecla.
     const [tentou, setTentou] = useState(false);
+    // A recusa do servidor, que não é erro de campo: nada aqui está errado, o
+    // gravar é que não foi.
+    const [erroAoSalvar, setErroAoSalvar] = useState(null);
+    const [salvando, setSalvando] = useState(false);
     const primeiroSemNome = checklist.findIndex(item => !item.name.trim());
     const erroDe = (campo) => (tentou || !faltando.has(campo) ? erros[campo] : undefined);
 
@@ -320,8 +324,9 @@ export default function NewClaim() {
         setChecklist(checklist.filter(item => item.id !== id));
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         setTentou(true);
+        setErroAoSalvar(null);
         const primeiro = Object.keys(erros)[0];
         if (primeiro) {
             // Levar até o campo em vez de descrever o problema numa caixa que
@@ -331,26 +336,39 @@ export default function NewClaim() {
             return;
         }
 
-        const newClaimId = addClaim({
-            number: claimNumber,
-            title: title || `Sinistro ${claimNumber}`,
-            insurer: effectiveInsurer,
-            insuredName,
-            policyNumber,
-            policyStartDate,
-            policyEndDate,
-            retroactiveDate,
-            modality: effectiveModality,
-            brokerName,
-            brokerClaimId,
-            adjusterName,
-            adjusterClaimId,
-            occurrenceDate,
-            occurrenceLocation,
-            description,
-            initialChecklist: checklist,
-            claimType: claimType || null,
-        });
+        // addClaim é assíncrono — sem o await o id vira uma promessa, a URL vira
+        // /sinistros/[object Promise] e a pessoa chega no sinistro que acabou de
+        // criar para ler "Sinistro não encontrado".
+        setSalvando(true);
+        let newClaimId;
+        try {
+            newClaimId = await addClaim({
+                number: claimNumber,
+                title: title || `Sinistro ${claimNumber}`,
+                insurer: effectiveInsurer,
+                insuredName,
+                policyNumber,
+                policyStartDate,
+                policyEndDate,
+                retroactiveDate,
+                modality: effectiveModality,
+                brokerName,
+                brokerClaimId,
+                adjusterName,
+                adjusterClaimId,
+                occurrenceDate,
+                occurrenceLocation,
+                description,
+                initialChecklist: checklist,
+                claimType: claimType || null,
+            });
+        } catch (e) {
+            // Nada foi criado, e o formulário continua de pé com tudo dentro:
+            // mandar para a lista aqui perderia o que a pessoa digitou.
+            setErroAoSalvar(e?.message || 'Não foi possível criar o sinistro. Tente de novo.');
+            setSalvando(false);
+            return;
+        }
 
         // Relativo funciona sob /app e /admin — mas contra a rota, não contra a
         // URL: "sinistros/novo" é um segmento só, então ".." é /app.
@@ -826,6 +844,13 @@ export default function NewClaim() {
                 </div>
             )}
 
+            {erroAoSalvar && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3" role="alert">
+                    <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-600" />
+                    <p className="text-sm font-bold text-red-700">{erroAoSalvar}</p>
+                </div>
+            )}
+
             {/* Actions */}
             <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
                 <button
@@ -834,12 +859,16 @@ export default function NewClaim() {
                 >
                     Cancelar
                 </button>
+                {/* Travado só enquanto grava, para não criar dois sinistros com o
+                    mesmo número num clique duplo. Fora disso ele fica clicável de
+                    propósito, porque desabilitado não conta o que falta. */}
                 <button
-                    className="bg-blue-600 text-white px-12 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center gap-2"
+                    className="bg-blue-600 text-white px-12 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center gap-2 disabled:opacity-60"
                     onClick={handleSave}
+                    disabled={salvando}
                 >
                     <Save size={18} />
-                    Criar Sinistro
+                    {salvando ? 'Criando…' : 'Criar Sinistro'}
                 </button>
             </div>
         </div>
