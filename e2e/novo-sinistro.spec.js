@@ -18,11 +18,8 @@ import { signIn } from './fixtures/session.js';
  */
 
 const abrir = async (page) => {
-    // Pelo botão, e não pela URL: o gate de processo.criar decide antes de as
-    // permissões chegarem, e um deep-link volta para a lista.
     await signIn(page, 'contributor');
-    await page.goto('/app/sinistros');
-    await page.getByRole('link', { name: 'Novo Sinistro' }).click();
+    await page.goto('/app/sinistros/novo');
     await expect(page.getByRole('heading', { name: 'Abrir Novo Sinistro' })).toBeVisible();
 };
 

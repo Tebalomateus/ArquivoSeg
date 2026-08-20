@@ -70,6 +70,14 @@ export function PermissionsProvider({ children }) {
     // "this is someone else's".
     const [accountId, setAccountId] = useState(cached?.accountId ?? null);
     const [loading, setLoading] = useState(false);
+    // Se já houve uma resposta — qualquer uma — para *este* usuário.
+    //
+    // `permissions` começa vazio, e vazio é indistinguível de "ainda não
+    // perguntei". Um portão de rota que chama can() no primeiro render lê esse
+    // vazio como "não pode" e redireciona antes de a API responder: era por isso
+    // que recarregar a página do formulário de novo sinistro devolvia a pessoa
+    // para a lista. Um cache da sessão já é uma resposta e vale de largada.
+    const [ready, setReady] = useState(() => Boolean(cached && cached.userId === currentUser?.id));
 
     // No backend to ask: the demo personas carry their own set. Not cached —
     // it is derived, and caching it would only create a second copy to expire.
@@ -78,6 +86,7 @@ export function PermissionsProvider({ children }) {
         setPolicyVersion(null);
         setAccountId(user?.id ?? null);
         setSource(SOURCE_MOCK);
+        setReady(true);
         clearPermissionsCache();
     }, []);
 
@@ -112,6 +121,11 @@ export function PermissionsProvider({ children }) {
             setSource(SOURCE_NONE);
         } finally {
             setLoading(false);
+            // Também depois de falhar. "Perguntei e não veio" é uma resposta: o
+            // portão precisa decidir alguma coisa, e o que este arquivo garante
+            // é que a falha não concede nada — então ele nega, que é o lado
+            // seguro. Ficar girando para sempre seria pior do que negar.
+            setReady(true);
         }
     }, [currentUser, applyMock]);
 
@@ -120,6 +134,9 @@ export function PermissionsProvider({ children }) {
             setPermissions(new Set());
             setPolicyVersion(null);
             setSource(SOURCE_NONE);
+            // Sair zera a espera: o próximo a entrar não herda o "já respondido"
+            // de quem saiu. Toda troca de pessoa passa por aqui.
+            setReady(false);
             clearPermissionsCache();
             return;
         }
@@ -137,8 +154,8 @@ export function PermissionsProvider({ children }) {
         // anti-lockout guarantee: a mistake in the tenant's own IAM data must
         // never shut the admin out of the screen that fixes it.
         const can = (action) => isAdmin || permissions.has(action);
-        return { permissions, isAdmin, accountId, policyVersion, source, loading, can, refresh };
-    }, [permissions, isAdmin, accountId, policyVersion, source, loading, refresh]);
+        return { permissions, isAdmin, accountId, policyVersion, source, loading, ready, can, refresh };
+    }, [permissions, isAdmin, accountId, policyVersion, source, loading, ready, refresh]);
 
     return <PermissionsContext.Provider value={value}>{children}</PermissionsContext.Provider>;
 }

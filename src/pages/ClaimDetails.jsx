@@ -532,7 +532,10 @@ export default function ClaimDetails() {
             {/* Top Header */}
             <div className="flex flex-col lg:flex-row gap-6 justify-between items-start">
                 <div className="space-y-1">
-                    <Link to=".." className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 hover:text-blue-600 transition-all mb-2 tracking-widest">
+                    {/* "sinistros/:id" é um segmento de rota só: ".." sobe para o
+                        portal e o link dizia "Lista de Sinistros" levando ao
+                        dashboard. Relativo continua valendo sob /app e /admin. */}
+                    <Link to="../sinistros" className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 hover:text-blue-600 transition-all mb-2 tracking-widest">
                         <ArrowLeft size={16} />
                         Lista de Sinistros
                     </Link>

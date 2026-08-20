@@ -4,6 +4,7 @@ import { ArrowRight, KeyRound, Lock, Mail, ShieldCheck, X } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { INITIAL_USERS } from '../constants/initialData';
 import { isMockEnabled } from '../api/client';
+import { takeDestination } from '../api/auth';
 import { zitadel } from '../api/zitadel';
 
 export default function Login() {
@@ -29,7 +30,10 @@ export default function Login() {
             }
             setCurrentUser({ ...user, isAdmin: user.role === 'ADMIN' });
             localStorage.setItem('arquivoseg_authenticated', 'true');
-            navigate('/');
+            // De volta para onde a pessoa ia. Sem isso o link que ela abriu se
+            // perde no login e ela reaparece no dashboard, tendo que procurar
+            // de novo o que já tinha achado. "/" resolve o portal certo.
+            navigate(takeDestination() || '/', { replace: true });
             setIsLoading(false);
         }, 600);
     };
