@@ -234,7 +234,16 @@ export default function Login() {
                                 <li>Clique no botão abaixo para ir à tela de login.</li>
                                 <li>Clique em <strong>"Forgot password?"</strong>, já disponível ali.</li>
                                 <li>Siga as instruções enviadas para o seu email corporativo.</li>
+                                <li>Ao terminar, volte para <strong>www.arquivoseg.com.br</strong> e entre por aqui.</li>
                             </ol>
+                            {/* O passo 4 não é zelo: o link do e-mail abre o Zitadel sem o
+                                pedido de autenticação que amarra a volta, então ao terminar
+                                ele solta a pessoa numa tela dele — e ela lê aquilo como o
+                                ArquivoSeg tendo quebrado. Dizer para onde voltar é o que
+                                este app pode fazer daqui; o resto é configuração do Zitadel. */}
+                            <p className="text-xs text-slate-500 leading-relaxed bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
+                                Se ao final você parar numa tela do <strong>Zitadel</strong> em vez do ArquivoSeg, não é erro seu nem perda da senha nova: é só voltar para <strong>www.arquivoseg.com.br</strong>.
+                            </p>
                             <button
                                 type="button"
                                 onClick={() => { setForgotOpen(false); handleZitadelLogin(); }}
