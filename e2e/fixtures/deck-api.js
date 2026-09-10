@@ -46,6 +46,7 @@ export const DEFAULT_PERMISSIONS = [
     'deck.enviar',
     'deck.analisar',
     'deck.baixarArquivos',
+    'compartilhamento.criar',
 ];
 
 const STATUS = { PENDENTE: 'pendente', ENVIADO: 'enviado', ATENDIDO: 'atendido' };
@@ -87,6 +88,8 @@ export function initialState() {
         },
         // file_versions, as the upload handler returns them.
         files: [],
+        // share_tokens, como POST /files/:id/shares devolve.
+        shares: [],
         board: { decks: [], seq: 0, taskStatus: {}, taskReturns: {} },
         // Injeções de falha: o caminho de erro do download só existe como
         // resposta do servidor, não há como provocá-lo pela interface.
@@ -321,6 +324,33 @@ function handle(state, method, seg, body) {
                 policy_version: state.nextId,
             },
         });
+    }
+
+    // Um arquivo por vez, fora do deck: o download pede a URL assinada em JSON
+    // (o front não segue o 302 — ver api/files.js) e o compartilhamento cria um
+    // token. A "URL assinada" é uma data URL com os bytes: o <a download> que o
+    // front cria navega por fora da interceptação do Playwright, então não há
+    // como servi-la por page.route.
+    if (a === 'files' && b && c === 'download' && method === 'GET') {
+        const fv = state.files.find((x) => x.id === b);
+        if (!fv) return fail(404, 'FILE_NOT_FOUND', 'file not found');
+        return ok({ url: `data:${fv.mime_type || 'application/octet-stream'};base64,${fv.content.toString('base64')}` });
+    }
+    if (a === 'files' && b && c === 'shares' && method === 'POST') {
+        const fv = state.files.find((x) => x.id === b);
+        if (!fv) return fail(404, 'FILE_NOT_FOUND', 'file not found');
+        const st = {
+            id: `share-${state.nextId++}`,
+            token: `tok-${fv.id}-${state.nextId++}`,
+            file_ver_id: fv.id,
+            label: body?.label ?? null,
+            expires_at: body?.expires_at ?? null,
+            revoked: false,
+            created_by: ACCOUNT_ID,
+            created_at: now(),
+        };
+        state.shares.push(st);
+        return { status: 201, body: st };
     }
 
     if (a !== 'processes') return null;
