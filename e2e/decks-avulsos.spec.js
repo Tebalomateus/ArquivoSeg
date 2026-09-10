@@ -14,7 +14,16 @@ import { openBoard, seedDeck, TASK } from './fixtures/deck-api.js';
 
 const pdf = (name, body) => ({ name, mimeType: 'application/pdf', buffer: Buffer.from(body) });
 
+// Os avulsos têm aba própria na lateral do repositório, sem kanban: é uma lista
+// do que está no sinistro sem comprovar nada, com o vincular ao lado.
+async function abrirAvulsos(page) {
+    await page.getByTestId('folder-avulsos').click();
+    await expect(page.getByTestId('loose-panel')).toBeVisible();
+    await expect(page.getByTestId('column-pendente')).toHaveCount(0);
+}
+
 async function enviarAvulso(page, file) {
+    await abrirAvulsos(page);
     await page.getByTestId('loose-upload').click();
     const modal = page.getByTestId('upload-modal');
     await modal.locator('input[type=file]').setInputFiles(file);
@@ -27,8 +36,10 @@ test('o documento sem tarefa fica esperando no painel de avulsos', async ({ page
 
     await enviarAvulso(page, pdf('foto-do-veiculo.pdf', 'foto'));
 
-    // O arquivo está no processo — só não comprova nada ainda.
+    // O arquivo está no processo — só não comprova nada ainda. A lateral conta.
     await expect(page.getByTestId('loose-panel')).toContainText('foto-do-veiculo.pdf');
+    await expect(page.getByTestId('folder-avulsos')).toContainText('1');
+    await page.getByRole('button', { name: /^Causa \d+%$/ }).click();
     await expect(page.getByTestId('deck-DECK-01')).toHaveCount(0);
     expect(state.files.map((f) => f.file_name)).toEqual(['foto-do-veiculo.pdf']);
     expect(state.board.decks).toHaveLength(0);
@@ -40,8 +51,14 @@ test('vincular o avulso a uma tarefa abre o deck com ele dentro', async ({ page 
 
     const fileId = state.files[0].id;
     await page.getByTestId(`loose-file-${fileId}`).getByRole('button', { name: 'Vincular' }).click();
-    await page.getByTestId('link-modal').getByRole('button', { name: 'Boletim de ocorrência' }).click();
+    // Fora de uma pasta, a tarefa diz de qual pasta ela é.
+    await page.getByTestId('link-modal').getByRole('button', { name: 'Causa · Boletim de ocorrência' }).click();
 
+    // E ele sai da fila de espera, porque agora tem dono.
+    await expect(page.getByTestId(`loose-file-${fileId}`)).toHaveCount(0);
+    await expect(page.getByTestId('folder-avulsos')).toContainText('0');
+
+    await page.getByRole('button', { name: /^Causa \d+%$/ }).click();
     const deck = page.getByTestId('deck-DECK-01');
     await expect(deck).toContainText('foto-do-veiculo.pdf');
     // Vincular reaproveita o arquivo que já subiu: um segundo upload aqui criaria
@@ -49,9 +66,6 @@ test('vincular o avulso a uma tarefa abre o deck com ele dentro', async ({ page 
     expect(state.files).toHaveLength(1);
     expect(state.board.decks[0].arquivos[0].fileVerId).toBe(fileId);
     expect(state.board.decks[0].tarefaIds).toEqual([TASK.bo]);
-
-    // E ele sai da fila de espera, porque agora tem dono.
-    await expect(page.getByTestId(`loose-file-${fileId}`)).toHaveCount(0);
 });
 
 test('vincular a um deck pendente não cria um segundo deck', async ({ page }) => {
@@ -62,6 +76,7 @@ test('vincular a um deck pendente não cria um segundo deck', async ({ page }) =
     await page.getByTestId(`loose-file-${fileId}`).getByRole('button', { name: 'Vincular' }).click();
     await page.getByTestId('link-modal').getByRole('button', { name: 'DECK-01' }).click();
 
+    await page.getByRole('button', { name: /^Causa \d+%$/ }).click();
     await expect(page.getByTestId('deck-DECK-01')).toContainText('1 tarefa · 2 arquivos');
     expect(state.board.decks).toHaveLength(1);
     expect(state.board.decks[0].arquivos.map((f) => f.nome)).toEqual(['laudo.pdf', 'complemento.pdf']);
@@ -93,8 +108,9 @@ test('a tarefa que o checklist não previu nasce solta em Pendente', async ({ pa
         .toContain('Nota fiscal do guincho');
 });
 
-test('sem permissão de subir arquivo não há painel de avulsos', async ({ page }) => {
+test('sem permissão de subir arquivo não há aba de avulsos', async ({ page }) => {
     await openBoard(page, { mutate: (s) => { s.permissions = s.permissions.filter((p) => p !== 'arquivo.subir'); } });
 
+    await expect(page.getByTestId('folder-avulsos')).toHaveCount(0);
     await expect(page.getByTestId('loose-panel')).toHaveCount(0);
 });

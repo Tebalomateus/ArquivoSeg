@@ -30,10 +30,11 @@ import {
     User,
     Search,
     Filter,
-    ListChecks
+    ListChecks,
+    FolderInput,
 } from 'lucide-react';
 import ChecklistPanel from '../components/ChecklistPanel';
-import KanbanBoard from '../components/KanbanBoard';
+import KanbanBoard, { LOOSE_FOLDER_ID } from '../components/KanbanBoard';
 import { useClaims, VALID_NEXT_STATUS } from '../context/ClaimsContext';
 import { useCan } from '../context/PermissionsContext';
 import { useConfirm } from '../components/ConfirmDialog';
@@ -236,6 +237,7 @@ export default function ClaimDetails() {
     } = useClaims();
 
     const [selectedFolderId, setSelectedFolderId] = useState(null);
+    const [looseCount, setLooseCount] = useState(0); // documentos sem tarefa, contados pelo board
     const [isUploadModalOpen, setUploadModalOpen] = useState(false);
     const [viewMode, setViewMode] = useState('decks');
     const [localObs, setLocalObs] = useState('');
@@ -470,7 +472,11 @@ export default function ClaimDetails() {
         return true;
     });
 
-    const currentFolderId = selectedFolderId || visibleFolders[0]?.id;
+    // "Documentos avulsos" é uma aba da lateral, mas só o board sabe mostrá-la:
+    // nos outros modos ela cai para a primeira pasta, sem perder a escolha.
+    const looseSelected = viewMode === 'decks' && selectedFolderId === LOOSE_FOLDER_ID;
+    const currentFolderId = looseSelected ? null
+        : (selectedFolderId && selectedFolderId !== LOOSE_FOLDER_ID ? selectedFolderId : visibleFolders[0]?.id);
     const currentFolder = claim.folders.find(f => f.id === currentFolderId) || visibleFolders[0];
 
     // Se ainda não houver pasta (falha catastrófica de dados), mostra fallback
@@ -684,6 +690,34 @@ export default function ClaimDetails() {
                                 </span>
                             </button>
                         ))}
+
+                        {/* Documentos avulsos: no sinistro, sem tarefa. Só faz sentido
+                            onde se vincula, que é o board. */}
+                        {viewMode === 'decks' && canManageDocuments && (
+                            <button
+                                type="button"
+                                data-testid="folder-avulsos"
+                                onClick={() => setSelectedFolderId(LOOSE_FOLDER_ID)}
+                                className={`
+                                    w-full flex items-center justify-between p-5 rounded-2xl transition-all border
+                                    ${looseSelected
+                                        ? 'bg-blue-600 border-blue-600 shadow-2xl shadow-blue-200 text-white translate-x-1'
+                                        : 'bg-white/80 backdrop-blur-md border-dashed border-gray-200 text-gray-700 hover:border-blue-300 hover:bg-blue-50/10'}
+                                `}
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${looseSelected ? 'bg-white/20' : 'bg-gray-100 text-gray-500'}`}>
+                                        <FolderInput size={18} />
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="font-black text-xs uppercase tracking-tight">Documentos avulsos</p>
+                                    </div>
+                                </div>
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${looseSelected ? 'bg-white/20 border-white/20' : looseCount > 0 ? 'bg-amber-50 border-amber-100 text-amber-700' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
+                                    {looseCount}
+                                </span>
+                            </button>
+                        )}
                     </div>
 
                     {/* Simple Timeline Card */}
@@ -759,7 +793,8 @@ export default function ClaimDetails() {
                 {/* Content Area */}
                 <div className="lg:col-span-3 space-y-6">
                     {viewMode === 'decks' ? (
-                        <KanbanBoard claim={claim} currentUser={currentUser} folderId={currentFolderId}
+                        <KanbanBoard claim={claim} currentUser={currentUser} folderId={looseSelected ? LOOSE_FOLDER_ID : currentFolderId}
+                            onLooseCount={setLooseCount}
                             onCreateTask={canEditClaimMeta ? (fid, name) => addChecklistItem(claim.id, fid, name) : null} />
                     ) : viewMode === 'checklist' ? (
                         <ChecklistPanel claim={claim} />

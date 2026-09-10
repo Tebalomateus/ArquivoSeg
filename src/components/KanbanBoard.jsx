@@ -11,6 +11,11 @@ import { useConfirm } from '../components/ConfirmDialog';
 
 const { STATUS } = board;
 
+// A "pasta" da lateral que não é pasta: os documentos que estão no sinistro sem
+// comprovar nada. Vive na mesma lista das pastas porque é de lá que a pessoa
+// escolhe o que está olhando.
+export const LOOSE_FOLDER_ID = 'avulsos';
+
 // Group accent palette — the checklist stages are dynamic, so we cycle a fixed
 // palette (blue = analista/CAUSA, amber = PREJUÍZO, teal = DOCUMENTOS, …) by tab index.
 const GROUP_STYLES = [
@@ -48,7 +53,7 @@ const toFileRef = (fv) => ({
  * A deck groups N files × N checklist tasks and moves Pendente → Enviado → Atendido.
  * Rendered as a view-mode inside ClaimDetails, scoped to a single process.
  */
-export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask }) {
+export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask, onLooseCount }) {
     const [tabs, setTabs] = useState([]);       // [{ id, title, tasks: [{key,label}] }] — one per repository folder
     const [tab, setTab] = useState(folderId || null);
     const [state, setState] = useState(board.emptyBoard());
@@ -158,6 +163,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     useEffect(() => { setSel({}); setReviewId(null); }, [tab]);
 
     // ── Derived view data (scoped to the active tab) ────────────────────────────
+    const isLoose = tab === LOOSE_FOLDER_ID;
     const activeTab = tabs.find(t => t.id === tab);
     const tabIndex = Math.max(0, tabs.findIndex(t => t.id === tab));
     const accent = GROUP_STYLES[tabIndex % GROUP_STYLES.length];
@@ -178,6 +184,14 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
         state.decks.forEach(d => { d.arquivos.forEach(f => { used.add(f.fileVerId); }); });
         return processFiles.filter(f => f.fileVerId && !used.has(f.fileVerId));
     }, [processFiles, state.decks]);
+    // A lateral mostra quantos esperam, mesmo com outra pasta aberta.
+    useEffect(() => { onLooseCount?.(looseFiles.length); }, [looseFiles.length, onLooseCount]);
+
+    // Na aba de avulsos não há pasta aberta: vincular enxerga o sinistro inteiro,
+    // com a tarefa dizendo de que pasta ela é.
+    const allPendingDecks = state.decks.filter(d => d.status === STATUS.PENDENTE);
+    const allLooseTasks = tabs.flatMap(t => t.tasks.filter(x => !inDeck.has(x.key)).map(x => ({ ...x, label: `${t.title} · ${x.label}` })));
+
     const tabDecks = state.decks.filter(d => d.grupo === tab);
     const pendingDecks = tabDecks.filter(d => d.status === STATUS.PENDENTE);
     const sentDecks = tabDecks.filter(d => d.status === STATUS.ENVIADO);
@@ -558,6 +572,17 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                             ))}
                         </div>
                     )}
+                    {isLoose ? (
+                        <div className="flex items-center gap-3 rounded-2xl border border-[#E9EEF5] bg-white px-[18px] py-[14px]">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F1F5F9] text-slate-500">
+                                <FolderInput size={20} />
+                            </div>
+                            <div>
+                                <p className="text-[9.5px] font-bold tracking-[0.14em] text-slate-400 uppercase">Sem tarefa</p>
+                                <p className="text-[19px] font-extrabold text-slate-900 leading-tight">{plural(looseFiles.length, 'documento', 'documentos')}</p>
+                            </div>
+                        </div>
+                    ) : (
                     <div className="flex items-center gap-3 rounded-2xl border border-[#E9EEF5] bg-white px-[18px] py-[14px]">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E9F8EF] text-[#16A34A]">
                             <Check size={20} />
@@ -571,15 +596,20 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                             </div>
                         </div>
                     </div>
+                    )}
                 </div>
             </div>
 
-            {/* Documentos avulsos: no sinistro, fora de qualquer tarefa */}
-            {can('arquivo.subir') && (
-                <LoosePanel files={looseFiles} onUpload={openUploadLoose} onLink={setLinking} onView={viewFile} />
+            {/* Documentos avulsos: no sinistro, fora de qualquer tarefa. É uma
+                aba própria na lateral, não um painel em cima do board. */}
+            {isLoose && (
+                can('arquivo.subir')
+                    ? <LoosePanel files={looseFiles} onUpload={openUploadLoose} onLink={setLinking} onView={viewFile} />
+                    : <Empty>Sem permissão para subir documentos neste sinistro.</Empty>
             )}
 
             {/* Board: 3 columns (the active group is driven by the folder sidebar) */}
+            {!isLoose && (
             <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-3">
                 {/* Pendente */}
                 <Column title="Pendente" dot="#94A3B8" count={pendingDecks.length + looseTasks.length}
@@ -660,6 +690,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                     {doneDecks.length === 0 && <Empty>Decks aprovados pelo analista aparecem aqui.</Empty>}
                 </Column>
             </div>
+            )}
 
             {/* Modals */}
             <AnimatePresence>
@@ -682,7 +713,8 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                         onDownloadAll={canDownloadArchive ? () => downloadArchive(reviewDeck) : null} downloading={zipping === reviewDeck.id} />
                 )}
                 {linking && (
-                    <LinkFileModal file={linking} decks={pendingDecks} tasks={looseTasks} labelFor={labelFor}
+                    <LinkFileModal file={linking} decks={isLoose ? allPendingDecks : pendingDecks} tasks={isLoose ? allLooseTasks : looseTasks}
+                        labelFor={labelFor} wholeClaim={isLoose}
                         onClose={() => setLinking(null)}
                         onDeck={(deckId) => linkFileToDeck(linking, deckId)}
                         onTask={(taskKey) => linkFileToTask(linking, taskKey)} />
@@ -745,7 +777,7 @@ function LoosePanel({ files, onUpload, onLink, onView }) {
 // Onde o avulso vai parar: dentro de um deck que já existe, ou numa tarefa ainda
 // solta — e aí o deck nasce com ele. São as duas únicas coisas que se pode fazer
 // com um arquivo aqui, então a escolha é a tela inteira.
-function LinkFileModal({ file, decks, tasks, labelFor, onClose, onDeck, onTask }) {
+function LinkFileModal({ file, decks, tasks, labelFor, wholeClaim = false, onClose, onDeck, onTask }) {
     const nada = decks.length === 0 && tasks.length === 0;
     return (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}
@@ -761,7 +793,9 @@ function LinkFileModal({ file, decks, tasks, labelFor, onClose, onDeck, onTask }
                 <div className="mt-4 overflow-y-auto">
                     {nada && (
                         <p className="rounded-[12px] border border-dashed border-[#D7E0EC] p-4 text-center text-[12px] font-semibold text-slate-400">
-                            Não há tarefa solta nem deck pendente nesta pasta. Troque de pasta na lateral ou crie a tarefa em Pendente.
+                            {wholeClaim
+                                ? 'Não há tarefa solta nem deck pendente neste sinistro. Abra uma pasta na lateral e crie a tarefa em Pendente.'
+                                : 'Não há tarefa solta nem deck pendente nesta pasta. Troque de pasta na lateral ou crie a tarefa em Pendente.'}
                         </p>
                     )}
 
