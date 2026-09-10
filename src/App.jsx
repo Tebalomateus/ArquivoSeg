@@ -10,6 +10,7 @@ import Login from './pages/Login';
 import Callback from './pages/Callback';
 import { useClaims } from './context/ClaimsContext';
 import { usePermissions } from './context/PermissionsContext';
+import { rememberDestination } from './api/auth';
 
 import AdminLayout from './components/layout/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -25,6 +26,21 @@ import AccessGroups from './pages/admin/access/AccessGroups';
 import Notifications from './pages/Notifications';
 
 /**
+ * Enquanto a resposta não chega.
+ *
+ * Um portão que decide sem ela decide errado, e o preço é a pessoa ser expulsa
+ * de uma página que ela pode ver — o que acontece a cada F5, porque `can()`
+ * responde "não" antes de a API responder qualquer coisa.
+ */
+function Aguardando() {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]" data-testid="rota-aguardando">
+            <div className="w-8 h-8 border-2 border-slate-200 border-t-primary rounded-full animate-spin" />
+        </div>
+    );
+}
+
+/**
  * ProtectedRoute gates a route on being signed in and, optionally, on a
  * permission (requiredAction) or on being the tenant admin (requireAdmin).
  *
@@ -34,12 +50,19 @@ import Notifications from './pages/Notifications';
  */
 function ProtectedRoute({ children, requiredAction, requireAdmin = false }) {
     const { currentUser } = useClaims();
-    const { isAdmin, can } = usePermissions();
+    const { isAdmin, can, ready } = usePermissions();
     const location = useLocation();
 
     if (!currentUser) {
+        // O state da rota não sobrevive ao login de verdade, que sai do app e
+        // volta em /callback com a página recarregada — daí o sessionStorage.
+        // O state fica porque o login mock não recarrega nada.
+        rememberDestination(location.pathname + location.search);
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
+
+    // isAdmin vem do token e já está aqui; can() depende da API.
+    if (requiredAction && !ready) return <Aguardando />;
 
     const allowed = (!requireAdmin || isAdmin) && (!requiredAction || can(requiredAction));
     if (!allowed) {
@@ -52,8 +75,12 @@ function ProtectedRoute({ children, requiredAction, requireAdmin = false }) {
 // UI-only gate: the backend is the authority and answers 403 to whoever forces
 // the route. This just keeps the form out of reach of someone who cannot submit it.
 function RequireCreateAccess({ children }) {
-    const { can } = usePermissions();
-    if (!can('processo.criar')) return <Navigate to="/app/sinistros" replace />;
+    const { can, ready } = usePermissions();
+    if (!ready) return <Aguardando />;
+    // Relativo, e não "/app/sinistros": este formulário também é rota do
+    // backoffice, e o caminho fixo jogava o admin para fora do portal dele.
+    // "sinistros/novo" é um segmento de rota só, então ".." daria no portal.
+    if (!can('processo.criar')) return <Navigate to="../sinistros" replace />;
     return children;
 }
 

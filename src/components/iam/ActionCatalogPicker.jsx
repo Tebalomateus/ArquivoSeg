@@ -12,10 +12,27 @@ import { Asterisk, Info } from 'lucide-react';
  * from "all boxes ticked", and why it carries a warning instead of a tooltip —
  * the admin is granting access to things that do not exist yet.
  */
+/**
+ * wildcardOf builds the wildcard pattern for a catalog group.
+ *
+ * It has to come from the action namespace, never from group.group — that field
+ * is the translated label the admin reads ("Documentos"), while the stored
+ * pattern must match action names ("arquivo.baixar"). The API sends the
+ * namespace as `prefix`; deriving it from the first action keeps older payloads
+ * working. Null means the group has no single namespace and so no wildcard.
+ */
+export function wildcardOf(group) {
+    const prefix = group?.prefix || (group?.actions?.[0]?.name || '').split('.')[0];
+    return prefix ? `${prefix}.*` : null;
+}
+
 export default function ActionCatalogPicker({ catalog, value, onChange, disabled = false }) {
     const selected = useMemo(() => new Set(value || []), [value]);
 
-    const isWildcard = (group) => selected.has(`${group.group}.*`);
+    const isWildcard = (group) => {
+        const pattern = wildcardOf(group);
+        return !!pattern && selected.has(pattern);
+    };
 
     const groupActions = (group) => group.actions.map((a) => a.name);
 
@@ -30,8 +47,9 @@ export default function ActionCatalogPicker({ catalog, value, onChange, disabled
     };
 
     const toggleWildcard = (group) => {
+        const pattern = wildcardOf(group);
+        if (!pattern) return;
         const next = new Set(selected);
-        const pattern = `${group.group}.*`;
         if (next.has(pattern)) {
             next.delete(pattern);
         } else {
@@ -48,7 +66,8 @@ export default function ActionCatalogPicker({ catalog, value, onChange, disabled
         if (allTicked(group)) {
             for (const name of groupActions(group)) next.delete(name);
         } else {
-            next.delete(`${group.group}.*`);
+            const pattern = wildcardOf(group);
+            if (pattern) next.delete(pattern);
             for (const name of groupActions(group)) next.add(name);
         }
         onChange([...next]);
@@ -57,6 +76,7 @@ export default function ActionCatalogPicker({ catalog, value, onChange, disabled
     return (
         <div className="space-y-4">
             {(catalog || []).map((group) => {
+                const pattern = wildcardOf(group);
                 const wildcard = isWildcard(group);
                 return (
                     <div
@@ -87,7 +107,7 @@ export default function ActionCatalogPicker({ catalog, value, onChange, disabled
                                 </button>
                                 <button
                                     type="button"
-                                    disabled={disabled}
+                                    disabled={disabled || !pattern}
                                     data-testid={`wildcard-${group.group}`}
                                     onClick={() => toggleWildcard(group)}
                                     className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors disabled:opacity-40 ${
@@ -95,10 +115,10 @@ export default function ActionCatalogPicker({ catalog, value, onChange, disabled
                                             ? 'bg-amber-500 text-white'
                                             : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
                                     }`}
-                                    title={`Conceder o curinga ${group.group}.*`}
+                                    title={pattern ? `Conceder o curinga ${pattern}` : 'Este grupo não tem um curinga'}
                                 >
                                     <Asterisk size={12} />
-                                    {group.group}.*
+                                    {pattern || '—'}
                                 </button>
                             </div>
                         </div>
@@ -107,7 +127,7 @@ export default function ActionCatalogPicker({ catalog, value, onChange, disabled
                             <div className="flex items-start gap-2 px-4 py-4 text-amber-800">
                                 <Info size={16} className="mt-0.5 shrink-0" />
                                 <p className="text-xs font-medium leading-relaxed">
-                                    Curinga <code className="font-black">{group.group}.*</code> concedido. Inclui as{' '}
+                                    Curinga <code className="font-black">{pattern}</code> concedido. Inclui as{' '}
                                     {group.actions.length} ações atuais{' '}
                                     <strong>e automaticamente novas permissões de {group.group} lançadas no futuro</strong>.
                                 </p>

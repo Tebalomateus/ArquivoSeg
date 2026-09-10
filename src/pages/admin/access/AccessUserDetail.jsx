@@ -23,6 +23,7 @@ import {
     listRoles,
     getActionCatalog,
 } from '../../../api/iam';
+import { wildcardOf } from '../../../components/iam/ActionCatalogPicker';
 import { useClaims } from '../../../context/ClaimsContext';
 import { usePermissions } from '../../../context/PermissionsContext';
 import { Spinner, ErrorNote, Empty, Modal, Chip, RolePicker } from './ui';
@@ -462,7 +463,9 @@ export default function AccessUserDetail() {
                                 <option value="">Selecione…</option>
                                 {catalog.map((group) => (
                                     <optgroup key={group.group} label={group.group}>
-                                        <option value={`${group.group}.*`}>{group.group}.* (curinga)</option>
+                                        {wildcardOf(group) && (
+                                            <option value={wildcardOf(group)}>{wildcardOf(group)} (curinga)</option>
+                                        )}
                                         {group.actions.map((a) => (
                                             <option key={a.name} value={a.name}>
                                                 {a.label} — {a.name}

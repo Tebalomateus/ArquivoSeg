@@ -37,12 +37,21 @@ export default defineConfig({
     projects: [
         {
             name: 'mock',
-            testMatch: /(permissoes-ui|nao-admin)\.spec\.js/,
+            testMatch: /(permissoes-ui|nao-admin|novo-sinistro|roteamento)\.spec\.js/,
             use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${MOCK_PORT}` },
         },
         {
             name: 'acessos',
             testMatch: /(acessos-.*|anti-lockout)\.spec\.js/,
+            use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${API_PORT}` },
+        },
+        {
+            // O board, o upload e o download do zip. Também com a API falsa e não
+            // com os fixtures locais: o deck só existe no servidor, e o download
+            // inteiro do deck (Bearer, Content-Disposition, os bytes do zip) não
+            // tem nada equivalente em modo mock — lá o botão nem aparece.
+            name: 'decks',
+            testMatch: /decks-.*\.spec\.js/,
             use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${API_PORT}` },
         },
     ],

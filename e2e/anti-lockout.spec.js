@@ -20,7 +20,7 @@ test('o último admin não consegue negar a si mesmo o acesso de IAM', async ({ 
 
     await page.getByRole('button', { name: 'Adicionar' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByLabel('Ação').selectOption('iam.atribuir');
+    await dialog.getByLabel('Ação').selectOption('iam.usuario.atribuirPapel');
     await dialog.getByRole('button', { name: 'Negar' }).click();
     await dialog.getByRole('button', { name: 'Aplicar' }).click();
 
@@ -52,7 +52,7 @@ test('com outro admin no tenant a mesma negação passa pela confirmação', asy
 
     await page.getByRole('button', { name: 'Adicionar' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByLabel('Ação').selectOption('iam.atribuir');
+    await dialog.getByLabel('Ação').selectOption('iam.usuario.atribuirPapel');
     await dialog.getByRole('button', { name: 'Negar' }).click();
     await dialog.getByRole('button', { name: 'Aplicar' }).click();
 
@@ -60,5 +60,5 @@ test('com outro admin no tenant a mesma negação passa pela confirmação', asy
     await expect(confirmar).toBeVisible();
     await confirmar.getByRole('button', { name: 'Entendi, prosseguir' }).click();
 
-    expect(state.individual['u-admin']).toEqual([{ action: 'iam.atribuir', effect: 'deny' }]);
+    expect(state.individual['u-admin']).toEqual([{ action: 'iam.usuario.atribuirPapel', effect: 'deny' }]);
 });

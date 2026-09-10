@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { CheckCircle2, Circle, ChevronDown, ChevronRight, AlertCircle, Loader2, Plus, Trash2, X, History } from 'lucide-react';
 import { getChecklistDef, updateChecklistState, addChecklistItem, removeChecklistItem } from '../api/checklist';
+import { useConfirm } from './ConfirmDialog';
 
 export default function ChecklistPanel({ claim }) {
+    const ask = useConfirm();
     const [def, setDef] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -13,10 +15,7 @@ export default function ChecklistPanel({ claim }) {
     const [addingToStage, setAddingToStage] = useState(null);
     const [newItemLabel, setNewItemLabel] = useState('');
     const [addingBusy, setAddingBusy] = useState(false);
-    const [removeTarget, setRemoveTarget] = useState(null); // { itemKey, label }
-    const [removeReason, setRemoveReason] = useState('');
     const [removeBusy, setRemoveBusy] = useState(false);
-    const [removeErr, setRemoveErr] = useState(null);
     const debounceRef = useRef(null);
 
     useEffect(() => {
@@ -49,13 +48,17 @@ export default function ChecklistPanel({ claim }) {
         }, 500);
     }, [claim.id]);
 
-    const toggleItem = (stageId, itemId) => {
+    const toggleItem = async (stageId, itemId) => {
         const key = `${stageId}.${itemId}`;
         const willBeChecked = !state[key];
         // Marking as done is a claim ("this document arrived") — require an explicit
         // confirmation so a stray click doesn't silently give a document a false pass.
         // Unmarking is always safe to reverse and stays instant.
-        if (willBeChecked && !confirm('Confirma que este item foi recebido/conferido?')) return;
+        if (willBeChecked && !await ask({
+            title: 'Marcar como recebido?',
+            message: 'Isto afirma que o documento chegou e foi conferido — é o que o resto do time vai ler como verdade.',
+            confirmLabel: 'Confirmar recebimento',
+        })) return;
         const nextState = { ...state, [key]: willBeChecked };
         setState(nextState);
         persistState(nextState);
@@ -91,39 +94,29 @@ export default function ChecklistPanel({ claim }) {
         }
     };
 
-    const openRemoveDialog = (itemKey, label) => {
-        setRemoveTarget({ itemKey, label });
-        setRemoveReason('');
-        setRemoveErr(null);
-    };
-
-    const closeRemoveDialog = () => {
-        setRemoveTarget(null);
-        setRemoveReason('');
-        setRemoveErr(null);
-    };
-
-    const submitRemoveItem = async () => {
-        if (!removeTarget || removeBusy) return;
-        const reason = removeReason.trim();
-        if (reason.length < 3) {
-            setRemoveErr('Justificativa deve ter ao menos 3 caracteres.');
-            return;
-        }
+    const removeItem = async (itemKey, label) => {
+        if (removeBusy) return;
+        const answer = await ask({
+            title: 'Remover item da checklist?',
+            message: 'O item deixa de ser cobrado neste sinistro. Fica registrado quem removeu e por quê.',
+            detail: label,
+            confirmLabel: 'Remover item',
+            tone: 'danger',
+            reason: { label: 'Justificativa', placeholder: 'Explique por que este item não se aplica (registrado para auditoria).' },
+        });
+        if (!answer) return;
         setRemoveBusy(true);
-        setRemoveErr(null);
         try {
-            const removal = await removeChecklistItem(claim.id, removeTarget.itemKey, reason);
+            const removal = await removeChecklistItem(claim.id, itemKey, answer.reason);
             setRemovedItems(prev => [...prev.filter(r => r.itemKey !== removal.itemKey), removal]);
             setState(prev => {
-                if (!(removeTarget.itemKey in prev)) return prev;
+                if (!(itemKey in prev)) return prev;
                 const next = { ...prev };
-                delete next[removeTarget.itemKey];
+                delete next[itemKey];
                 return next;
             });
-            closeRemoveDialog();
         } catch (err) {
-            setRemoveErr(err.message || 'Erro ao remover item');
+            alert(err.message || 'Erro ao remover item');
         } finally {
             setRemoveBusy(false);
         }
@@ -269,7 +262,7 @@ export default function ChecklistPanel({ claim }) {
                                                 {!removal && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => openRemoveDialog(key, item.label)}
+                                                        onClick={() => removeItem(key, item.label)}
                                                         className="flex-shrink-0 text-gray-300 hover:text-red-500 transition-colors focus:outline-none"
                                                         aria-label="Remover item"
                                                         title="Remover item"
@@ -337,48 +330,6 @@ export default function ChecklistPanel({ claim }) {
                 );
             })}
 
-            {/* Remove confirmation with mandatory justification */}
-            {removeTarget && (
-                <div
-                    className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
-                    onClick={closeRemoveDialog}
-                >
-                    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
-                        <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest mb-1">Remover item</h4>
-                        <p className="text-sm text-gray-500 mb-4">{removeTarget.label}</p>
-                        <label htmlFor="checklist-remove-reason" className="block text-xs font-bold text-gray-600 mb-1.5">
-                            Justificativa <span className="text-red-500">*</span>
-                        </label>
-                        <textarea
-                            id="checklist-remove-reason"
-                            autoFocus
-                            value={removeReason}
-                            onChange={e => setRemoveReason(e.target.value)}
-                            rows={3}
-                            placeholder="Explique o motivo da remoção deste item (registrado para auditoria)"
-                            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 resize-none"
-                        />
-                        {removeErr && <p className="text-xs text-red-600 mt-1.5">{removeErr}</p>}
-                        <div className="flex justify-end gap-2 mt-5">
-                            <button
-                                type="button"
-                                onClick={closeRemoveDialog}
-                                className="text-xs font-bold px-4 py-2 rounded-lg text-gray-500 hover:bg-gray-100"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={submitRemoveItem}
-                                disabled={removeBusy}
-                                className="text-xs font-bold px-4 py-2 rounded-lg bg-red-600 text-white disabled:opacity-50"
-                            >
-                                {removeBusy ? 'Removendo...' : 'Confirmar remoção'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

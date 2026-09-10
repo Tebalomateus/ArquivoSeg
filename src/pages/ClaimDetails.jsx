@@ -30,12 +30,14 @@ import {
     User,
     Search,
     Filter,
-    ListChecks
+    ListChecks,
+    FolderInput,
 } from 'lucide-react';
 import ChecklistPanel from '../components/ChecklistPanel';
-import KanbanBoard from '../components/KanbanBoard';
+import KanbanBoard, { LOOSE_FOLDER_ID } from '../components/KanbanBoard';
 import { useClaims, VALID_NEXT_STATUS } from '../context/ClaimsContext';
 import { useCan } from '../context/PermissionsContext';
+import { useConfirm } from '../components/ConfirmDialog';
 import { actorLabelFromDbId } from '../api/auth';
 import { formatBytes, mimeShortLabel } from '../api/files';
 
@@ -235,6 +237,7 @@ export default function ClaimDetails() {
     } = useClaims();
 
     const [selectedFolderId, setSelectedFolderId] = useState(null);
+    const [looseCount, setLooseCount] = useState(0); // documentos sem tarefa, contados pelo board
     const [isUploadModalOpen, setUploadModalOpen] = useState(false);
     const [viewMode, setViewMode] = useState('decks');
     const [localObs, setLocalObs] = useState('');
@@ -262,6 +265,7 @@ export default function ClaimDetails() {
     }, [id, claimMissing]);
 
     const can = useCan();
+    const ask = useConfirm();
     const canReadAudit = can('auditoria.listar');
 
     useEffect(() => {
@@ -314,7 +318,11 @@ export default function ClaimDetails() {
     };
 
     const handleRevokeShare = async (tokenId) => {
-        if (!confirm('Revogar este link? O acesso público será imediatamente bloqueado.')) return;
+        if (!await ask({
+            title: 'Revogar este link público?',
+            message: 'Quem estiver com o endereço perde o acesso na hora. Não dá para reativar o mesmo link — só gerar outro.',
+            confirmLabel: 'Revogar link', tone: 'danger',
+        })) return;
         try {
             await revokeFileShare(tokenId);
             await refreshShares();
@@ -370,14 +378,22 @@ export default function ClaimDetails() {
 
     const handleDeleteAnnotation = async (doc) => {
         if (!doc.commentId) return;
-        if (!confirm('Remover esta anotação? O arquivo continua, mas a contextualização será apagada.')) return;
+        if (!await ask({
+            title: 'Remover esta anotação?',
+            message: 'O arquivo continua no sinistro. O que se perde é a explicação de por que ele está aqui.',
+            confirmLabel: 'Remover anotação', tone: 'danger',
+        })) return;
         try { await deleteAnnotation(claim.id, doc.commentId); }
         catch (err) { console.error(err); }
     };
 
     const handleDeleteFile = async (doc) => {
         if (!doc?.backFileVerId) return;
-        if (!confirm(`Excluir o documento "${doc.name}"? Essa ação é definitiva.`)) return;
+        if (!await ask({
+            title: 'Excluir este documento?',
+            message: 'Some do sinistro e não volta. Se ele foi enviado por engano, prefira substituir por uma nova versão.',
+            detail: doc.name, confirmLabel: 'Excluir documento', tone: 'danger',
+        })) return;
         try { await deleteDocument(claim.id, doc.backFileVerId); }
         catch (err) { console.error(err); }
     };
@@ -401,7 +417,11 @@ export default function ClaimDetails() {
     const handleTransition = async (next) => {
         if (next === 'archived') {
             if (!canArchive) return alert('Apenas admin pode arquivar.');
-            if (!confirm(`Arquivar sinistro #${claim.number}? Essa ação é definitiva.`)) return;
+            if (!await ask({
+                title: `Arquivar o sinistro #${claim.number}?`,
+                message: 'O sinistro sai do fluxo de trabalho e deixa de aceitar movimentação.',
+                confirmLabel: 'Arquivar sinistro', tone: 'warning',
+            })) return;
             await archiveClaim(claim.id);
         } else {
             await transitionStatus(claim.id, next);
@@ -452,7 +472,11 @@ export default function ClaimDetails() {
         return true;
     });
 
-    const currentFolderId = selectedFolderId || visibleFolders[0]?.id;
+    // "Documentos avulsos" é uma aba da lateral, mas só o board sabe mostrá-la:
+    // nos outros modos ela cai para a primeira pasta, sem perder a escolha.
+    const looseSelected = viewMode === 'decks' && selectedFolderId === LOOSE_FOLDER_ID;
+    const currentFolderId = looseSelected ? null
+        : (selectedFolderId && selectedFolderId !== LOOSE_FOLDER_ID ? selectedFolderId : visibleFolders[0]?.id);
     const currentFolder = claim.folders.find(f => f.id === currentFolderId) || visibleFolders[0];
 
     // Se ainda não houver pasta (falha catastrófica de dados), mostra fallback
@@ -489,12 +513,16 @@ export default function ClaimDetails() {
         alert('Observações salvas com sucesso!');
     };
 
-    const toggleChecklistItem = (itemId, received) => {
+    const toggleChecklistItem = async (itemId, received) => {
         if (!can('checklist.atualizarEstado')) return;
         // Marking as received is a claim ("this document arrived") — require an explicit
         // confirmation so a stray click doesn't silently give a document a false pass.
         // Unmarking is always safe to reverse and stays instant.
-        if (!received && !confirm('Confirma que este item foi recebido/conferido?')) return;
+        if (!received && !await ask({
+            title: 'Marcar como recebido?',
+            message: 'Isto afirma que o documento chegou e foi conferido — é o que o resto do time vai ler como verdade.',
+            confirmLabel: 'Confirmar recebimento',
+        })) return;
         updateChecklistStatus(claim.id, currentFolderId, itemId, !received);
     };
 
@@ -510,7 +538,10 @@ export default function ClaimDetails() {
             {/* Top Header */}
             <div className="flex flex-col lg:flex-row gap-6 justify-between items-start">
                 <div className="space-y-1">
-                    <Link to=".." className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 hover:text-blue-600 transition-all mb-2 tracking-widest">
+                    {/* "sinistros/:id" é um segmento de rota só: ".." sobe para o
+                        portal e o link dizia "Lista de Sinistros" levando ao
+                        dashboard. Relativo continua valendo sob /app e /admin. */}
+                    <Link to="../sinistros" className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 hover:text-blue-600 transition-all mb-2 tracking-widest">
                         <ArrowLeft size={16} />
                         Lista de Sinistros
                     </Link>
@@ -659,6 +690,34 @@ export default function ClaimDetails() {
                                 </span>
                             </button>
                         ))}
+
+                        {/* Documentos avulsos: no sinistro, sem tarefa. Só faz sentido
+                            onde se vincula, que é o board. */}
+                        {viewMode === 'decks' && canManageDocuments && (
+                            <button
+                                type="button"
+                                data-testid="folder-avulsos"
+                                onClick={() => setSelectedFolderId(LOOSE_FOLDER_ID)}
+                                className={`
+                                    w-full flex items-center justify-between p-5 rounded-2xl transition-all border
+                                    ${looseSelected
+                                        ? 'bg-blue-600 border-blue-600 shadow-2xl shadow-blue-200 text-white translate-x-1'
+                                        : 'bg-white/80 backdrop-blur-md border-dashed border-gray-200 text-gray-700 hover:border-blue-300 hover:bg-blue-50/10'}
+                                `}
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${looseSelected ? 'bg-white/20' : 'bg-gray-100 text-gray-500'}`}>
+                                        <FolderInput size={18} />
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="font-black text-xs uppercase tracking-tight">Documentos avulsos</p>
+                                    </div>
+                                </div>
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${looseSelected ? 'bg-white/20 border-white/20' : looseCount > 0 ? 'bg-amber-50 border-amber-100 text-amber-700' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
+                                    {looseCount}
+                                </span>
+                            </button>
+                        )}
                     </div>
 
                     {/* Simple Timeline Card */}
@@ -734,7 +793,9 @@ export default function ClaimDetails() {
                 {/* Content Area */}
                 <div className="lg:col-span-3 space-y-6">
                     {viewMode === 'decks' ? (
-                        <KanbanBoard claim={claim} currentUser={currentUser} folderId={currentFolderId} />
+                        <KanbanBoard claim={claim} currentUser={currentUser} folderId={looseSelected ? LOOSE_FOLDER_ID : currentFolderId}
+                            onLooseCount={setLooseCount}
+                            onCreateTask={canEditClaimMeta ? (fid, name) => addChecklistItem(claim.id, fid, name) : null} />
                     ) : viewMode === 'checklist' ? (
                         <ChecklistPanel claim={claim} />
                     ) : viewMode === 'interaction' ? (

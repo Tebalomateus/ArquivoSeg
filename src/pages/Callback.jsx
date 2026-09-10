@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { zitadel } from '../api/zitadel';
-import { logoutSession } from '../api/auth';
+import { logoutSession, takeDestination } from '../api/auth';
 import { setToken } from '../api/client';
 import { useClaims } from '../context/ClaimsContext';
 
@@ -39,7 +39,10 @@ export default function Callback() {
                 // can do — that is GET /me/permissions, and only that.
                 role: isAdmin ? 'ADMIN' : 'USUÁRIO',
             });
-            navigate('/');
+            // O destino que o portão guardou antes de mandar para o Zitadel.
+            // É aqui que ele importa: esta é a única volta do login de verdade,
+            // e sem isto todo deep-link termina no dashboard.
+            navigate(takeDestination() || '/', { replace: true });
         }).catch(() => {
             logoutSession();
             navigate('/login');

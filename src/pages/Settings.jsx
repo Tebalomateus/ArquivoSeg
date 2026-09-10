@@ -79,7 +79,10 @@ export default function Settings() {
         <div className="space-y-8 max-w-5xl animate-fade-in relative z-10">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
                 <div>
-                    <Link to="/" className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 hover:text-blue-600 transition-all mb-2 tracking-widest">
+                    {/* ".." e não "/": "configuracoes" é filha do portal, então o
+                        relativo já dá o dashboard certo. O "/" acertava por
+                        acidente, passando por um redirect que lê o isAdmin. */}
+                    <Link to=".." className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 hover:text-blue-600 transition-all mb-2 tracking-widest">
                         <ArrowLeft size={16} />
                         Voltar ao Dashboard
                     </Link>

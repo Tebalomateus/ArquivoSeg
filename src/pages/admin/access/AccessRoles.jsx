@@ -9,6 +9,7 @@ import {
 } from '../../../api/iam';
 import ActionCatalogPicker from '../../../components/iam/ActionCatalogPicker';
 import { Spinner, ErrorNote, Empty, Modal, Chip } from './ui';
+import { useConfirm } from '../../../components/ConfirmDialog';
 
 // A key is the stable identifier a policy refers to; the name is what people
 // read. Deriving one from the other on the way in saves the admin from typing
@@ -19,9 +20,26 @@ function keyFrom(name) {
         .normalize('NFD')
         .replace(/[̀-ͯ]/g, '')
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '')
-        .slice(0, 40);
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^[^a-z]+/, '')
+        .replace(/-+$/, '')
+        .slice(0, 50);
+}
+
+// The server's slug rule, mirrored here so a bad key is caught before the round
+// trip instead of coming back as an opaque error.
+const KEY_PATTERN = /^[a-z][a-z0-9-]{0,49}$/;
+
+// Typing is sanitised, not slugified: trimming a trailing hyphen mid-keystroke
+// would make "regulador-senior" impossible to type by hand.
+function sanitizeKeyInput(value) {
+    return value
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^[^a-z]+/, '')
+        .slice(0, 50);
 }
 
 const EMPTY = { key: '', name: '', description: '', permissions: [] };
@@ -32,7 +50,7 @@ export default function AccessRoles() {
     const [error, setError] = useState(null);
 
     const [editor, setEditor] = useState(null); // { role|null, form, saving, error }
-    const [confirmDelete, setConfirmDelete] = useState(null); // { role, inUse, count }
+    const ask = useConfirm();
 
     const load = useCallback(async () => {
         setError(null);
@@ -83,6 +101,16 @@ export default function AccessRoles() {
             setEditor((s) => ({ ...s, error: { message: 'Nome e chave são obrigatórios.' } }));
             return;
         }
+        if (!role && !KEY_PATTERN.test(form.key)) {
+            setEditor((s) => ({
+                ...s,
+                error: {
+                    message:
+                        'A chave aceita apenas letras minúsculas, números e hifens, começando por uma letra. Ex.: regulador-senior',
+                },
+            }));
+            return;
+        }
         setEditor((s) => ({ ...s, saving: true, error: null }));
         try {
             if (role) {
@@ -101,20 +129,39 @@ export default function AccessRoles() {
         }
     };
 
-    const remove = async (role, force) => {
-        try {
-            await deleteRole(role.id, { force });
-            setConfirmDelete(null);
-            await load();
-        } catch (err) {
-            // The API refuses a role somebody still holds and says how many —
-            // that count is the blast radius, and showing it beats asking the
-            // admin to guess what force would break.
-            if (err.code === 'ROLE_IN_USE') {
-                setConfirmDelete({ role, inUse: true, count: err.body?.error?.details?.assignments ?? null });
-                return;
+    const remove = async (role) => {
+        // Duas perguntas, não uma. A API recusa um papel que alguém ainda tem e
+        // diz quantas atribuições cairiam junto; esse número é o estrago, e
+        // mostrá-lo é melhor do que pedir ao admin que adivinhe o que o force
+        // quebra. Só a segunda pergunta é a que apaga com força.
+        let force = false;
+        let count = null;
+        for (;;) {
+            let escalate = false;
+            const done = await ask({
+                title: `Excluir ${role.name}?`,
+                message: force
+                    ? `Este papel ainda está atribuído${count !== null ? ` a ${count} atribuição(ões)` : ''}. Excluir agora remove essas atribuições junto — as pessoas afetadas perdem as permissões que só vinham daqui.`
+                    : 'O papel some e deixa de valer para quem o tiver.',
+                detail: role.name,
+                confirmLabel: force ? 'Excluir mesmo assim' : 'Excluir',
+                tone: force ? 'warning' : 'danger',
+                onConfirm: async () => {
+                    try {
+                        await deleteRole(role.id, { force });
+                    } catch (err) {
+                        if (err.code !== 'ROLE_IN_USE') throw err;
+                        count = err.body?.error?.details?.assignments ?? null;
+                        escalate = true;
+                    }
+                },
+            });
+            if (escalate) {
+                force = true;
+                continue;
             }
-            setConfirmDelete({ role, error: err });
+            if (done) await load();
+            return;
         }
     };
 
@@ -187,7 +234,7 @@ export default function AccessRoles() {
                                 <button
                                     type="button"
                                     disabled={role.is_system}
-                                    onClick={() => setConfirmDelete({ role })}
+                                    onClick={() => remove(role)}
                                     className="p-2.5 rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400"
                                     title={role.is_system ? 'Papéis de sistema não podem ser excluídos' : 'Excluir'}
                                 >
@@ -236,12 +283,12 @@ export default function AccessRoles() {
                                             setEditor((s) => ({
                                                 ...s,
                                                 keyTouched: true,
-                                                form: { ...s.form, key: e.target.value },
+                                                form: { ...s.form, key: sanitizeKeyInput(e.target.value) },
                                             }))
                                         }
                                         disabled={!!editor.role}
                                         className="mt-1 w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
-                                        placeholder="regulador_senior"
+                                        placeholder="regulador-senior"
                                     />
                                     {editor.role && (
                                         <span className="text-[10px] text-slate-400 mt-1 block">
@@ -298,46 +345,6 @@ export default function AccessRoles() {
                             </div>
                         </div>
                     </form>
-                )}
-            </Modal>
-
-            <Modal
-                open={!!confirmDelete}
-                title={`Excluir ${confirmDelete?.role?.name || ''}?`}
-                onClose={() => setConfirmDelete(null)}
-            >
-                {confirmDelete && (
-                    <div className="p-6 space-y-4">
-                        <ErrorNote error={confirmDelete.error} />
-                        {confirmDelete.inUse ? (
-                            <p className="text-sm text-slate-600 leading-relaxed">
-                                Este papel ainda está atribuído
-                                {confirmDelete.count !== null ? ` a ${confirmDelete.count} atribuição(ões)` : ''}. Excluir
-                                agora remove essas atribuições junto — as pessoas afetadas perdem as permissões que só
-                                vinham daqui.
-                            </p>
-                        ) : (
-                            <p className="text-sm text-slate-600 leading-relaxed">
-                                O papel some e deixa de valer para quem o tiver.
-                            </p>
-                        )}
-                        <div className="flex items-center justify-end gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setConfirmDelete(null)}
-                                className="px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => remove(confirmDelete.role, confirmDelete.inUse)}
-                                className="px-6 py-3 rounded-2xl bg-red-600 text-white text-xs font-black uppercase tracking-widest hover:bg-red-700"
-                            >
-                                {confirmDelete.inUse ? 'Excluir mesmo assim' : 'Excluir'}
-                            </button>
-                        </div>
-                    </div>
                 )}
             </Modal>
         </div>
