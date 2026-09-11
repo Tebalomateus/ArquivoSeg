@@ -19,9 +19,9 @@ export default function Callback() {
             }
 
             const roles = oidcUser.profile['urn:zitadel:iam:org:project:roles'] || {};
-            const role = Object.keys(roles)[0] || '';
+            const role = 'backoffice';
 
-            if (role !== 'backoffice') {
+            if (!(role in roles)) {
                 navigate('/unauthorized');
                 return;
             }

@@ -99,6 +99,8 @@ const adaptProcessToClaim = (proc, cached) => {
         backCreatedBy: proc.created_by || null,
         claimType: proc.claim_type || null,
         checklistState: meta.checklist_state || {},
+        checklistAdhocItems: Array.isArray(meta.checklist_adhoc_items) ? meta.checklist_adhoc_items : [],
+        checklistRemovedItems: Array.isArray(meta.checklist_removed_items) ? meta.checklist_removed_items : [],
         date: created.toLocaleDateString('pt-BR'),
         lastModified: updated.toLocaleDateString('pt-BR'),
 
