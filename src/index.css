@@ -213,3 +213,26 @@ h4,
     opacity: 1;
     transition: opacity 300ms ease-in;
 }
+
+/* Arquivos do deck: quando a coluna fica estreita, o tamanho do arquivo some e
+   os botões de ver/baixar/compartilhar descem para uma segunda linha, para o
+   nome continuar legível. O contêiner é a lista porque uma @container query
+   não alcança o próprio contêiner, só o que está dentro dele. */
+.deck-file-list {
+    container-type: inline-size;
+}
+
+@container (max-width: 300px) {
+    .deck-file-row {
+        flex-wrap: wrap;
+    }
+
+    .deck-file-row .deck-file-size {
+        display: none;
+    }
+
+    .deck-file-row .deck-file-actions {
+        flex-basis: 100%;
+        justify-content: flex-end;
+    }
+}

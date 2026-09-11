@@ -206,7 +206,8 @@ Cenário end-to-end testado:
 | AdminDashboard | `/admin` | `GET /audit`, `GET /processes`, `GET /clients`, `GET /users`, `/health/ready` | ✅ |
 | ClientManagement | `/admin/clientes` | `GET/POST/PATCH/DELETE /clients` | ✅ |
 | LinkTracker | `/admin/links` | `GET /files/:id/shares`, `GET /audit?resource_type=share_token` | ✅ |
-| UserManagement | `/admin/usuarios` | `GET /users` + popover deep-links | ✅ |
+| AccessUsers | `/admin/acessos/usuarios` | `GET /users`, `GET /iam/roles`, `GET /iam/groups`, `POST /users/invite` | ✅ |
+| AccessUserDetail | `/admin/acessos/usuarios/:id` | `GET/PUT /iam/users/:id/...`, `POST /users/:id/resend-invite`, `DELETE /users/:id` | ✅ |
 | AuditLog | `/admin/audit` | `GET /audit` com 4 filtros | ✅ |
 | ComplianceDataCenter | `/admin/compliance` | `GET /audit?from=`, `GET /processes`, `GET /files/:id/shares`, `GET /health/live` | ✅ |
 | PublicShare | `/portal/:token` | `GET /s/:token` (302 → MinIO) | ✅ |

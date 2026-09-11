@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, KeyRound, Lock, Mail, ShieldCheck, X } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { INITIAL_USERS } from '../constants/initialData';
-import { backRoleFor } from '../api/auth';
 import { isMockEnabled } from '../api/client';
+import { takeDestination } from '../api/auth';
 import { zitadel } from '../api/zitadel';
 
 export default function Login() {
@@ -28,10 +28,12 @@ export default function Login() {
                 setIsLoading(false);
                 return;
             }
-            const backRole = backRoleFor(user.role);
-            setCurrentUser({ ...user, backRole });
+            setCurrentUser({ ...user, isAdmin: user.role === 'ADMIN' });
             localStorage.setItem('arquivoseg_authenticated', 'true');
-            navigate('/');
+            // De volta para onde a pessoa ia. Sem isso o link que ela abriu se
+            // perde no login e ela reaparece no dashboard, tendo que procurar
+            // de novo o que já tinha achado. "/" resolve o portal certo.
+            navigate(takeDestination() || '/', { replace: true });
             setIsLoading(false);
         }, 600);
     };
@@ -232,7 +234,16 @@ export default function Login() {
                                 <li>Clique no botão abaixo para ir à tela de login.</li>
                                 <li>Clique em <strong>"Forgot password?"</strong>, já disponível ali.</li>
                                 <li>Siga as instruções enviadas para o seu email corporativo.</li>
+                                <li>Ao terminar, volte para <strong>www.arquivoseg.com.br</strong> e entre por aqui.</li>
                             </ol>
+                            {/* O passo 4 não é zelo: o link do e-mail abre o Zitadel sem o
+                                pedido de autenticação que amarra a volta, então ao terminar
+                                ele solta a pessoa numa tela dele — e ela lê aquilo como o
+                                ArquivoSeg tendo quebrado. Dizer para onde voltar é o que
+                                este app pode fazer daqui; o resto é configuração do Zitadel. */}
+                            <p className="text-xs text-slate-500 leading-relaxed bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
+                                Se ao final você parar numa tela do <strong>Zitadel</strong> em vez do ArquivoSeg, não é erro seu nem perda da senha nova: é só voltar para <strong>www.arquivoseg.com.br</strong>.
+                            </p>
                             <button
                                 type="button"
                                 onClick={() => { setForgotOpen(false); handleZitadelLogin(); }}

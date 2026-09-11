@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check, ChevronRight } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
+import { useCan } from '../context/PermissionsContext';
 import { listAudit, ACTION_LABELS } from '../api/audit';
 
 const LAST_SEEN_KEY = 'arquivoseg_notifications_last_seen';
@@ -21,19 +22,17 @@ const RELEVANT_ACTIONS = new Set([
 ]);
 
 // Generates a notification list from raw audit entries — filters out the
-// current user's own actions, keeps only events relevant to the user's
-// claims (when contributor) or all tenant events (when manager+).
-function buildNotifications({ entries, currentUser, claims, backendUsers }) {
+// current user's own actions, keeps only events relevant to the user's own
+// claims — unless seesEverything, in which case the whole tenant's activity.
+function buildNotifications({ entries, currentUser, claims, backendUsers, seesEverything }) {
     // currentUser doesn't carry a dbId directly; resolve it by matching email
-    // against the backendUsers list (only available for manager+).
+    // against the backendUsers list (only available to whoever may list users).
     const me = backendUsers.find((u) => u.email?.toLowerCase() === currentUser?.email?.toLowerCase())?.id;
     const myClaimIds = new Set(
         claims
             .filter((c) => c.assignedTo === me || c.backCreatedBy === me)
             .map((c) => c.id)
     );
-
-    const isManagerPlus = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
 
     const findClaim = (id) => claims.find((c) => c.id === id);
     const labelFor = (uuid) => backendUsers.find((u) => u.id === uuid)?.email || 'Usuário';
@@ -42,7 +41,7 @@ function buildNotifications({ entries, currentUser, claims, backendUsers }) {
         .filter((e) => RELEVANT_ACTIONS.has(e.action))
         .filter((e) => e.actor_user_id !== me)
         .filter((e) => {
-            if (isManagerPlus) return true;
+            if (seesEverything) return true;
             if (e.resource_type === 'process') return myClaimIds.has(e.resource_id);
             return false;
         })
@@ -69,6 +68,9 @@ function buildNotifications({ entries, currentUser, claims, backendUsers }) {
 
 export default function NotificationBell({ basePath = '/app' }) {
     const { currentUser, claims, backendUsers } = useClaims();
+    // The feed is the audit trail, so whoever may read the audit sees the whole
+    // tenant's activity; everyone else sees only what touches their own work.
+    const seesEverything = useCan()('auditoria.listar');
     const navigate = useNavigate();
     const [open, setOpen] = useState(false);
     const [entries, setEntries] = useState([]);
@@ -111,8 +113,8 @@ export default function NotificationBell({ basePath = '/app' }) {
     }, [open]);
 
     const notifications = useMemo(
-        () => buildNotifications({ entries, currentUser, claims, backendUsers }),
-        [entries, currentUser, claims, backendUsers]
+        () => buildNotifications({ entries, currentUser, claims, backendUsers, seesEverything }),
+        [entries, currentUser, claims, backendUsers, seesEverything]
     );
 
     const unreadCount = useMemo(() => {

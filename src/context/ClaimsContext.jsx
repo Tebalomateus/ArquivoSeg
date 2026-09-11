@@ -719,8 +719,11 @@ export const ClaimsProvider = ({ children }) => {
 
     const refreshUsers = useCallback(async () => {
         if (isMockEnabled() || !getToken()) return;
-        // GET /users requires manager+; gracefully degrade for viewer/contributor.
-        if (currentUser?.backRole !== 'manager' && currentUser?.backRole !== 'admin') return;
+        // GET /users requires usuario.listar. This cannot ask usePermissions —
+        // PermissionsProvider is mounted inside this one — so it stays a cheap
+        // pre-filter on the admin claim, and a 403 degrades gracefully anyway
+        // for a non-admin who was granted the permission by a custom role.
+        if (!currentUser?.isAdmin) return;
         setUsersLoading(true);
         try {
             const res = await claimsService.listUsers();
@@ -799,11 +802,6 @@ export const ClaimsProvider = ({ children }) => {
         return created;
     };
 
-    const updateUserRoleAction = async (id, role) => {
-        await claimsService.updateUserRole(id, role);
-        await refreshUsers();
-    };
-
     const deactivateUserAction = async (id) => {
         await claimsService.deactivateUser(id);
         await refreshUsers();
@@ -831,7 +829,7 @@ export const ClaimsProvider = ({ children }) => {
             claimsLoading, claimsError, claimsTotal, refreshClaims, claimsFilter,
             users,
             backendUsers, usersLoading, refreshUsers, resolveActorLabel,
-            inviteUser: inviteUserAction, updateUserRole: updateUserRoleAction,
+            inviteUser: inviteUserAction,
             deactivateUser: deactivateUserAction, resendInvite: resendInviteAction,
             clients, clientsLoading, addClientEntity, updateClientEntity, deleteClientEntity, refreshClients,
             settings, updateSettings,

@@ -131,8 +131,10 @@ VITE_USER_DBID_VIEWER, VITE_USER_DBID_CONTRIBUTOR, VITE_USER_DBID_MANAGER, VITE_
 
 | Tela | Ação UI | API | Persistência |
 |---|---|---|---|
-| `UserManagement.jsx` | Listar | `GET /api/v1/users` | `users` (read-only) |
-| Adicionar usuário | _desabilitado_ — exige Zitadel console | — | — |
+| `AccessUsers.jsx` | Listar | `GET /api/v1/users` | `users` (read-only) |
+| `AccessUsers.jsx` | Convidar | `POST /api/v1/users/invite` | `users` + Zitadel |
+| `AccessUserDetail.jsx` | Reenviar convite / recuperar | `POST /api/v1/users/{id}/resend-invite` | Zitadel |
+| `AccessUserDetail.jsx` | Desativar conta | `DELETE /api/v1/users/{id}` | `users.status` |
 
 ---
 
