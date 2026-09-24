@@ -9,7 +9,8 @@
 // only as rich as the demo needs. Nothing here is enforced anywhere: the server
 // is still the authority on every request that leaves the browser.
 
-const ANALISTA = [
+// What every persona can do: read the process and its files.
+const LEITURA = [
     'processo.listar',
     'processo.ver',
     'arquivo.listar',
@@ -25,8 +26,16 @@ const ANALISTA = [
     'cliente.ver',
 ];
 
+// The analista reviews what the perito sends. deck.analisar is the whole
+// difference between the two sides of the board, and it is the analista's, not
+// the perito's — the demo has one login per side, no in-board switch.
+const ANALISTA = [
+    ...LEITURA,
+    'deck.analisar',
+];
+
 const PERITO = [
-    ...ANALISTA,
+    ...LEITURA,
     'processo.criar',
     'processo.editar',
     'processo.alterarStatus',

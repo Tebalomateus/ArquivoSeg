@@ -80,17 +80,11 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     const ask = useConfirm();
     const online = !isMockEnabled() && !!getToken();
     const actor = currentUser?.name || currentUser?.email || '';
-    // Reviewing a deck is a permission now, not a rung on the role ladder: a
-    // tenant can hand deck.analisar to whoever it wants. The demo switch stays
-    // flag-gated and still simulates the two sides of that permission.
+    // Reviewing a deck is a permission, not a rung on the role ladder: a tenant
+    // can hand deck.analisar to whoever it wants. Read it on every render — the
+    // permissions arrive by HTTP after the board mounts, and the affordances
+    // (analyse vs. wait) follow the set the moment it lands.
     const canAnalyse = can('deck.analisar');
-    const demoSwitch = import.meta.env.VITE_DEMO_ROLE_SWITCH === 'true';
-    // null = ninguém tocou no interruptor, então ele segue a permissão. Guardar
-    // canAnalyse no estado inicial congelava o lado errado: as permissões chegam
-    // por HTTP, e na primeira renderização elas ainda não chegaram.
-    const [demoRole, setDemoRole] = useState(null);
-    const effectiveDemoRole = demoRole ?? (canAnalyse ? 'analista' : 'perito');
-    const isAnalyst = demoSwitch ? effectiveDemoRole === 'analista' : canAnalyse;
 
     // ── Groups = repository folders (driven by the left sidebar in ClaimDetails).
     // One group per folder; tasks come from that folder's checklist.
@@ -562,16 +556,6 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                     <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Relação de documentos</h2>
                 </div>
                 <div className="flex items-center gap-4">
-                    {demoSwitch && (
-                        <div className="flex rounded-xl border border-[#E9EEF5] bg-[#F4F7FB] p-1">
-                            {['perito', 'analista'].map(rl => (
-                                <button key={rl} onClick={() => setDemoRole(rl)}
-                                    className={`rounded-[9px] px-3 py-2 text-[10px] font-extrabold uppercase tracking-wider transition-all ${effectiveDemoRole === rl ? 'bg-white text-[#0E8A78] shadow' : 'text-slate-400'}`}>
-                                    {rl}
-                                </button>
-                            ))}
-                        </div>
-                    )}
                     {isLoose ? (
                         <div className="flex items-center gap-3 rounded-2xl border border-[#E9EEF5] bg-white px-[18px] py-[14px]">
                             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F1F5F9] text-slate-500">
@@ -629,7 +613,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
 
                     {pendingDecks.map(d => (
                         <DeckCard key={d.id} deck={d} accentOf={grupoAccent(tabs, d.grupo)} labelFor={labelFor} taskReturns={state.taskReturns}
-                            role={isAnalyst ? 'analista' : 'perito'} hot={hotDeck === d.id} selCount={selCount}
+                            role={canAnalyse ? 'analista' : 'perito'} hot={hotDeck === d.id} selCount={selCount}
                             onDragStart={(e) => startDragDeck(e, d.id)} onDragEnd={endDrag}
                             onDragOver={(e) => onDeckDragOver(e, d.id)} onDrop={(e) => onDeckDrop(e, d.id)}
                             onAddFile={() => openUploadForDeck(d.id)} onSubmit={() => submit(d.id)}
@@ -674,7 +658,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                     )}
                     {sentDecks.map(d => (
                         <DeckCard key={d.id} deck={d} accentOf={grupoAccent(tabs, d.grupo)} labelFor={labelFor} taskReturns={state.taskReturns}
-                            role={isAnalyst ? 'analista' : 'perito'} onAnalyze={() => setReviewId(d.id)}
+                            role={canAnalyse ? 'analista' : 'perito'} onAnalyze={() => setReviewId(d.id)}
                             onDownloadAll={canDownloadArchive ? () => downloadArchive(d) : null} downloading={zipping === d.id} {...fileActions} />
                     ))}
                     {sentDecks.length === 0 && <Empty>Nenhum deck em análise.<br />Envie um deck da coluna pendente.</Empty>}

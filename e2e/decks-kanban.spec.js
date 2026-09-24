@@ -140,9 +140,9 @@ test('tarefa devolvida volta para pendente com o motivo à vista', async ({ page
 
 test('o analista analisa mesmo quando as permissões chegam depois do board', async ({ page }) => {
     // O board monta antes de /me/permissions responder — é o caso normal, as duas
-    // requisições saem juntas. O interruptor de papel da demo (VITE_DEMO_ROLE_SWITCH)
-    // já foi semeado uma vez a partir de canAnalyse nessa primeira renderização, e
-    // ficava preso em "perito": quem podia analisar via só "Aguardando análise".
+    // requisições saem juntas. O lado da tela (analisar vs. aguardar) tem de seguir
+    // deck.analisar quando ela chega, e não o conjunto vazio da primeira renderização:
+    // já houve um estado semeado ali que prendia quem podia analisar em "Aguardando análise".
     const state = await openBoard(page, {
         persona: 'viewer',
         mutate: (s) => {
