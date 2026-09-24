@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Save, X, Plus, Trash2, Shield, Info, Link as LinkIcon, Share2, Building2, User, FileText, Calendar, MapPin, Briefcase, ArrowLeft, ListChecks, AlertCircle } from 'lucide-react';
+import { Save, X, Plus, Trash2, Shield, Info, Link as LinkIcon, Building2, User, FileText, Calendar, MapPin, Briefcase, ArrowLeft, ListChecks, AlertCircle } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { GENERAL_CHECKLIST } from '../constants/config';
 import { listChecklistTypes } from '../api/checklist';
@@ -700,22 +700,6 @@ export default function NewClaim() {
                                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-gray-300 resize-none"
                             />
                             <p className="text-[10px] text-gray-400 mt-1 text-right">{description.length}/500</p>
-                        </div>
-                    </div>
-
-                    {/* Link compartilhável */}
-                    <div className="card bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 space-y-3">
-                        <h4 className="text-sm font-bold text-blue-900 flex items-center gap-2">
-                            <Share2 size={16} />
-                            Link de Compartilhamento
-                        </h4>
-                        <p className="text-xs text-blue-700">O sistema gerará um link único para envio de documentos após criação do sinistro.</p>
-                        <div className="flex flex-wrap gap-2">
-                            {['Causa', 'Prejuízo', 'Liquidação', 'Gerencial'].map(p => (
-                                <span key={p} className="px-2.5 py-1 bg-white/80 border border-blue-100 rounded-full text-[10px] font-bold text-blue-700 uppercase tracking-wider">
-                                    {p}
-                                </span>
-                            ))}
                         </div>
                     </div>
                 </div>
