@@ -8,6 +8,8 @@ import Settings from './pages/Settings';
 import PublicShare from './pages/PublicShare';
 import Login from './pages/Login';
 import Callback from './pages/Callback';
+import Signup from './pages/Signup';
+import SignupPending from './pages/SignupPending';
 import { useClaims } from './context/ClaimsContext';
 import { usePermissions } from './context/PermissionsContext';
 import { rememberDestination } from './api/auth';
@@ -92,6 +94,8 @@ function App() {
         <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/callback" element={<Callback />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/signup/retorno" element={<SignupPending />} />
 
             {/* BACKOFFICE / ADMIN PORTAL */}
             <Route
