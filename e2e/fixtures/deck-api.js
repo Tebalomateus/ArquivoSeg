@@ -47,6 +47,7 @@ export const DEFAULT_PERMISSIONS = [
     'deck.analisar',
     'deck.baixarArquivos',
     'compartilhamento.criar',
+    'processo.verGerencial',
 ];
 
 const STATUS = { PENDENTE: 'pendente', ENVIADO: 'enviado', ATENDIDO: 'atendido' };
@@ -312,6 +313,50 @@ export function archiveFor(state, deckId) {
     })));
 }
 
+function gerencialTree(state) {
+    const files = new Map(state.files.map((fv) => [fv.id, fv]));
+    const toFile = (fv) => ({
+        fileVerId: fv.id,
+        nome: fv.file_name.replace(/^(causa|prejuizo|liquidacao|gerencial)__/, ''),
+        tamanho: fv.size_bytes,
+        mimeType: fv.mime_type,
+        versao: fv.version,
+        enviadoEm: fv.created_at,
+    });
+    const deckOfTask = new Map();
+    const referenced = new Set();
+    for (const d of state.board.decks) {
+        for (const k of d.tarefaIds) deckOfTask.set(k, d);
+        for (const f of d.arquivos) referenced.add(f.fileVerId);
+    }
+    const pastas = (state.process.metadata.folders || [])
+        .filter((f) => f.category !== 'gerencial')
+        .map((f) => ({
+            id: f.id,
+            nome: f.name,
+            categoria: f.category,
+            tarefas: (f.checklist || []).map((item) => {
+                const chave = `${f.id}.${item.id}`;
+                const deck = deckOfTask.get(chave) || null;
+                return {
+                    chave,
+                    rotulo: item.name,
+                    recebida: !!item.received,
+                    status: state.board.taskStatus[chave] || null,
+                    deckCodigo: deck?.codigo || null,
+                    // fileVerId cuja versão foi apagada é pulado, como no servidor.
+                    arquivos: deck ? deck.arquivos.map((a) => files.get(a.fileVerId)).filter(Boolean).map(toFile) : [],
+                };
+            }),
+            arquivos: [],
+        }));
+    pastas.push({
+        id: 'avulsos', nome: 'Documentos avulsos', categoria: 'avulsos', tarefas: [],
+        arquivos: state.files.filter((fv) => !referenced.has(fv.id)).map(toFile),
+    });
+    return { processId: state.process.id, pastas };
+}
+
 function handle(state, method, seg, body) {
     const [a, b, c, d, e] = seg;
 
@@ -387,6 +432,17 @@ function handle(state, method, seg, body) {
         state.files.push(fv);
         const { content, ...view } = fv;
         return ok(view);
+    }
+
+    // A visão gerencial, montada como o servidor monta (handler/gerencial.go):
+    // as pastas do metadata menos a gerencial, o checklist de cada uma como
+    // tarefas, os arquivos do deck sob cada tarefa que ele carrega, e o que
+    // nenhum deck referencia em "Documentos avulsos".
+    if (c === 'gerencial' && method === 'GET') {
+        if (!state.permissions.includes('processo.verGerencial')) {
+            return { status: 403, body: { error: { code: 'INSUFFICIENT_PERMISSION', message: 'insufficient permission', required_action: 'processo.verGerencial', request_id: 'e2e' } } };
+        }
+        return ok({ data: gerencialTree(state) });
     }
 
     if (c !== 'decks') return null;

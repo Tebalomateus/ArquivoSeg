@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import ChecklistPanel from '../components/ChecklistPanel';
 import KanbanBoard, { LOOSE_FOLDER_ID } from '../components/KanbanBoard';
+import GerencialTree from '../components/GerencialTree';
 import { useClaims, VALID_NEXT_STATUS } from '../context/ClaimsContext';
 import { useCan } from '../context/PermissionsContext';
 import { useConfirm } from '../components/ConfirmDialog';
@@ -459,16 +460,12 @@ export default function ClaimDetails() {
 
     const canManageDocuments = can('arquivo.subir');
 
-    // Regra Reunião 3: o corretor não vê a pasta "Gerencial".
-    //
-    // Isto continua olhando o papel legado de propósito: é uma regra de persona
-    // (que conteúdo interno o corretor enxerga), não uma permissão — não existe
-    // ação equivalente no catálogo e inventar uma seria pior do que deixar a
-    // exceção à vista. Precisa de decisão de produto antes do passo 12, quando o
-    // papel legado sai.
-    const isBroker = currentUser?.role === 'CORRETOR';
+    // A pasta "Gerencial" é a visão consolidada do sinistro, e quem a vê é quem
+    // tem a permissão — não mais o papel legado. Sem ela a pasta não existe na
+    // lateral, e o servidor recusa a rota de qualquer jeito.
+    const canSeeGerencial = can('processo.verGerencial');
     const visibleFolders = claim.folders.filter(f => {
-        if (f.category === 'gerencial') return !isBroker;
+        if (f.category === 'gerencial') return canSeeGerencial;
         return true;
     });
 
@@ -478,6 +475,9 @@ export default function ClaimDetails() {
     const currentFolderId = looseSelected ? null
         : (selectedFolderId && selectedFolderId !== LOOSE_FOLDER_ID ? selectedFolderId : visibleFolders[0]?.id);
     const currentFolder = claim.folders.find(f => f.id === currentFolderId) || visibleFolders[0];
+    // Gerencial não tem kanban nem checklist próprio: é uma árvore só de leitura
+    // sobre as outras pastas, seja qual for o modo de visualização.
+    const gerencialSelected = currentFolder?.category === 'gerencial';
 
     // Se ainda não houver pasta (falha catastrófica de dados), mostra fallback
     if (!currentFolder) return <div className="p-20 text-center">Erro ao carregar pastas do sinistro.</div>;
@@ -593,6 +593,8 @@ export default function ClaimDetails() {
                             </button>
                         )}
                     </div>
+                    {/* A visão gerencial é só leitura: nada sobe para a pasta gerencial. */}
+                    {!gerencialSelected && (
                     <button
                         onClick={() => setUploadModalOpen(true)}
                         className="bg-secondary text-white px-6 py-2 rounded-xl font-bold hover:bg-secondary-hover transition-all shadow-lg shadow-secondary/10 flex items-center gap-2 group"
@@ -600,6 +602,7 @@ export default function ClaimDetails() {
                         <Plus size={18} className="group-hover:rotate-90 transition-transform" />
                         Upload Seguro
                     </button>
+                    )}
                 </div>
             </div>
 
@@ -685,15 +688,17 @@ export default function ClaimDetails() {
                                         </p>
                                     </div>
                                 </div>
-                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${currentFolderId === folder.id ? 'bg-white/20 border-white/20' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
-                                    {folder.completion}%
-                                </span>
+                                {folder.category !== 'gerencial' && (
+                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${currentFolderId === folder.id ? 'bg-white/20 border-white/20' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
+                                        {folder.completion}%
+                                    </span>
+                                )}
                             </button>
                         ))}
 
                         {/* Documentos avulsos: no sinistro, sem tarefa. Só faz sentido
                             onde se vincula, que é o board. */}
-                        {viewMode === 'decks' && canManageDocuments && (
+                        {viewMode === 'decks' && canManageDocuments && !gerencialSelected && (
                             <button
                                 type="button"
                                 data-testid="folder-avulsos"
@@ -792,7 +797,9 @@ export default function ClaimDetails() {
 
                 {/* Content Area */}
                 <div className="lg:col-span-3 space-y-6">
-                    {viewMode === 'decks' ? (
+                    {gerencialSelected ? (
+                        <GerencialTree claim={claim} />
+                    ) : viewMode === 'decks' ? (
                         <KanbanBoard claim={claim} currentUser={currentUser} folderId={looseSelected ? LOOSE_FOLDER_ID : currentFolderId}
                             onLooseCount={setLooseCount}
                             onCreateTask={canEditClaimMeta ? (fid, name) => addChecklistItem(claim.id, fid, name) : null} />

@@ -61,3 +61,25 @@ test('manager gerencia links públicos', async ({ page }) => {
     await expect(page.getByText('Apenas perfis manager+ podem gerenciar links.')).toHaveCount(0);
     await expect(page.getByRole('combobox').filter({ hasText: 'Selecione um arquivo' })).toBeVisible();
 });
+
+// A pasta "Gerencial" do repositório segue processo.verGerencial. No demo só o
+// corretor (manager) a tem; o perito e o analista não a veem na lateral.
+test('viewer e contributor não veem a pasta "Gerencial"', async ({ page }) => {
+    for (const persona of ['viewer', 'contributor']) {
+        await signIn(page, persona);
+        await page.goto('/app/sinistros/1');
+        await expect(page.getByRole('button', { name: /^Causa \d+%$/ })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Gerencial' })).toHaveCount(0);
+    }
+});
+
+test('manager vê a pasta "Gerencial" e ela abre a visão consolidada, sem kanban', async ({ page }) => {
+    await signIn(page, 'manager');
+    await page.goto('/app/sinistros/1');
+    await page.getByRole('button', { name: 'Gerencial' }).click();
+    const tree = page.getByTestId('gerencial-tree');
+    await expect(tree.getByRole('heading', { name: 'Visão gerencial' })).toBeVisible();
+    await expect(tree.getByTestId('gerencial-folder-avulsos')).toBeVisible();
+    await expect(page.getByTestId('column-pendente')).toHaveCount(0);
+    await expect(page.getByTestId('folder-avulsos')).toHaveCount(0);
+});

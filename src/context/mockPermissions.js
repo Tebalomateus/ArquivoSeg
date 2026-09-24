@@ -58,6 +58,7 @@ const PERITO = [
 // belongs to the admin.
 const CORRETOR = [
     ...PERITO,
+    'processo.verGerencial',
     'arquivo.excluir',
     'comentario.editarQualquer',
     'comentario.excluirQualquer',
