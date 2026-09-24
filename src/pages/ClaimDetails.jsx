@@ -1286,40 +1286,27 @@ export default function ClaimDetails() {
                             </div>
 
                             {/* Management View: Compliance & Security */}
-                            <div className="card border-2 border-purple-100 bg-purple-50/20 mb-6 relative overflow-hidden">
-                                <Shield className="absolute top-0 right-0 w-32 h-32 text-purple-100 -mr-12 opacity-40" />
-                                <div className="flex items-center justify-between mb-6 relative z-10">
-                                    <h3 className="text-lg font-black text-gray-900 font-display flex items-center gap-3 uppercase tracking-tight">
-                                        <Shield size={24} className="text-purple-600" /> Regulação {claim.insurer || 'Seguradora'}
-                                    </h3>
-                                    <div className="flex items-center gap-4 bg-white p-2 px-4 rounded-xl shadow-sm border border-purple-100">
-                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Complexidade (Art. 86)</span>
-                                        <button
-                                            onClick={() => canEditClaimMeta && setComplexStatus(claim.id, !claim.isComplex)}
-                                            className={`w-12 h-6 rounded-full transition-all relative ${claim.isComplex ? 'bg-purple-600' : 'bg-gray-200'}`}
-                                        >
-                                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${claim.isComplex ? 'right-1' : 'left-1'}`}></div>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
-                                    <div className="p-4 bg-white rounded-2xl border border-purple-50 shadow-sm">
-                                        <p className="text-[10px] font-black text-purple-600 uppercase mb-2 tracking-widest">Status de Prorrogação</p>
-                                        <p className="text-xs text-gray-600 font-medium">
-                                            {claim.isComplex ? 'Regra de Complexidade Ativada: Prazo estendido para 120 dias conforme regulamentação.' : 'Fluxo padrão de 30 dias ativos (Regra Geral).'}
+                            <div className="card border-gray-100 mb-6">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-sm font-black text-gray-900 flex items-center gap-2">
+                                            <Shield size={16} className="text-purple-600" /> Sinistro complexo (Art. 86)
+                                        </p>
+                                        <p className="text-xs text-gray-500 font-medium mt-1">
+                                            {claim.isComplex ? 'Prazo regulatório de 120 dias' : 'Prazo regulatório de 30 dias'}
                                         </p>
                                     </div>
-                                    <div className="p-4 bg-white rounded-2xl border border-purple-50 shadow-sm">
-                                        <p className="text-[10px] font-black text-purple-600 uppercase mb-2 tracking-widest">Integridade de Dados</p>
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-xs text-gray-600 font-medium flex items-center gap-2">
-                                                <Lock size={12} className="text-purple-400" /> Criptografia AES-256 ativa.
-                                            </p>
-                                            <p className="text-xs text-gray-600 font-medium flex items-center gap-2">
-                                                <Eye size={12} className="text-purple-400" /> Rastreamento de leitura ativado.
-                                            </p>
-                                        </div>
-                                    </div>
+                                    <button
+                                        type="button"
+                                        role="switch"
+                                        aria-checked={!!claim.isComplex}
+                                        aria-label="Sinistro complexo (Art. 86)"
+                                        disabled={!canEditClaimMeta}
+                                        onClick={() => setComplexStatus(claim.id, !claim.isComplex)}
+                                        className={`w-12 h-6 rounded-full transition-all relative shrink-0 ${claim.isComplex ? 'bg-purple-600' : 'bg-gray-200'} ${canEditClaimMeta ? '' : 'cursor-not-allowed opacity-50'}`}
+                                    >
+                                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${claim.isComplex ? 'right-1' : 'left-1'}`}></div>
+                                    </button>
                                 </div>
                             </div>
 
