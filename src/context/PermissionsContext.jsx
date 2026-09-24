@@ -54,7 +54,7 @@ export function clearPermissionsCache() {
 }
 
 export function PermissionsProvider({ children }) {
-    const { currentUser } = useClaims();
+    const { currentUser, tokenEpoch } = useClaims();
     // Straight from the Zitadel claim, never from the IAM tables: a mistake in
     // the tenant's own permission data must not be able to shut the admin out.
     const isAdmin = currentUser?.isAdmin === true;
@@ -92,10 +92,15 @@ export function PermissionsProvider({ children }) {
 
     const refresh = useCallback(async () => {
         if (!currentUser) return;
-        if (isMockEnabled() || !getToken()) {
+        if (isMockEnabled()) {
             applyMock(currentUser);
             return;
         }
+        // Fora do mock, a persona de demonstração nunca vale: ela era o
+        // conjunto do perito para quem recarregava a página antes de o token
+        // ser restaurado, e o analista ficava "sem poder analisar". Sem token
+        // não há resposta ainda; o tokenEpoch chama de volta quando ele chegar.
+        if (!getToken()) return;
 
         setLoading(true);
         try {
@@ -147,7 +152,7 @@ export function PermissionsProvider({ children }) {
         }
         refresh();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentUser?.id]);
+    }, [currentUser?.id, tokenEpoch]);
 
     const value = useMemo(() => {
         // Admin is an implicit wildcard, matching the backend. It is also the

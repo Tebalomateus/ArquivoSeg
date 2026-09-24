@@ -204,12 +204,20 @@ export const ClaimsProvider = ({ children }) => {
         }
     }, [claims, users, clients, currentUser, claimsCache]);
 
+    // Quantas vezes o token da API foi (re)estabelecido nesta sessão. Quem
+    // depende do token — as permissões, por exemplo — observa este contador
+    // em vez de ler o sessionStorage no render: ao recarregar a página o token
+    // só chega depois do primeiro render, e sem o sinal a busca de permissões
+    // rodava antes dele e nunca mais.
+    const [tokenEpoch, setTokenEpoch] = useState(0);
+
     // Re-establish API token on reload when session is still active
     useEffect(() => {
         if (!currentUser || getToken() || !zitadel) return;
         zitadel.userManager.getUser().then((oidcUser) => {
             if (oidcUser && !oidcUser.expired) {
                 setToken(oidcUser.access_token);
+                setTokenEpoch((n) => n + 1);
             } else {
                 setCurrentUser(null);
             }
@@ -807,7 +815,7 @@ export const ClaimsProvider = ({ children }) => {
 
     return (
         <ClaimsContext.Provider value={{
-            currentUser, setCurrentUser, logout,
+            currentUser, setCurrentUser, logout, tokenEpoch,
             claims, addClaim, updateChecklistStatus, markFileReviewed, addChecklistItem,
             transitionStatus, archiveClaim, assignClaim, updateClaimFields, fetchSingleClaim,
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
