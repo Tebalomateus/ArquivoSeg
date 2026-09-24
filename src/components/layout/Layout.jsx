@@ -15,9 +15,10 @@ import {
 import { useClaims } from '../../context/ClaimsContext';
 import NotificationBell from '../NotificationBell';
 
-const SidebarItem = ({ to, icon: Icon, label, isOpen }) => (
+const SidebarItem = ({ to, icon: Icon, label, isOpen, end = false }) => (
     <NavLink
         to={to}
+        end={end}
         className={({ isActive }) => `
       flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 font-bold text-sm
       ${isActive
@@ -84,7 +85,7 @@ export default function Layout() {
                 </div>
 
                 <nav className="flex-1 px-4 py-4 space-y-2">
-                    <SidebarItem to="/app" icon={BarChart3} label="Dashboard" isOpen={isSidebarOpen} />
+                    <SidebarItem to="/app" end icon={BarChart3} label="Dashboard" isOpen={isSidebarOpen} />
                     <SidebarItem to="/app/sinistros" icon={FileText} label="Meus Sinistros" isOpen={isSidebarOpen} />
                     <SidebarItem to="/app/configuracoes" icon={Settings} label="Configurações" isOpen={isSidebarOpen} />
                 </nav>
