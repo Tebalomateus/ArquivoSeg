@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom';
 import {
     BarChart3,
     FileText,
     Users,
-    Settings,
     Menu,
     X,
     PlusCircle,
     Clock,
     LogOut,
-    ShieldCheck
+    ShieldCheck,
+    ChevronDown,
+    KeyRound
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 import NotificationBell from '../NotificationBell';
@@ -30,6 +32,123 @@ const SidebarItem = ({ to, icon: Icon, label, isOpen, end = false }) => (
         {isOpen && <span>{label}</span>}
     </NavLink>
 );
+
+/**
+ * O que sobrou de "Configurações Globais": quem sou eu, e onde se troca a senha.
+ *
+ * E-mail e senha vivem no Zitadel, então a única ação real aqui é lembrar que a
+ * troca acontece pelo "Esqueceu a senha?" da tela de login.
+ */
+const MENU_WIDTH = 288; // w-72
+const MENU_MARGIN = 8; // keep the menu on-screen at narrow widths
+
+const ProfileMenu = ({ user, onLogout }) => {
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
+    const panelRef = useRef(null);
+    // Menu position in viewport coords: the panel is portaled to <body>, like
+    // NotificationBell's, because the header's backdrop-filter stacking context
+    // sits under the page's own z-10 blocks and they would paint over it.
+    const [pos, setPos] = useState({ top: 0, left: 0 });
+
+    // close on outside click / Escape — "inside" is the trigger or the portaled panel
+    useEffect(() => {
+        if (!open) return;
+        const onClick = (e) => {
+            const inTrigger = ref.current?.contains(e.target);
+            const inPanel = panelRef.current?.contains(e.target);
+            if (!inTrigger && !inPanel) setOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        document.addEventListener('mousedown', onClick);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onClick);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+
+    // anchor the fixed panel under the trigger's right edge; follow resize/scroll
+    useEffect(() => {
+        if (!open) return;
+        const place = () => {
+            const rect = ref.current?.getBoundingClientRect();
+            if (!rect) return;
+            const width = Math.min(MENU_WIDTH, window.innerWidth - 2 * MENU_MARGIN);
+            const left = Math.min(Math.max(MENU_MARGIN, rect.right - width), window.innerWidth - MENU_MARGIN - width);
+            setPos({ top: rect.bottom + 8, left, width });
+        };
+        place();
+        window.addEventListener('resize', place);
+        window.addEventListener('scroll', place, true);
+        return () => {
+            window.removeEventListener('resize', place);
+            window.removeEventListener('scroll', place, true);
+        };
+    }, [open]);
+
+    const initials = user?.name?.split(' ').map(n => n[0]).join('');
+
+    return (
+        <div className="relative" ref={ref}>
+            <button
+                type="button"
+                onClick={() => setOpen(o => !o)}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                aria-label="Meu perfil"
+                data-testid="profile-menu-trigger"
+                className="flex items-center gap-4 rounded-2xl p-1 -m-1 transition-all hover:bg-white/60"
+            >
+                <div className="text-right hidden sm:block">
+                    <p className="text-sm font-bold text-slate-900 leading-none">{user?.name}</p>
+                    <p className="text-[11px] font-bold text-secondary uppercase tracking-widest mt-1">{user?.role}</p>
+                </div>
+                <div className="w-10 h-10 bg-white border-2 border-white shadow-lg rounded-2xl flex items-center justify-center font-bold text-secondary text-sm">
+                    {initials}
+                </div>
+                <ChevronDown size={16} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+
+            {open && createPortal(
+                <div
+                    ref={panelRef}
+                    role="menu"
+                    data-testid="profile-menu"
+                    style={{ top: pos.top, left: pos.left, width: pos.width || MENU_WIDTH }}
+                    className="fixed w-72 max-w-[calc(100vw-16px)] bg-white rounded-2xl border border-slate-100 shadow-2xl z-50 overflow-hidden animate-fade-in"
+                >
+                    <div className="p-5 flex items-center gap-4 border-b border-slate-100">
+                        <div className="w-12 h-12 bg-secondary/10 rounded-2xl flex items-center justify-center font-black text-secondary">
+                            {initials}
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-900 truncate">{user?.name}</p>
+                            <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+                            <span className="inline-block mt-1.5 px-2 py-0.5 rounded-lg bg-secondary/10 text-secondary text-[10px] font-black uppercase tracking-widest">
+                                {user?.role}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="px-5 py-3 flex items-start gap-2 text-[11px] text-slate-500 border-b border-slate-100">
+                        <KeyRound size={14} className="shrink-0 mt-0.5 text-slate-400" />
+                        <span>E-mail e senha são geridos pelo Zitadel: para trocar, use "Esqueceu a senha?" na tela de login.</span>
+                    </div>
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={onLogout}
+                        className="w-full flex items-center gap-3 px-5 py-3 text-sm font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 transition-all"
+                    >
+                        <LogOut size={16} />
+                        Sair
+                    </button>
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+};
 
 export default function Layout() {
     const [isSidebarOpen, setSidebarOpen] = useState(true);
@@ -87,7 +206,6 @@ export default function Layout() {
                 <nav className="flex-1 px-4 py-4 space-y-2">
                     <SidebarItem to="/app" end icon={BarChart3} label="Dashboard" isOpen={isSidebarOpen} />
                     <SidebarItem to="/app/sinistros" icon={FileText} label="Meus Sinistros" isOpen={isSidebarOpen} />
-                    <SidebarItem to="/app/configuracoes" icon={Settings} label="Configurações" isOpen={isSidebarOpen} />
                 </nav>
 
                 <div className="p-6 border-t border-white/40">
@@ -120,15 +238,7 @@ export default function Layout() {
                     <div className="flex items-center gap-6">
                         <NotificationBell basePath="/app" />
                         <div className="h-8 w-[1px] bg-slate-200"></div>
-                        <div className="flex items-center gap-4">
-                            <div className="text-right hidden sm:block">
-                                <p className="text-sm font-bold text-slate-900 leading-none">{currentUser?.name}</p>
-                                <p className="text-[11px] font-bold text-secondary uppercase tracking-widest mt-1">{currentUser?.role}</p>
-                            </div>
-                            <div className="w-10 h-10 bg-white border-2 border-white shadow-lg rounded-2xl flex items-center justify-center font-bold text-secondary text-sm">
-                                {currentUser?.name?.split(' ').map(n => n[0]).join('')}
-                            </div>
-                        </div>
+                        <ProfileMenu user={currentUser} onLogout={handleLogout} />
                     </div>
                 </header>
 

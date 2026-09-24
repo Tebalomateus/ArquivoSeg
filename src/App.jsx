@@ -4,7 +4,6 @@ import Dashboard from './pages/Dashboard';
 import ClaimsList from './pages/ClaimsList';
 import ClaimDetails from './pages/ClaimDetails';
 import NewClaim from './pages/NewClaim';
-import Settings from './pages/Settings';
 import PublicShare from './pages/PublicShare';
 import Login from './pages/Login';
 import Callback from './pages/Callback';
@@ -122,7 +121,6 @@ function App() {
                     <Route path="papeis" element={<AccessRoles />} />
                     <Route path="grupos" element={<AccessGroups />} />
                 </Route>
-                <Route path="configuracoes" element={<Settings />} />
                 <Route path="compliance" element={<ComplianceDataCenter />} />
                 <Route path="audit" element={<AuditLog />} />
                 <Route path="notificacoes" element={<Notifications />} />
@@ -141,7 +139,9 @@ function App() {
                 <Route path="sinistros" element={<ClaimsList />} />
                 <Route path="sinistros/novo" element={<RequireCreateAccess><NewClaim /></RequireCreateAccess>} />
                 <Route path="sinistros/:id" element={<ClaimDetails />} />
-                <Route path="configuracoes" element={<Settings />} />
+                {/* Configurações Globais foi removida: nada ali era real. O redirect
+                    fica porque o caminho antigo está em links salvos. */}
+                <Route path="configuracoes" element={<Navigate to="/app" replace />} />
                 <Route path="notificacoes" element={<Notifications />} />
             </Route>
 

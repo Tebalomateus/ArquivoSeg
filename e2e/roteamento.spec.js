@@ -58,11 +58,11 @@ test('o voltar do sinistro leva à lista, que é o que ele promete', async ({ pa
     await expect(page).toHaveURL(/\/app\/sinistros$/);
 });
 
-test('o voltar de configurações dá no dashboard do portal', async ({ page }) => {
+test('o caminho antigo de configurações dá no dashboard do portal', async ({ page }) => {
+    // A página foi removida; o link antigo ainda pode estar salvo em algum lugar.
     await signIn(page, 'contributor');
     await page.goto('/app/configuracoes');
 
-    await page.getByRole('link', { name: 'Voltar ao Dashboard' }).click();
     await expect(page).toHaveURL(/\/app$/);
 });
 

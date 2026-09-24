@@ -187,21 +187,13 @@ export const ClaimsProvider = ({ children }) => {
         } catch { return null; }
     });
 
-    const [settings, setSettings] = useState(() => {
-        try {
-            const saved = localStorage.getItem('arquivoseg_settings');
-            return saved ? JSON.parse(saved) : { notificationInterval: '3h', weeklyReport: true };
-        } catch { return { notificationInterval: '3h', weeklyReport: true }; }
-    });
-
-    // Persistence (mock-only data + cache + settings)
+    // Persistence (mock-only data + cache)
     useEffect(() => {
         if (isMockEnabled()) {
             localStorage.setItem('arquivoseg_claims', JSON.stringify(claims));
             localStorage.setItem('arquivoseg_clients', JSON.stringify(clients));
         }
         localStorage.setItem('arquivoseg_users', JSON.stringify(users));
-        localStorage.setItem('arquivoseg_settings', JSON.stringify(settings));
         localStorage.setItem('arquivoseg_claims_cache', JSON.stringify(claimsCache));
         if (currentUser) {
             localStorage.setItem('arquivoseg_current_user', JSON.stringify(currentUser));
@@ -210,7 +202,7 @@ export const ClaimsProvider = ({ children }) => {
             localStorage.removeItem('arquivoseg_current_user');
             localStorage.removeItem('arquivoseg_authenticated');
         }
-    }, [claims, users, clients, settings, currentUser, claimsCache]);
+    }, [claims, users, clients, currentUser, claimsCache]);
 
     // Re-establish API token on reload when session is still active
     useEffect(() => {
@@ -811,8 +803,6 @@ export const ClaimsProvider = ({ children }) => {
         return claimsService.resendInvite(id);
     };
 
-    const updateSettings = (newSettings) => setSettings(newSettings);
-
     const isGuestVerified = (token) => sessionStorage.getItem(`verified_guest_${token}`) === 'true';
 
     return (
@@ -832,7 +822,6 @@ export const ClaimsProvider = ({ children }) => {
             inviteUser: inviteUserAction,
             deactivateUser: deactivateUserAction, resendInvite: resendInviteAction,
             clients, clientsLoading, addClientEntity, updateClientEntity, deleteClientEntity, refreshClients,
-            settings, updateSettings,
             isGuestVerified,
         }}>
             {children}

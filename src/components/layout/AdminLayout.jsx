@@ -3,7 +3,6 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard,
     Users,
-    Settings as SettingsIcon,
     LogOut,
     ShieldCheck,
     Search,
@@ -66,7 +65,6 @@ export default function AdminLayout() {
         { icon: ShieldHalf, label: 'Usuários e Acessos', path: '/admin/acessos' },
         { icon: History, label: 'Auditoria Global', path: '/admin/audit' },
         { icon: Database, label: 'Compliance Data Center', path: '/admin/compliance' },
-        { icon: SettingsIcon, label: 'Configurações do Sistema', path: '/admin/configuracoes' },
     ];
 
     const handleLogout = () => {
