@@ -83,6 +83,16 @@ h4,
     border-color: rgba(30, 64, 175, 0.2);
 }
 
+/* Cards que pedem digitação (formulários, modais de edição, campos de busca)
+   não flutuam: o movimento atrapalha quem está preenchendo. */
+.card:has(input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]):hover,
+.card.card-static:hover {
+    transform: none;
+    background: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
 .btn {
     display: inline-flex;
     align-items: center;
