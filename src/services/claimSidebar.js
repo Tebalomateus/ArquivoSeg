@@ -1,7 +1,7 @@
 import { isMockEnabled, getToken } from '../api/client';
 import { getProcessStorage } from '../api/storage';
 import { listProcessAudit } from '../api/processAudit';
-import { filesKey } from '../api/deckBoard';
+import { filesKey, persistKey } from '../api/deckBoard';
 import { getDeadline, adjustDeadline } from '../api/deadline';
 
 // Dados do cartão lateral do sinistro que não vêm no próprio processo:
@@ -75,13 +75,52 @@ function readMockDeadline(claim) {
     };
 }
 
+const writeMockDeadline = (claim, dl) => {
+    try { sessionStorage.setItem(deadlineKey(claim.id), JSON.stringify(dl)); } catch { /* ignore */ }
+};
+
+// A regra do servidor (deadline.AutoStart) sobre o que o mock guarda: os
+// obrigatórios são os itens das pastas não gerenciais; cada um está cumprido
+// se foi marcado (received / checklistState) ou se o deck da tarefa tem ao
+// menos um arquivo. Lista vazia nunca inicia, e o início nunca é desfeito.
+function mockRequirementsMet(claim) {
+    const required = (claim.folders || [])
+        .filter(f => f.category !== 'gerencial')
+        .flatMap(f => (f.checklist || []).map(i => ({ key: `${f.id}.${i.id}`, received: !!i.received })));
+    if (required.length === 0) return false;
+    let board = null;
+    try { board = JSON.parse(sessionStorage.getItem(persistKey(claim.id)) || 'null'); } catch { /* ignore */ }
+    const withFile = new Set((board?.decks || [])
+        .filter(d => (d.arquivos || []).length > 0)
+        .flatMap(d => d.tarefaIds || []));
+    const checked = claim.checklistState || {};
+    return required.every(r => r.received || checked[r.key] || withFile.has(r.key));
+}
+
+function mockAutoStart(claim, dl) {
+    if (dl.start_at || !mockRequirementsMet(claim)) return dl;
+    const at = new Date().toISOString();
+    dl.history.unshift({
+        at, by: null, by_name: null, by_email: null,
+        field: 'start_at', from: null, to: at, justification: '', source: 'auto',
+    });
+    dl.start_at = at;
+    dl.start_source = 'auto';
+    if (dl.due_source !== 'manual') {
+        dl.due_at = new Date(Date.parse(at) + dl.total_days * DAY_MS).toISOString();
+        dl.due_source = 'auto';
+    }
+    writeMockDeadline(claim, dl);
+    return dl;
+}
+
 // → Deadline (ver api/deadline.js)
 export async function loadDeadline(claim) {
     if (online()) {
         const res = await getDeadline(claim.id);
         return res?.data || res;
     }
-    return { ...readMockDeadline(claim), can_adjust: true };
+    return { ...mockAutoStart(claim, readMockDeadline(claim)), can_adjust: true };
 }
 
 class MockDeadlineError extends Error {
@@ -123,7 +162,7 @@ export async function saveDeadlineAdjust(claim, body, currentUser) {
         dl.due_at = body.due_at;
         dl.due_source = 'manual';
     }
-    try { sessionStorage.setItem(deadlineKey(claim.id), JSON.stringify(dl)); } catch { /* ignore */ }
+    writeMockDeadline(claim, dl);
     return { ...dl, can_adjust: true };
 }
 
