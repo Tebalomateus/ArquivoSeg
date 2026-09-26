@@ -150,3 +150,22 @@ test('no mock o prazo começa quando o último obrigatório recebe arquivo', asy
     await page.getByRole('link', { name: 'Lista de Sinistros' }).click();
     await expect(page.getByTestId('album-card').filter({ hasText: 'SD - 2024-001' }).getByTestId('album-prazo')).toHaveText('30 dias');
 });
+
+// Antes do início o cartão continua aguardando, mas um vencimento ajustado já
+// vale — e as listas contam por ele —, então aparece no cartão.
+test('vencimento ajustado sem início aparece no cartão enquanto aguarda', async ({ page }) => {
+    await signIn(page, 'manager');
+    await page.goto(CLAIM);
+    await expect(page.getByTestId('deadline-due')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Ajustar prazo' }).click();
+    const modal = page.getByRole('dialog', { name: 'Ajustar prazo' });
+    await modal.getByLabel('Novo vencimento').fill(dayInput(12));
+    await modal.getByLabel('Justificativa *').fill('Seguradora fixou a data de entrega');
+    await modal.getByRole('button', { name: 'Salvar ajuste' }).click();
+    await expect(modal).toHaveCount(0);
+
+    const [y, m, d] = dayInput(12).split('-');
+    await expect(page.getByTestId('deadline-status')).toHaveText('Aguardando documentos obrigatórios');
+    await expect(page.getByTestId('deadline-due')).toHaveText(`Vence ${d}/${m}/${y} · ajustado`);
+});

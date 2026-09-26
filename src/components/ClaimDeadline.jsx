@@ -75,6 +75,13 @@ export default function ClaimDeadline({ claim, currentUser, onChange }) {
                 <p className="text-[10.5px] text-gray-400 leading-snug mt-0.5">
                     Os {deadline.total_days || 30} dias começam a contar quando o último obrigatório for entregue.
                 </p>
+                {/* Um vencimento ajustado vale mesmo antes do início. */}
+                {deadline.due_at && (
+                    <p className="text-[10.5px] text-gray-500 leading-snug mt-0.5" data-testid="deadline-due">
+                        Vence {formatDate(deadline.due_at)}
+                        {deadline.due_source === 'manual' && <span className="text-gray-400"> · ajustado</span>}
+                    </p>
+                )}
             </>
         );
     } else {
@@ -95,7 +102,7 @@ export default function ClaimDeadline({ claim, currentUser, onChange }) {
                     Início {formatDate(deadline.start_at)}{' '}
                     <span className="text-gray-400">· {deadline.start_source === 'manual' ? 'ajustado' : 'automático'}</span>
                 </p>
-                <p className="text-[10.5px] text-gray-500 leading-snug">
+                <p className="text-[10.5px] text-gray-500 leading-snug" data-testid="deadline-due">
                     Vence {formatDate(deadline.due_at)}
                     {deadline.due_source === 'manual' && <span className="text-gray-400"> · ajustado</span>}
                 </p>
