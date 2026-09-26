@@ -59,12 +59,19 @@ export async function loadLastActivity(claim) {
 const DAY_MS = 86_400_000;
 const deadlineKey = (id) => `deadline_${id}`;
 
-function readMockDeadline(claimId) {
+// Sem nada guardado, parte do que o sinistro mock já traz (deadlineStartAt /
+// deadlineDueAt), como o servidor devolveria na lista.
+function readMockDeadline(claim) {
     let stored = null;
-    try { stored = JSON.parse(sessionStorage.getItem(deadlineKey(claimId)) || 'null'); } catch { /* ignore */ }
-    return stored || {
-        start_at: null, start_source: null, total_days: 30,
-        due_at: null, due_source: null, history: [],
+    try { stored = JSON.parse(sessionStorage.getItem(deadlineKey(claim.id)) || 'null'); } catch { /* ignore */ }
+    if (stored) return stored;
+    const start = claim.deadlineStartAt || null;
+    const due = claim.deadlineDueAt || null;
+    const autoDue = start ? new Date(Date.parse(start) + 30 * DAY_MS).toISOString() : null;
+    return {
+        start_at: start, start_source: start ? 'auto' : null, total_days: 30,
+        due_at: due || autoDue, due_source: due && due !== autoDue ? 'manual' : (start ? 'auto' : null),
+        history: [],
     };
 }
 
@@ -74,7 +81,7 @@ export async function loadDeadline(claim) {
         const res = await getDeadline(claim.id);
         return res?.data || res;
     }
-    return { ...readMockDeadline(claim.id), can_adjust: true };
+    return { ...readMockDeadline(claim), can_adjust: true };
 }
 
 class MockDeadlineError extends Error {
@@ -90,7 +97,7 @@ export async function saveDeadlineAdjust(claim, body, currentUser) {
     const justification = String(body.justification || '').trim();
     if (justification.length < 5) throw new MockDeadlineError(400, 'VALIDATION_ERROR', 'A justificativa precisa ter ao menos 5 caracteres.');
     if (!body.start_at && !body.due_at) throw new MockDeadlineError(400, 'VALIDATION_ERROR', 'Informe um novo início ou um novo vencimento.');
-    const dl = readMockDeadline(claim.id);
+    const dl = readMockDeadline(claim);
     const start = body.start_at || dl.start_at;
     if (body.due_at && start && Date.parse(body.due_at) < Date.parse(start)) {
         throw new MockDeadlineError(400, 'VALIDATION_ERROR', 'O vencimento não pode ser anterior ao início.');

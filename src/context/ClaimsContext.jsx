@@ -38,23 +38,6 @@ const buildFolders = (initialChecklist) => [
     { id: 'f4-' + Date.now(), name: 'Gerencial', category: 'gerencial', completion: 0, private: true, documents: [], checklist: [] },
 ];
 
-// Computes SLA from process.created_at + 30 days, no persisted suspensions.
-// O prazo de verdade vem de GET /processes/:id/deadline; isto só alimenta os
-// resumos das listas enquanto elas não leem o endpoint.
-const computeDeadline = (createdAtISO) => {
-    const totalDays = 30;
-    const created = createdAtISO ? new Date(createdAtISO) : new Date();
-    const elapsedDays = Math.floor((Date.now() - created.getTime()) / 86_400_000);
-    return {
-        totalDays,
-        remainingDays: Math.max(0, totalDays - elapsedDays),
-        isSuspended: false,
-        suspensionCount: 0,
-        lastUpdated: Date.now(),
-        history: [{ date: created.toLocaleDateString('pt-BR'), action: 'Início do prazo legal.' }],
-    };
-};
-
 // Front-only fields that we serialize into process.metadata for cross-device persistence.
 // Documents are excluded — they come from /processes/:id/files. Backend-owned fields
 // (id, title, description, status, created_at, updated_at) are also excluded.
@@ -62,7 +45,7 @@ const METADATA_KEYS = [
     'number', 'insurer', 'insuredName', 'policyNumber', 'policyStartDate', 'policyEndDate',
     'retroactiveDate', 'modality', 'brokerName', 'brokerClaimId', 'adjusterName', 'adjusterClaimId',
     'occurrenceDate', 'occurrenceLocation', 'observations', 'progress',
-    'deadline', 'shareToken', 'activities', 'reviewedFiles',
+    'shareToken', 'activities', 'reviewedFiles',
 ];
 
 const extractMetadata = (claim) => {
@@ -101,6 +84,11 @@ const adaptProcessToClaim = (proc, cached) => {
         backCreatedByName: proc.created_by_name || null,
         backCreatedByEmail: proc.created_by_email || null,
         claimType: proc.claim_type || null,
+        // Prazo regulatório: início (último obrigatório ou ajuste) e vencimento
+        // efetivo (manual, senão início + 30 dias, senão null). É o servidor
+        // quem calcula; as listas só leem (constants/deadline.js).
+        deadlineStartAt: proc.deadline_start_at || null,
+        deadlineDueAt: proc.deadline_due_at || null,
         checklistState: meta.checklist_state || {},
         checklistAdhocItems: Array.isArray(meta.checklist_adhoc_items) ? meta.checklist_adhoc_items : [],
         checklistRemovedItems: Array.isArray(meta.checklist_removed_items) ? meta.checklist_removed_items : [],
@@ -124,7 +112,6 @@ const adaptProcessToClaim = (proc, cached) => {
         occurrenceLocation: meta.occurrenceLocation || '',
         observations: meta.observations || '',
         progress: meta.progress ?? 0,
-        deadline: meta.deadline || computeDeadline(proc.created_at),
         activities: Array.isArray(meta.activities) ? meta.activities : [],
         reviewedFiles: meta.reviewedFiles || {},
         folders: baseFolders,
@@ -303,7 +290,8 @@ export const ClaimsProvider = ({ children }) => {
             title,
             description,
             progress: 0,
-            deadline: computeDeadline(now.toISOString()),
+            deadlineStartAt: null,
+            deadlineDueAt: null,
             activities: [{
                 id: 'a-' + Date.now(),
                 user: currentUser?.name || 'Sistema',
@@ -345,7 +333,6 @@ export const ClaimsProvider = ({ children }) => {
             backCreatedByEmail: currentUser?.email || null,
             date: now.toLocaleDateString('pt-BR'),
             lastModified: now.toLocaleDateString('pt-BR'),
-            deadline: computeDeadline(backCreatedAt),
         };
 
         setClaims(prev => [localClaim, ...prev]);
@@ -677,6 +664,18 @@ export const ClaimsProvider = ({ children }) => {
         }));
     };
 
+    // O cartão do sinistro relê o prazo (GET /deadline) depois de ajustes e de
+    // entregas; as listas leem os campos do processo. Espelhar aqui evita a
+    // lista mostrar o prazo antigo até o próximo refresh. Não vai para o
+    // metadata: início e vencimento são colunas do servidor.
+    const setClaimDeadline = (claimId, { start_at, due_at }) => updateClaimLocal(
+        claimId,
+        c => ((c.deadlineStartAt || null) === (start_at || null) && (c.deadlineDueAt || null) === (due_at || null)
+            ? c
+            : { ...c, deadlineStartAt: start_at || null, deadlineDueAt: due_at || null }),
+        { syncToBack: false },
+    );
+
     const updateClaimObservations = (id, observations) => updateClaimLocal(id, c => ({ ...c, observations }));
 
     const refreshUsers = useCallback(async () => {
@@ -780,7 +779,7 @@ export const ClaimsProvider = ({ children }) => {
             currentUser, setCurrentUser, logout, tokenEpoch,
             claims, addClaim, updateChecklistStatus, markFileReviewed, addChecklistItem,
             transitionStatus, archiveClaim, updateClaimFields, fetchSingleClaim,
-            logView, updateClaimObservations,
+            logView, updateClaimObservations, setClaimDeadline,
             uploadFileToClaim, addCommentToClaim, refreshClaimFiles, openDocument, downloadDocument,
             deleteDocument, listFileVersions,
             updateAnnotation, deleteAnnotation,

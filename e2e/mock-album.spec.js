@@ -17,7 +17,8 @@ for (const width of [1440, 360]) {
         await expect(card).toContainText('Incêndio Depósito Norte');
         await expect(card).toContainText('Porto Seguro');
         await expect(card.getByTestId('album-progress')).toHaveText('72%');
-        await expect(card.getByTestId('album-prazo')).toHaveText('18 dias');
+        // O sinistro de demonstração ainda não tem todos os obrigatórios.
+        await expect(card.getByTestId('album-prazo')).toHaveText('Aguardando documentos');
 
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         expect(overflow).toBeLessThanOrEqual(0);

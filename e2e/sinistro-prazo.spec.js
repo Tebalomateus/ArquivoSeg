@@ -101,3 +101,19 @@ test('no celular o modal de ajuste fica por cima da página inteira', async ({ p
     await expect(modal).toHaveCount(0);
     await expect(page.getByTestId('deadline-status')).toHaveText(/^(29|30) dias restantes$/);
 });
+
+test('o prazo ajustado no sinistro já aparece no álbum', async ({ page }) => {
+    await signIn(page, 'manager');
+    await page.goto(CLAIM);
+    await page.getByRole('button', { name: 'Ajustar prazo' }).click();
+    const modal = page.getByRole('dialog', { name: 'Ajustar prazo' });
+    await modal.getByLabel('Novo início').fill(dayInput(-26));
+    await modal.getByLabel('Justificativa *').fill('Obrigatórios entregues');
+    await modal.getByRole('button', { name: 'Salvar ajuste' }).click();
+    await expect(page.getByTestId('deadline-status')).toHaveText('4 dias restantes');
+
+    await page.getByRole('link', { name: 'Lista de Sinistros' }).click();
+    const prazo = page.getByTestId('album-card').filter({ hasText: 'SD - 2024-001' }).getByTestId('album-prazo');
+    await expect(prazo).toHaveText('4 dias');
+    await expect(prazo).toHaveClass(/text-red-600/);
+});

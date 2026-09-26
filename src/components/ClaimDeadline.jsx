@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Clock, X } from 'lucide-react';
 import { loadDeadline, saveDeadlineAdjust } from '../services/claimSidebar';
+import { daysUntil, CRITICAL_DAYS } from '../constants/deadline';
 
 /**
  * Prazo regulatório no cartão lateral do sinistro.
@@ -12,7 +13,6 @@ import { loadDeadline, saveDeadlineAdjust } from '../services/claimSidebar';
  * justificativa, e cada correção fica no histórico logo abaixo.
  */
 
-const DAY_MS = 86_400_000;
 const MIN_JUSTIFICATION = 5;
 
 const formatDate = (iso) => {
@@ -37,13 +37,7 @@ function errorMessage(err) {
     return err?.message || 'Não foi possível ajustar o prazo.';
 }
 
-export function daysLeft(dueAt, now = Date.now()) {
-    const due = Date.parse(dueAt);
-    if (Number.isNaN(due)) return null;
-    return Math.ceil((due - now) / DAY_MS);
-}
-
-export default function ClaimDeadline({ claim, currentUser }) {
+export default function ClaimDeadline({ claim, currentUser, onChange }) {
     // undefined = carregando; null = falhou.
     const [deadline, setDeadline] = useState(undefined);
     const [modalOpen, setModalOpen] = useState(false);
@@ -53,7 +47,11 @@ export default function ClaimDeadline({ claim, currentUser }) {
     // então o progresso mudar é motivo para reler.
     useEffect(() => {
         let off = false;
-        loadDeadline(claim).then(d => { if (!off) setDeadline(d || null); }).catch(() => { if (!off) setDeadline(null); });
+        loadDeadline(claim).then(d => {
+            if (off) return;
+            setDeadline(d || null);
+            if (d) onChange?.(d);
+        }).catch(() => { if (!off) setDeadline(null); });
         return () => { off = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [claim.id, claim.progress]);
@@ -76,9 +74,9 @@ export default function ClaimDeadline({ claim, currentUser }) {
             </>
         );
     } else {
-        const left = daysLeft(deadline.due_at);
+        const left = daysUntil(deadline.due_at);
         const overdue = left !== null && left < 0;
-        const urgent = left !== null && left <= 5;
+        const urgent = left !== null && left <= CRITICAL_DAYS;
         const text = left === null ? '—'
             : overdue ? `Vencido há ${-left} ${-left === 1 ? 'dia' : 'dias'}`
                 : left === 0 ? 'Vence hoje'
@@ -145,6 +143,7 @@ export default function ClaimDeadline({ claim, currentUser }) {
                     onSave={async (body) => {
                         const next = await saveDeadlineAdjust(claim, body, currentUser);
                         setDeadline(next);
+                        onChange?.(next);
                         setModalOpen(false);
                     }}
                 />,
