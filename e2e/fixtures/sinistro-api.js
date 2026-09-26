@@ -36,14 +36,14 @@ function event(id, hoursAgo, who, action, metadata = {}, extra = {}) {
 /** A história padrão, mais novo primeiro — a ordem em que o servidor devolve. */
 export function defaultAudit() {
     return [
-        event('e9', 1, 'maria', 'deck.approved', { codigo: 'DECK-01' }),
-        event('e8', 3, null, 'share.accessed', { file_name: 'causa__apolice.pdf', ip_address: '10.0.0.9' }, { share_token_id: 'st-1' }),
+        event('e9', 1, 'maria', 'deck.analyzed', { codigo: 'DECK-01', devolvidas: [] }),
+        event('e8', 3, null, 'share.accessed', { file_name: 'causa__apolice.pdf' }, { share_token_id: 'st-1', ip_address: '10.0.0.9' }),
         event('e7', 5, 'ricardo', 'process.deadline_adjusted', {
             field: 'due_at', from: '2026-10-01T12:00:00Z', to: '2026-10-15T12:00:00Z', justification: 'Prorrogação pedida pelo segurado.',
         }),
         event('e6', 8, 'ana', 'deck.submitted', { codigo: 'DECK-01', tarefas: ['causa.bo'] }),
         event('e5', 9, 'ana', 'file.uploaded', { file_name: 'causa__laudo.pdf', version: 2 }),
-        event('e4', 20, 'maria', 'deck.returned', { codigo: 'DECK-01', devolvidas: ['causa.bo'], motivo: 'Sem assinatura.' }),
+        event('e4', 20, 'maria', 'deck.analyzed', { codigo: 'DECK-01', devolvidas: ['causa.bo'], motivo: 'Sem assinatura.' }),
         event('e3', 30, 'ana', 'file.uploaded', { file_name: 'causa__laudo.pdf', version: 1 }),
         event('e2', 40, 'ricardo', 'process.frobnicated', {}),
         event('e1', 50, 'ricardo', 'process.created', {}),

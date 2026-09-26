@@ -25,7 +25,7 @@ test('cada pessoa ganha uma raia e uma cor, e o acesso externo fica na raia neut
     const rows = page.getByTestId('audit-event');
     await expect(rows).toHaveCount(9);
     // Mais novo em cima.
-    await expect(rows.first()).toContainText('Deck aprovado');
+    await expect(rows.first()).toContainText('Deck analisado');
     await expect(rows.last()).toContainText('Sinistro criado');
 
     // Três pessoas e o externo: quatro raias, na ordem em que aparecem de cima para baixo.
@@ -59,7 +59,12 @@ test('as ações são frases, com o detalhe do metadata, e código desconhecido 
 
     await expect(rows.filter({ hasText: 'Documento enviado' }).first()).toContainText('laudo.pdf');
     await expect(rows.filter({ hasText: 'Documento enviado' }).first()).not.toContainText('causa__');
-    await expect(rows.filter({ hasText: 'Deck devolvido' })).toContainText('Sem assinatura.');
+    // Aprovar e devolver são o mesmo deck.analyzed; o que muda é o metadata.
+    const analises = rows.filter({ hasText: 'Deck analisado' });
+    await expect(analises.first()).toContainText('tudo aceito');
+    await expect(analises.filter({ hasText: 'Sem assinatura.' })).toContainText('1 tarefa devolvida');
+    // O IP vem da coluna do log, não do metadata.
+    await expect(rows.filter({ hasText: 'Link público acessado' })).toContainText('IP 10.0.0.9');
     await expect(rows.filter({ hasText: 'process.frobnicated' })).toHaveCount(1);
 });
 
@@ -80,6 +85,13 @@ test('filtrar por pessoa e por ação vai para o servidor; o externo é recortad
     await page.getByLabel('Filtrar por tipo de ação').selectOption('file.uploaded');
     await expect(page.getByTestId('audit-event')).toHaveCount(2);
     expect(state.requests.some((r) => r.path.includes('action=file.uploaded'))).toBe(true);
+
+    // Só as ações que o servidor emite: aprovar/recusar/devolver não existem.
+    const tipos = await page.getByLabel('Filtrar por tipo de ação').locator('option').evaluateAll((os) => os.map((o) => o.value));
+    expect(tipos).toContain('deck.analyzed');
+    expect(tipos).not.toContain('deck.approved');
+    expect(tipos).not.toContain('deck.returned');
+    expect(tipos).not.toContain('deck.rejected');
 
     await page.getByLabel('Filtrar por tipo de ação').selectOption('comment.deleted');
     await expect(page.getByTestId('audit-empty')).toContainText('Nenhum evento com esses filtros.');
