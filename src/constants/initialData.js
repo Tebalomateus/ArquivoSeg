@@ -9,7 +9,6 @@ export const INITIAL_CLAIMS = [
         progress: 72,
         date: '02/01/2026',
         lastModified: '08/01/2026',
-        isComplex: false,
         deadline: {
             totalDays: 30,
             remainingDays: 18,

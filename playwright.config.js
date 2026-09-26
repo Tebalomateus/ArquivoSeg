@@ -37,7 +37,7 @@ export default defineConfig({
     projects: [
         {
             name: 'mock',
-            testMatch: /(permissoes-ui|nao-admin|novo-sinistro|roteamento|cabecalho)\.spec\.js/,
+            testMatch: /(permissoes-ui|nao-admin|novo-sinistro|roteamento|cabecalho|sinistro-[a-z-]+)\.spec\.js/,
             use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${MOCK_PORT}` },
         },
         {
