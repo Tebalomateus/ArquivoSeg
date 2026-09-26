@@ -117,3 +117,36 @@ test('o prazo ajustado no sinistro já aparece no álbum', async ({ page }) => {
     await expect(prazo).toHaveText('4 dias');
     await expect(prazo).toHaveClass(/text-red-600/);
 });
+
+// No mock não há servidor para iniciar o prazo: o cartão aplica a mesma regra
+// sobre o board guardado no navegador — todo obrigatório com arquivo no deck
+// (ou marcado) inicia os 30 dias.
+test('no mock o prazo começa quando o último obrigatório recebe arquivo', async ({ page }) => {
+    await signIn(page, 'manager');
+    await page.goto(CLAIM);
+    const status = page.getByTestId('deadline-status');
+    await expect(status).toHaveText('Aguardando documentos obrigatórios');
+
+    const enviar = async (key, nome) => {
+        await page.getByTestId('column-pendente').getByTestId(`task-${key}`).click();
+        const modal = page.getByTestId('upload-modal');
+        await modal.locator('input[type=file]').setInputFiles({ name: nome, mimeType: 'application/pdf', buffer: Buffer.from(`%PDF-1.4 ${nome}`) });
+        await modal.getByRole('button', { name: 'Confirmar' }).click();
+        await expect(modal).toHaveCount(0);
+    };
+
+    await page.getByRole('tab', { name: /^Causa/ }).click();
+    await enviar('f1-1.bo', 'bo.pdf');
+    await enviar('f1-1.laudo', 'laudo.pdf');
+    // Ainda falta o orçamento, na pasta Prejuízo.
+    await expect(status).toHaveText('Aguardando documentos obrigatórios');
+
+    await page.getByRole('tab', { name: /^Prejuízo/ }).click();
+    await enviar('f2-1.orcamento', 'orcamento.pdf');
+    await expect(status).toHaveText('30 dias restantes');
+    await expect(page.getByTestId('deadline-start')).toContainText('automático');
+
+    // O início automático volta para o sinistro e aparece no álbum.
+    await page.getByRole('link', { name: 'Lista de Sinistros' }).click();
+    await expect(page.getByTestId('album-card').filter({ hasText: 'SD - 2024-001' }).getByTestId('album-prazo')).toHaveText('30 dias');
+});
