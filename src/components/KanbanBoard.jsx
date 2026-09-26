@@ -1044,8 +1044,7 @@ function UploadModal({ title, note, busy, onClose, onConfirm }) {
                 transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }} onClick={(e) => e.stopPropagation()}
                 role="dialog" aria-label="Upload de arquivos do deck" data-testid="upload-modal"
                 className="w-full max-w-[520px] rounded-[20px] bg-white p-6 shadow-[0_40px_80px_-30px_rgba(15,23,42,.5)]">
-                <p className="text-[10px] font-extrabold tracking-[0.14em] text-slate-400 uppercase">Upload seguro</p>
-                <h3 className="mt-1 text-[19px] font-extrabold text-slate-900">{title}</h3>
+                <h3 className="text-[19px] font-extrabold text-slate-900">{title}</h3>
                 <p className="mt-1 text-[12.5px] text-slate-500">{note || 'O arquivo passa a comprovar esta tarefa. Depois você pode arrastar outras tarefas para o mesmo deck.'}</p>
 
                 <div className="mt-4 rounded-[14px] border-[1.5px] border-dashed border-[#C9DDFF] bg-[#F7FAFF] p-[22px] text-center">

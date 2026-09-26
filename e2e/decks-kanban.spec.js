@@ -21,6 +21,8 @@ test('uma tarefa solta vira deck com o arquivo enviado', async ({ page }) => {
 
     const modal = page.getByTestId('upload-modal');
     await expect(modal).toContainText('Boletim de ocorrência');
+    // Sem o sobretítulo "Upload seguro": o título da tarefa abre o modal.
+    await expect(modal).not.toContainText('Upload seguro');
     await modal.locator('input[type=file]').setInputFiles(pdf('bo.pdf', 'boletim de ocorrencia'));
     await modal.getByRole('button', { name: 'Confirmar' }).click();
 
