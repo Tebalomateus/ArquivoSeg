@@ -4,7 +4,6 @@ import {
     Activity,
     ArrowLeft,
     Calendar,
-    Clock,
     FolderInput,
     Gauge,
     HardDrive,
@@ -12,9 +11,7 @@ import {
     ListChecks,
     Lock,
     MessageSquare,
-    Pause,
     Pencil,
-    Play,
     Share2,
     Shield,
     X,
@@ -26,6 +23,7 @@ import { useClaims } from '../context/ClaimsContext';
 import { useCan } from '../context/PermissionsContext';
 import { useConfirm } from '../components/ConfirmDialog';
 import ClaimAuditTrail from '../components/ClaimAuditTrail';
+import ClaimDeadline from '../components/ClaimDeadline';
 import { actorLabelFromDbId } from '../api/auth';
 import { formatBytes } from '../api/files';
 import { ACTION_LABELS } from '../api/audit';
@@ -76,7 +74,6 @@ export default function ClaimDetails() {
         fetchSingleClaim,
         resolveActorLabel,
         addChecklistItem,
-        toggleDeadline,
         updateClaimObservations,
     } = useClaims();
 
@@ -249,12 +246,6 @@ export default function ClaimDetails() {
         alert('Observações salvas com sucesso!');
     };
 
-    const handleToggleDeadline = () => {
-        if (!canEditClaimMeta) return alert('Acesso negado: você não tem permissão para alterar prazos.');
-        const reason = claim.deadline.isSuspended ? '' : prompt('Motivo da suspensão (SLA Art. 86):');
-        if (!claim.deadline.isSuspended && !reason) return;
-        toggleDeadline(claim.id, reason);
-    };
 
     // Só o nome e o e-mail que o servidor manda; o resolvedor antigo (lista de
     // usuários, que nem todo papel pode ler) fica para processos sem esses campos.
@@ -420,38 +411,6 @@ export default function ClaimDetails() {
                         <Info size={12} /> Notas internas não são visíveis para Usuários Tipo 1.
                     </p>
                 </div>
-
-
-                {/* Management View: SLA History */}
-                <div className="card border-gray-100">
-                    <h3 className="text-lg font-black text-gray-900 mb-6 font-display uppercase tracking-tight flex items-center gap-3">
-                        <Clock size={24} className="text-amber-600" /> Trilha de Prazos (SLA)
-                    </h3>
-                    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-inner">
-                        <table className="w-full text-left">
-                            <thead>
-                                <tr className="bg-gray-50/80 border-b border-gray-100">
-                                    <th className="px-6 py-4 font-black text-gray-400 uppercase text-[10px] tracking-widest">Data</th>
-                                    <th className="px-6 py-4 font-black text-gray-400 uppercase text-[10px] tracking-widest">Ação / Evento</th>
-                                    <th className="px-6 py-4 font-black text-gray-400 uppercase text-[10px] tracking-widest">Responsável</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {claim.deadline?.history?.map((entry, idx) => (
-                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 text-xs font-black text-gray-700">{entry.date}</td>
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ring-4 ring-opacity-10 ${entry.action.includes('Suspenso') ? 'bg-red-50 text-red-600 ring-red-50' : 'bg-green-50 text-green-600 ring-green-50'}`}>
-                                                {entry.action}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">ArquivoSeg Admin</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
             </div>
         );
     };
@@ -508,17 +467,8 @@ export default function ClaimDetails() {
                                     <div className="h-full bg-secondary rounded-full transition-all duration-700" style={{ width: `${claim.progress}%` }} />
                                 </div>
                             </div>
-                            <div>
-                                <div className="lbl inline-flex items-center gap-1"><Clock size={14} className="text-amber-500" />Prazo</div>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-sm font-extrabold text-primary">{claim.deadline?.remainingDays ?? 30} dias{claim.deadline?.isSuspended && ' (suspenso)'}</span>
-                                    {canEditClaimMeta && (
-                                        <button type="button" onClick={handleToggleDeadline} title={claim.deadline?.isSuspended ? 'Retomar prazo' : 'Suspender prazo'}
-                                            className="w-6 h-6 rounded-md bg-white border border-gray-200 text-gray-500 hover:text-primary flex items-center justify-center">
-                                            {claim.deadline?.isSuspended ? <Play size={12} /> : <Pause size={12} />}
-                                        </button>
-                                    )}
-                                </div>
+                            <div className="col-span-2 lg:col-span-1">
+                                <ClaimDeadline claim={claim} currentUser={currentUser} />
                             </div>
                             <div>
                                 <div className="lbl inline-flex items-center gap-1"><Calendar size={14} className="text-primary/70" />Data de abertura</div>
