@@ -13,6 +13,7 @@ import {
     History,
     FileText,
     ShieldHalf,
+    HardDrive,
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 import NotificationBell from '../NotificationBell';
@@ -64,6 +65,7 @@ export default function AdminLayout() {
         { icon: LinkIcon, label: 'Rastreamento de Links', path: '/admin/links' },
         { icon: ShieldHalf, label: 'Usuários e Acessos', path: '/admin/acessos' },
         { icon: History, label: 'Auditoria Global', path: '/admin/audit' },
+        { icon: HardDrive, label: 'Armazenamento', path: '/admin/armazenamento' },
         { icon: Database, label: 'Compliance Data Center', path: '/admin/compliance' },
     ];
 
