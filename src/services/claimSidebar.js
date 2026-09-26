@@ -33,7 +33,8 @@ export async function loadStorage(claim) {
 }
 
 // → { actor, action, timestamp } | null. `action` é o código do servidor;
-// quem mostra traduz com ACTION_LABELS.
+// quem mostra traduz com actionLabel (constants/auditTrail), o mesmo
+// vocabulário da aba de auditoria.
 export async function loadLastActivity(claim) {
     if (online()) {
         const res = await listProcessAudit(claim.id, { limit: 1 });
