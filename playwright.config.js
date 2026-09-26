@@ -37,7 +37,7 @@ export default defineConfig({
     projects: [
         {
             name: 'mock',
-            testMatch: /(permissoes-ui|nao-admin|novo-sinistro|roteamento|cabecalho|sinistro-[a-z-]+)\.spec\.js/,
+            testMatch: /(permissoes-ui|nao-admin|novo-sinistro|roteamento|cabecalho|sinistro-[a-z-]+|mock-.*)\.spec\.js/,
             use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${MOCK_PORT}` },
         },
         {
@@ -52,6 +52,15 @@ export default defineConfig({
             // tem nada equivalente em modo mock — lá o botão nem aparece.
             name: 'decks',
             testMatch: /decks-.*\.spec\.js/,
+            use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${API_PORT}` },
+        },
+        {
+            // As telas que leem contratos novos do servidor — a trilha de
+            // auditoria do sinistro, o álbum de sinistros, o armazenamento — com a API falsa
+            // de fixtures/sinistro-api.js. Nomes exatos e ancorados: specs
+            // sinistro-* de outras frentes rodam no modo mock.
+            name: 'contratos',
+            testMatch: /[\\/](trilha-auditoria|album-sinistros|armazenamento)\.spec\.js$/,
             use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${API_PORT}` },
         },
     ],
