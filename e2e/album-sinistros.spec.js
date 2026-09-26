@@ -115,3 +115,21 @@ test('vencimento manual sem início aparece como prazo correndo', async ({ page 
     });
     await expect(page.getByTestId('album-card').filter({ hasText: 'SD - 2026-0103' }).getByTestId('album-prazo')).toHaveText('12 dias');
 });
+
+// Arquivado está encerrado como o concluído: não entra na aba de ativos, e
+// os status de revisão e arquivo têm cor própria no filtro.
+test('arquivado fica fora dos ativos; revisão e arquivado têm cor no filtro', async ({ page }) => {
+    await signIn(page, 'manager', { token: 'e2e-token' });
+    await installSinistroApi(page, (s) => {
+        s.processes[1].status = 'archived';
+        s.processes[2].status = 'review';
+    });
+    await page.goto('/app/sinistros');
+    await expect(page.getByTestId('album-card')).toHaveCount(2);
+    await expect(page.getByTestId('album-card').filter({ hasText: 'SD - 2026-0102' })).toHaveCount(0);
+    await expect(page.getByTestId('album-card').filter({ hasText: 'SD - 2026-0103' }).getByText('Em Revisão')).toHaveClass(/bg-indigo-100/);
+
+    await page.getByRole('button', { name: /Filtros/ }).first().click();
+    const status = page.getByRole('combobox').filter({ has: page.getByRole('option', { name: 'Arquivado' }) });
+    await expect(status.getByRole('option', { name: 'Em Revisão' })).toHaveCount(1);
+});

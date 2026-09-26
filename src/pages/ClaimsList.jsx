@@ -4,7 +4,7 @@ import { Search, Filter, Plus, ChevronDown, X, Calendar, Building2, AlertCircle,
 import { useClaims } from '../context/ClaimsContext';
 import { useCan } from '../context/PermissionsContext';
 import { STATUS_COLORS, INSURERS_CONFIG } from '../constants/config';
-import { deadlineInfo, isCriticalClaim, urgencyKey, CRITICAL_DAYS } from '../constants/deadline';
+import { deadlineInfo, isClosedClaim, isCriticalClaim, urgencyKey, CRITICAL_DAYS } from '../constants/deadline';
 import Badge from '../components/Badge';
 
 /**
@@ -120,7 +120,8 @@ export default function ClaimsList() {
     // MEMOIZED: Filtered and Sorted Claims
     const filteredClaims = useMemo(() => {
         const filtered = claims.filter(c => {
-            if (activeTab === 'ativos' && c.status === 'Concluído') return false;
+            // Arquivado também está encerrado: não é trabalho em andamento.
+            if (activeTab === 'ativos' && isClosedClaim(c)) return false;
             if (activeTab === 'concluidos' && c.status !== 'Concluído') return false;
 
             const matchesSearch =
