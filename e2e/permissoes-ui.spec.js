@@ -68,18 +68,19 @@ test('viewer e contributor não veem a pasta "Gerencial"', async ({ page }) => {
     for (const persona of ['viewer', 'contributor']) {
         await signIn(page, persona);
         await page.goto('/app/sinistros/1');
-        await expect(page.getByRole('button', { name: /^Causa \d+%$/ })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Gerencial' })).toHaveCount(0);
+        await expect(page.getByRole('tab', { name: /^Causa \(\d+%\)$/ })).toBeVisible();
+        await expect(page.getByRole('tab', { name: 'Gerencial' })).toHaveCount(0);
     }
 });
 
 test('manager vê a pasta "Gerencial" e ela abre a visão consolidada, sem kanban', async ({ page }) => {
     await signIn(page, 'manager');
     await page.goto('/app/sinistros/1');
-    await page.getByRole('button', { name: 'Gerencial' }).click();
+    await page.getByRole('tab', { name: 'Gerencial' }).click();
     const tree = page.getByTestId('gerencial-tree');
     await expect(tree.getByRole('heading', { name: 'Visão gerencial' })).toBeVisible();
     await expect(tree.getByTestId('gerencial-folder-avulsos')).toBeVisible();
     await expect(page.getByTestId('column-pendente')).toHaveCount(0);
-    await expect(page.getByTestId('folder-avulsos')).toHaveCount(0);
+    // Na aba Gerencial a árvore substitui os três modos: nem o seletor aparece.
+    await expect(page.getByRole('group', { name: 'Modo de visualização' })).toHaveCount(0);
 });

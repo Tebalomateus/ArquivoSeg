@@ -9,6 +9,9 @@ export const INITIAL_CLAIMS = [
         progress: 72,
         date: '02/01/2026',
         lastModified: '08/01/2026',
+        backStatus: 'ongoing',
+        backCreatedByName: 'Ricardo Silva',
+        backCreatedByEmail: 'ricardo@corretora.com',
         deadline: {
             totalDays: 30,
             remainingDays: 18,
@@ -17,7 +20,9 @@ export const INITIAL_CLAIMS = [
             lastUpdated: Date.now(),
             history: [{ date: '02/01/2026', action: 'Início do prazo de 30 dias.' }]
         },
-        activities: [],
+        activities: [
+            { id: 'a-1', user: 'Ana Souza', action: 'enviou "laudo_pericial.pdf" em Causa', date: '08/01/2026, 14:32', type: 'UPLOAD' },
+        ],
         folders: [
             { id: 'f1-1', name: 'Causa', category: 'causa', completion: 80, documents: [], checklist: [] },
             { id: 'f2-1', name: 'Prejuízo', category: 'prejuizo', completion: 60, documents: [], checklist: [] },

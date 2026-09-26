@@ -98,6 +98,8 @@ const adaptProcessToClaim = (proc, cached) => {
         backUpdatedAt: proc.updated_at,
         assignedTo: proc.assigned_to || null,
         backCreatedBy: proc.created_by || null,
+        backCreatedByName: proc.created_by_name || null,
+        backCreatedByEmail: proc.created_by_email || null,
         claimType: proc.claim_type || null,
         checklistState: meta.checklist_state || {},
         checklistAdhocItems: Array.isArray(meta.checklist_adhoc_items) ? meta.checklist_adhoc_items : [],
@@ -337,6 +339,10 @@ export const ClaimsProvider = ({ children }) => {
             backStatus,
             status: STATUS_BACK_TO_UI[backStatus] || backStatus,
             backCreatedAt,
+            // Quem cria é quem está logado; o cartão lateral mostra isso antes
+            // de o processo voltar do servidor (e é o único dado no mock).
+            backCreatedByName: currentUser?.name || null,
+            backCreatedByEmail: currentUser?.email || null,
             date: now.toLocaleDateString('pt-BR'),
             lastModified: now.toLocaleDateString('pt-BR'),
             deadline: computeDeadline(backCreatedAt),

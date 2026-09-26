@@ -65,6 +65,24 @@ h4,
     box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
 }
 
+.glass-card {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 10px 30px -12px rgba(26, 43, 83, 0.12), 0 1px 2px rgba(26, 43, 83, 0.04);
+}
+
+/* Rótulo das métricas do cartão lateral do sinistro. */
+.lbl {
+    white-space: nowrap;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 900;
+    color: #9ca3af;
+}
+
 .card {
     background: rgba(255, 255, 255, 0.7);
     backdrop-filter: blur(8px);
