@@ -26,7 +26,7 @@ import ClaimAuditTrail from '../components/ClaimAuditTrail';
 import ClaimDeadline from '../components/ClaimDeadline';
 import { actorLabelFromDbId } from '../api/auth';
 import { formatBytes } from '../api/files';
-import { ACTION_LABELS } from '../api/audit';
+import { actionLabel } from '../constants/auditTrail';
 import { loadStorage, loadLastActivity } from '../services/claimSidebar';
 
 const GERENCIAL_TAB = 'gerencial';
@@ -498,7 +498,7 @@ export default function ClaimDetails() {
                                             <Activity size={14} className="text-secondary mt-0.5 shrink-0" />
                                             <span>
                                                 <span className="font-semibold text-gray-700">{lastActivity.actor}</span>{' '}
-                                                {lastActivity.text || (ACTION_LABELS[lastActivity.action] || lastActivity.action || '').toLowerCase()}
+                                                {lastActivity.text || (actionLabel(lastActivity.action) || '').toLowerCase()}
                                                 <br />
                                                 <span className="text-gray-400">
                                                     {lastActivity.when || formatWhen(lastActivity.timestamp)} ·{' '}

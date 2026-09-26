@@ -40,3 +40,21 @@ test('sem processo.verAuditoria a trilha nem é pedida', async ({ page }) => {
     await expect(page.getByRole('tab', { name: 'Auditoria' })).toHaveCount(0);
     expect(state.requests.some((r) => r.path.includes('/audit'))).toBe(false);
 });
+
+// A última atividade usa o mesmo vocabulário da aba de auditoria: códigos que
+// só a trilha nova conhece (prazo, decks) não podem aparecer crus no cartão.
+test('a última atividade traduz os códigos da trilha nova', async ({ page }) => {
+    await openBoard(page, {
+        persona: 'manager',
+        mutate: (s) => {
+            s.permissions.push('processo.verAuditoria');
+            s.audit = [{
+                id: 'a1', timestamp: '2026-09-20T14:32:00Z', action: 'process.deadline_started',
+                resource_type: 'process', resource_id: s.process.id, actor_user_id: null,
+                actor_name: null, actor_email: null, metadata: { source: 'auto' },
+            }];
+        },
+    });
+
+    await expect(page.getByTestId('claim-last-activity')).toContainText('Sistema prazo regulatório iniciado');
+});
