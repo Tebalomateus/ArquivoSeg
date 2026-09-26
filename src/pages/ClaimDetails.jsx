@@ -1,21 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-    Folder,
-    Info,
-    Clock,
-    CheckCircle,
+    Activity,
     ArrowLeft,
     Calendar,
-    X,
+    Clock,
+    FolderInput,
+    Gauge,
+    HardDrive,
+    Info,
+    ListChecks,
+    Lock,
+    MessageSquare,
     Pause,
+    Pencil,
     Play,
     Share2,
     Shield,
-    Lock,
-    MessageSquare,
-    ListChecks,
-    FolderInput,
+    X,
 } from 'lucide-react';
 import ChecklistPanel from '../components/ChecklistPanel';
 import KanbanBoard, { LOOSE_FOLDER_ID } from '../components/KanbanBoard';
@@ -23,7 +25,28 @@ import GerencialTree from '../components/GerencialTree';
 import { useClaims } from '../context/ClaimsContext';
 import { useCan } from '../context/PermissionsContext';
 import { useConfirm } from '../components/ConfirmDialog';
+import ClaimAuditTrail from '../components/ClaimAuditTrail';
 import { actorLabelFromDbId } from '../api/auth';
+import { formatBytes } from '../api/files';
+import { ACTION_LABELS } from '../api/audit';
+import { loadStorage, loadLastActivity } from '../services/claimSidebar';
+
+const GERENCIAL_TAB = 'gerencial';
+const AUDIT_TAB = 'auditoria';
+
+const STATUS_PILL = {
+    ready: 'bg-blue-100 text-blue-700',
+    ongoing: 'bg-amber-100 text-amber-700',
+    review: 'bg-purple-100 text-purple-700',
+    done: 'bg-green-100 text-green-700',
+    archived: 'bg-gray-200 text-gray-600',
+};
+
+const formatWhen = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+};
 
 const STATUS_LABELS_PT = {
     ready: 'Aberto',
@@ -34,12 +57,10 @@ const STATUS_LABELS_PT = {
 };
 
 /**
- * Claim Details Page Component.
- * The core interaction hub of the application, handling:
- * - Document Repository (Folders)
- * - Regulatory SLA Management (Art. 86)
- * - Stakeholders & Sharing (Token-based)
- * - Compliance Audit Trail
+ * Página do sinistro (variante C, "cartão lateral"): à esquerda um cartão com
+ * identidade, números e última atividade; à direita uma aba por pasta, os
+ * documentos avulsos, a visão gerencial e a auditoria. Abaixo de ~1024px as
+ * duas colunas empilham.
  */
 export default function ClaimDetails() {
     const { id } = useParams();
@@ -59,8 +80,9 @@ export default function ClaimDetails() {
         updateClaimObservations,
     } = useClaims();
 
-    const [selectedFolderId, setSelectedFolderId] = useState(null);
-    const [looseCount, setLooseCount] = useState(0); // documentos sem tarefa, contados pelo board
+    const [tab, setTab] = useState(null); // id da pasta, LOOSE_FOLDER_ID, GERENCIAL_TAB ou AUDIT_TAB
+    // Documentos sem tarefa, contados pelo board; null até ele contar.
+    const [looseCount, setLooseCount] = useState(null);
     const [viewMode, setViewMode] = useState('decks');
     const [localObs, setLocalObs] = useState('');
     const [shares, setShares] = useState([]);
@@ -175,34 +197,52 @@ export default function ClaimDetails() {
         await archiveClaim(claim.id);
     };
 
+    const canSeeGerencial = can('processo.verGerencial');
+    const canSeeAudit = can('processo.verAuditoria');
+
+    // Armazenamento e última atividade vêm de rotas próprias (ou, no mock, do
+    // que o navegador guarda). Falha em qualquer uma só apaga o número.
+    const docCount = (claim?.folders || []).reduce((n, f) => n + (f.documents?.length || 0), 0);
+    const [storage, setStorage] = useState(null);
+    useEffect(() => {
+        if (!claim) return undefined;
+        let off = false;
+        loadStorage(claim).then(s => { if (!off) setStorage(s); }).catch(() => { if (!off) setStorage(null); });
+        return () => { off = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [claim?.id, docCount, looseCount]);
+
+    // undefined = carregando; null = nada a mostrar.
+    const [lastActivity, setLastActivity] = useState(undefined);
+    useEffect(() => {
+        if (!claim || !canSeeAudit) return undefined;
+        let off = false;
+        loadLastActivity(claim).then(a => { if (!off) setLastActivity(a); }).catch(() => { if (!off) setLastActivity(null); });
+        return () => { off = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [claim?.id, canSeeAudit]);
+
     if (!claim) return <div className="p-20 text-center font-bold text-gray-500 h-full flex items-center justify-center">Sinistro não encontrado.</div>;
 
     // Verificações de segurança para evitar crash
     if (!currentUser) return null;
 
     const canManageDocuments = can('arquivo.subir');
+    const canSeeLoose = canManageDocuments;
 
-    // A pasta "Gerencial" é a visão consolidada do sinistro, e quem a vê é quem
-    // tem a permissão — não mais o papel legado. Sem ela a pasta não existe na
-    // lateral, e o servidor recusa a rota de qualquer jeito.
-    const canSeeGerencial = can('processo.verGerencial');
-    const visibleFolders = claim.folders.filter(f => {
-        if (f.category === 'gerencial') return canSeeGerencial;
-        return true;
-    });
-
-    // "Documentos avulsos" é uma aba da lateral, mas só o board sabe mostrá-la:
-    // nos outros modos ela cai para a primeira pasta, sem perder a escolha.
-    const looseSelected = viewMode === 'decks' && selectedFolderId === LOOSE_FOLDER_ID;
-    const currentFolderId = looseSelected ? null
-        : (selectedFolderId && selectedFolderId !== LOOSE_FOLDER_ID ? selectedFolderId : visibleFolders[0]?.id);
-    const currentFolder = claim.folders.find(f => f.id === currentFolderId) || visibleFolders[0];
-    // Gerencial não tem kanban nem checklist próprio: é uma árvore só de leitura
-    // sobre as outras pastas, seja qual for o modo de visualização.
-    const gerencialSelected = currentFolder?.category === 'gerencial';
-
-    // Se ainda não houver pasta (falha catastrófica de dados), mostra fallback
-    if (!currentFolder) return <div className="p-20 text-center">Erro ao carregar pastas do sinistro.</div>;
+    // Abas do sinistro: uma por pasta de trabalho, depois os avulsos, a visão
+    // gerencial e a auditoria. A pasta "gerencial" do metadata não vira aba de
+    // pasta — a aba Gerencial é a árvore consolidada de todas, e quem a vê é
+    // quem tem processo.verGerencial (o servidor recusa a rota sem ela).
+    const folderTabs = claim.folders.filter(f => f.category !== 'gerencial');
+    const tabIds = [
+        ...folderTabs.map(f => f.id),
+        ...(canSeeLoose ? [LOOSE_FOLDER_ID] : []),
+        ...(canSeeGerencial ? [GERENCIAL_TAB] : []),
+        ...(canSeeAudit ? [AUDIT_TAB] : []),
+    ];
+    const activeTab = tabIds.includes(tab) ? tab : tabIds[0];
+    const currentFolder = folderTabs.find(f => f.id === activeTab) || null;
 
     const handleSaveObs = () => {
         updateClaimObservations(claim.id, localObs);
@@ -216,371 +256,381 @@ export default function ClaimDetails() {
         toggleDeadline(claim.id, reason);
     };
 
-    return (
-        <div className="space-y-6 relative z-10 animate-fade-in pb-20">
-            {/* Top Header */}
-            <div className="flex flex-col lg:flex-row gap-6 justify-between items-start">
-                <div className="space-y-1">
-                    {/* "sinistros/:id" é um segmento de rota só: ".." sobe para o
-                        portal e o link dizia "Lista de Sinistros" levando ao
-                        dashboard. Relativo continua valendo sob /app e /admin. */}
-                    <Link to="../sinistros" className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-400 hover:text-blue-600 transition-all mb-2 tracking-widest">
-                        <ArrowLeft size={16} />
-                        Lista de Sinistros
-                    </Link>
-                    <div className="flex items-center gap-3">
-                        <h1 className="text-3xl font-black text-gray-900 font-display tracking-tight">SD - {claim.number}</h1>
-                        <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ring-4 ring-opacity-10 ${claim.status === 'Concluído' ? 'bg-green-100 text-green-700 ring-green-50' : 'bg-blue-100 text-blue-700 ring-blue-50'}`}>
-                            {claim.status}
-                        </span>
-                    </div>
-                    <p className="text-sm text-gray-500 font-bold uppercase tracking-tight">
-                        {claim.title} <span className="text-gray-300 mx-2">|</span> <span className="text-blue-600">{claim.insurer}</span>
-                        {canEditClaimMeta && (
-                            <button onClick={openEditClaim} className="ml-3 text-[10px] text-blue-600 hover:underline normal-case tracking-normal">editar</button>
-                        )}
-                    </p>
-                    {claim.backCreatedBy && (
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">
-                            Criado por {(resolveActorLabel?.(claim.backCreatedBy) || actorLabelFromDbId(claim.backCreatedBy, '—'))}
-                        </p>
+    // Só o nome e o e-mail que o servidor manda; o resolvedor antigo (lista de
+    // usuários, que nem todo papel pode ler) fica para processos sem esses campos.
+    const creatorName = claim.backCreatedByName
+        || (!claim.backCreatedByEmail && claim.backCreatedBy
+            ? (resolveActorLabel?.(claim.backCreatedBy) || actorLabelFromDbId(claim.backCreatedBy, null))
+            : null);
+    const creatorEmail = claim.backCreatedByEmail;
+
+    const statusPill = STATUS_PILL[claim.backStatus] || (claim.status === 'Concluído' ? STATUS_PILL.done : STATUS_PILL.ready);
+
+    const tabClass = (on) => `relative flex items-center gap-1.5 px-4 py-3 text-sm font-bold border-b-2 -mb-px whitespace-nowrap transition ${on ? 'border-secondary text-primary' : 'border-transparent text-gray-500 hover:text-primary'}`;
+    const segClass = (on) => `px-3.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${on ? 'bg-white shadow-sm text-primary' : 'text-gray-500 hover:text-gray-700'}`;
+
+    const renderFolderContent = () => {
+        if (viewMode === 'decks') {
+            return (
+                <KanbanBoard claim={claim} currentUser={currentUser} folderId={currentFolder.id}
+                    onLooseCount={setLooseCount}
+                    onCreateTask={canEditClaimMeta ? (fid, name) => addChecklistItem(claim.id, fid, name) : null} />
+            );
+        }
+        if (viewMode === 'checklist' || !canManageDocuments) return <ChecklistPanel claim={claim} />;
+        return (
+            <div className="space-y-6">
+                {/* Management View: Workflow / Status */}
+                <div className="card border-l-[6px] border-purple-600">
+                    <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
+                        <Shield size={22} className="text-purple-600" /> Workflow do Sinistro
+                    </h3>
+                    <p className="text-xs text-gray-500 font-medium mb-6">Status atual: <span className="font-black text-gray-900">{STATUS_LABELS_PT[claim.backStatus] || claim.backStatus}</span>.</p>
+                    {claim.backStatus === 'archived' ? (
+                        <p className="text-xs text-amber-700 font-medium">Sinistro arquivado — não aceita mais movimentação.</p>
+                    ) : canArchive ? (
+                        <button
+                            type="button"
+                            onClick={handleArchive}
+                            className="px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all bg-red-50 text-red-600 hover:bg-red-100 border border-red-100"
+                        >
+                            Arquivar
+                        </button>
+                    ) : (
+                        <p className="text-xs text-amber-700 font-medium">Seu perfil não pode arquivar sinistros.</p>
                     )}
                 </div>
 
-                <div className="flex flex-wrap gap-4 bg-white/50 p-2 rounded-2xl border border-white shadow-sm backdrop-blur-md">
-                    <div className="flex p-1 bg-gray-100 rounded-xl border border-gray-200">
+                {/* Management View: External Sharing & Invite */}
+                <div className="card border-l-[6px] border-blue-600">
+                    <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
+                        <Share2 size={22} className="text-blue-600" /> Links Públicos por Documento
+                    </h3>
+                    <p className="text-xs text-gray-500 font-medium mb-6">Cada link aponta para um arquivo específico do sinistro. O destinatário não precisa de login; cada acesso é registrado na auditoria.</p>
+
+                    {!canManageShares && (
+                        <p className="text-xs text-amber-700 font-medium">Apenas perfis manager+ podem gerenciar links.</p>
+                    )}
+
+                    {canManageShares && (
+                        <>
+                            <form onSubmit={handleCreateShare} className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                <select
+                                    value={shareForm.fileVerId}
+                                    onChange={(e) => setShareForm({ ...shareForm, fileVerId: e.target.value })}
+                                    className="md:col-span-5 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="">Selecione um arquivo...</option>
+                                    {allFiles.map(f => (
+                                        <option key={f.backFileVerId} value={f.backFileVerId}>{f.name}</option>
+                                    ))}
+                                </select>
+                                <input
+                                    type="text"
+                                    value={shareForm.label}
+                                    onChange={(e) => setShareForm({ ...shareForm, label: e.target.value })}
+                                    placeholder="Rótulo (opcional)"
+                                    className="md:col-span-3 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <select
+                                    value={shareForm.expiresInDays}
+                                    onChange={(e) => setShareForm({ ...shareForm, expiresInDays: e.target.value })}
+                                    className="md:col-span-2 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="7">7 dias</option>
+                                    <option value="30">30 dias</option>
+                                    <option value="90">90 dias</option>
+                                    <option value="0">Sem expiração</option>
+                                </select>
+                                <button
+                                    type="submit"
+                                    disabled={!shareForm.fileVerId}
+                                    className={`md:col-span-2 px-4 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 ${shareForm.fileVerId ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                                >
+                                    Gerar Link
+                                </button>
+                            </form>
+
+                            {sharesLoading && <p className="text-xs text-gray-400">Carregando links...</p>}
+
+                            {!sharesLoading && shares.length === 0 && (
+                                <p className="text-xs text-gray-500 text-center py-6">Nenhum link público criado ainda. Use o formulário acima.</p>
+                            )}
+
+                            {shares.map(s => {
+                                const url = `${window.location.origin}/portal/${s.token}`;
+                                const expires = s.expires_at ? new Date(s.expires_at).toLocaleDateString('pt-BR') : 'sem expiração';
+                                const creatorLabel = s.created_by ? (resolveActorLabel?.(s.created_by) || actorLabelFromDbId(s.created_by, '—')) : '—';
+                                return (
+                                    <div key={s.id} className={`flex flex-col gap-2 p-4 rounded-2xl border mb-3 ${s.revoked ? 'bg-red-50/40 border-red-100' : 'bg-white border-gray-100'}`}>
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-black text-gray-900 truncate">{s._file?.name || s.file_ver_id}</p>
+                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                                                    {s.label || 'sem rótulo'} · expira {expires} · criado por {creatorLabel} · {s.revoked ? 'REVOGADO' : 'ATIVO'}
+                                                </p>
+                                            </div>
+                                            {!s.revoked && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { navigator.clipboard.writeText(url); alert('Link copiado!'); }}
+                                                        className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-100"
+                                                    >
+                                                        Copiar
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRevokeShare(s.id)}
+                                                        className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-100"
+                                                    >
+                                                        Revogar
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                        <input readOnly value={url} className="w-full bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-[11px] font-mono text-gray-600" />
+                                    </div>
+                                );
+                            })}
+                        </>
+                    )}
+                </div>
+
+                {/* Management View: Administrator Observations */}
+                <div className="card border-l-[6px] border-amber-500">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3">
+                            <MessageSquare size={24} className="text-amber-500" /> Observações do Gestor
+                        </h3>
                         <button
-                            onClick={() => setViewMode('checklist')}
-                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${viewMode === 'checklist' ? 'bg-white shadow-md text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                            onClick={handleSaveObs}
+                            className="text-[10px] font-black uppercase text-blue-600 hover:underline tracking-widest"
                         >
-                            <ListChecks size={13} />
-                            Checklist
+                            Salvar Alterações
                         </button>
-                        <button
-                            onClick={() => setViewMode('decks')}
-                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'decks' ? 'bg-white shadow-md text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            Decks
-                        </button>
-                        {canManageDocuments && (
-                            <button
-                                onClick={() => setViewMode('management')}
-                                className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'management' ? 'bg-white shadow-md text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                            >
-                                Gerenciamento
-                            </button>
-                        )}
+                    </div>
+                    <textarea
+                        value={localObs}
+                        onChange={(e) => setLocalObs(e.target.value)}
+                        placeholder="Adicione notas internas sobre o andamento do processo, ligações com seguradoras ou orientações para o perito..."
+                        className="w-full h-40 p-6 bg-amber-50/30 border border-amber-100 rounded-2xl text-sm font-medium text-gray-700 outline-none focus:ring-4 focus:ring-amber-50 transition-all shadow-inner"
+                    />
+                    <p className="mt-4 text-[10px] text-amber-600 font-bold uppercase tracking-widest italic flex items-center gap-2">
+                        <Info size={12} /> Notas internas não são visíveis para Usuários Tipo 1.
+                    </p>
+                </div>
+
+
+                {/* Management View: SLA History */}
+                <div className="card border-gray-100">
+                    <h3 className="text-lg font-black text-gray-900 mb-6 font-display uppercase tracking-tight flex items-center gap-3">
+                        <Clock size={24} className="text-amber-600" /> Trilha de Prazos (SLA)
+                    </h3>
+                    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-inner">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="bg-gray-50/80 border-b border-gray-100">
+                                    <th className="px-6 py-4 font-black text-gray-400 uppercase text-[10px] tracking-widest">Data</th>
+                                    <th className="px-6 py-4 font-black text-gray-400 uppercase text-[10px] tracking-widest">Ação / Evento</th>
+                                    <th className="px-6 py-4 font-black text-gray-400 uppercase text-[10px] tracking-widest">Responsável</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {claim.deadline?.history?.map((entry, idx) => (
+                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-6 py-4 text-xs font-black text-gray-700">{entry.date}</td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ring-4 ring-opacity-10 ${entry.action.includes('Suspenso') ? 'bg-red-50 text-red-600 ring-red-50' : 'bg-green-50 text-green-600 ring-green-50'}`}>
+                                                {entry.action}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">ArquivoSeg Admin</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
+        );
+    };
 
-            {/* Stats Bar */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="card flex items-center gap-5 py-5 group cursor-default">
-                    <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner group-hover:bg-blue-600 group-hover:text-white transition-all duration-500">
-                        <CheckCircle size={28} />
-                    </div>
-                    <div className="flex-1">
-                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Status de Conclusão</p>
-                        <div className="flex items-center gap-3">
-                            <span className="text-2xl font-black font-display text-gray-900">{claim.progress}%</span>
-                            <div className="flex-1 bg-gray-100 h-2.5 rounded-full overflow-hidden shadow-inner">
-                                <div className="bg-blue-600 h-full transition-all duration-1000 ease-out" style={{ width: `${claim.progress}%` }}></div>
+    return (
+        <div className="relative z-10 animate-fade-in pb-20">
+            {/* "sinistros/:id" é um segmento de rota só: ".." sobe para o
+                portal e o link dizia "Lista de Sinistros" levando ao
+                dashboard. Relativo continua valendo sob /app e /admin. */}
+            <Link to="../sinistros" className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-primary transition">
+                <ArrowLeft size={14} strokeWidth={2.5} />
+                Lista de Sinistros
+            </Link>
+
+            <div className="mt-3 flex flex-col lg:flex-row gap-6 items-stretch lg:items-start">
+                {/* Cartão lateral: identidade e números do sinistro. */}
+                <aside className="w-full lg:w-64 shrink-0" aria-label="Resumo do sinistro">
+                    <div className="glass-card rounded-2xl p-4 lg:sticky lg:top-[88px] space-y-4" data-testid="claim-card">
+                        <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <h1 className="text-[11px] font-black font-mono text-gray-600">SD - {claim.number}</h1>
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest ${statusPill}`}>
+                                    {claim.status}
+                                </span>
+                            </div>
+                            <div className="flex items-baseline gap-1.5 mt-1.5">
+                                <p className="text-base font-extrabold text-primary leading-tight tracking-tight uppercase break-words min-w-0">
+                                    {claim.title}
+                                    {claim.insurer && (<><span className="text-gray-300 mx-1">|</span>{claim.insurer}</>)}
+                                </p>
+                                {canEditClaimMeta && (
+                                    <button type="button" onClick={openEditClaim} className="text-secondary hover:text-primary shrink-0" title="Editar sinistro" aria-label="Editar sinistro">
+                                        <Pencil size={14} strokeWidth={2.2} />
+                                    </button>
+                                )}
+                            </div>
+                            {(creatorName || creatorEmail) && (
+                                <p className="text-[11px] text-gray-500 mt-1.5 leading-snug" data-testid="claim-creator">
+                                    Criado por <span className="font-semibold text-gray-700">{creatorName || creatorEmail}</span>
+                                    {creatorName && creatorEmail && (<><br /><span className="break-all">{creatorEmail}</span></>)}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="h-px bg-gray-100" />
+
+                        <div className="grid grid-cols-2 lg:grid-cols-1 gap-3">
+                            <div className="col-span-2 lg:col-span-1">
+                                <div className="flex items-center justify-between">
+                                    <span className="lbl inline-flex items-center gap-1"><Gauge size={14} className="text-secondary" />Conclusão</span>
+                                    <span className="text-sm font-extrabold text-primary">{claim.progress}%</span>
+                                </div>
+                                <div className="mt-1.5 w-full h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                                    <div className="h-full bg-secondary rounded-full transition-all duration-700" style={{ width: `${claim.progress}%` }} />
+                                </div>
+                            </div>
+                            <div>
+                                <div className="lbl inline-flex items-center gap-1"><Clock size={14} className="text-amber-500" />Prazo</div>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-sm font-extrabold text-primary">{claim.deadline?.remainingDays ?? 30} dias{claim.deadline?.isSuspended && ' (suspenso)'}</span>
+                                    {canEditClaimMeta && (
+                                        <button type="button" onClick={handleToggleDeadline} title={claim.deadline?.isSuspended ? 'Retomar prazo' : 'Suspender prazo'}
+                                            className="w-6 h-6 rounded-md bg-white border border-gray-200 text-gray-500 hover:text-primary flex items-center justify-center">
+                                            {claim.deadline?.isSuspended ? <Play size={12} /> : <Pause size={12} />}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <div>
+                                <div className="lbl inline-flex items-center gap-1"><Calendar size={14} className="text-primary/70" />Data de abertura</div>
+                                <div className="text-sm font-extrabold text-primary mt-1">{claim.date}</div>
+                            </div>
+                            <div>
+                                <div className="lbl inline-flex items-center gap-1"><HardDrive size={14} className="text-primary/70" />Armazenamento</div>
+                                <div className="text-sm font-extrabold text-primary mt-1" data-testid="claim-storage">
+                                    {storage ? formatBytes(storage.bytes) : '—'}
+                                    {storage && (
+                                        <span className="ml-1 text-[11px] font-semibold text-gray-400">
+                                            · {storage.file_count} {storage.file_count === 1 ? 'arquivo' : 'arquivos'}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <div className={`card flex items-center gap-5 py-5 transition-all ${claim.deadline?.isSuspended ? 'bg-amber-50 border-amber-200' : 'hover:border-blue-100'}`}>
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner ${claim.deadline?.isSuspended ? 'bg-amber-100 text-amber-600 border border-amber-200' : 'bg-green-50 text-green-600 border border-green-100'}`}>
-                        <Clock size={28} />
-                    </div>
-                    <div className="flex-1">
-                        <div className="flex justify-between items-center mb-1">
-                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">SLA Regulatória</p>
-                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${claim.deadline?.suspensionCount >= 2 ? 'bg-red-50 border-red-200 text-red-600' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
-                                SUSP: {claim.deadline?.suspensionCount || 0}/2
-                            </span>
-                        </div>
-                        <p className={`text-2xl font-black font-display tracking-tighter ${claim.deadline?.isSuspended ? 'text-amber-700 animate-pulse' : 'text-gray-900'}`}>
-                            {claim.deadline?.remainingDays || 30} dias {claim.deadline?.isSuspended && '(Suspenso)'}
-                        </p>
-                    </div>
-                    {canEditClaimMeta && (
-                        <button
-                            onClick={handleToggleDeadline}
-                            className={`ml-2 w-10 h-10 rounded-xl flex items-center justify-center transition-all ${claim.deadline?.isSuspended ? 'bg-green-600 text-white shadow-lg shadow-green-100' : 'bg-amber-100 text-amber-700 border border-amber-200'}`}
-                        >
-                            {claim.deadline?.isSuspended ? <Play size={20} /> : <Pause size={20} />}
-                        </button>
-                    )}
-                </div>
-
-                <div className="card flex items-center gap-5 py-5 border-0 bg-slate-900 text-white shadow-2xl shadow-slate-200">
-                    <div className="w-14 h-14 bg-white/10 text-white rounded-2xl flex items-center justify-center border border-white/20">
-                        <Calendar size={28} />
-                    </div>
-                    <div>
-                        <p className="text-[10px] text-white/50 font-black uppercase tracking-widest mb-1">Data de Abertura</p>
-                        <p className="text-2xl font-black font-display tracking-tight uppercase">{claim.date}</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Main Folder Explorer */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
-                {/* Sidebar Space (Folders or Timeline) */}
-                <div className="space-y-6 lg:sticky lg:top-6">
-                    {/* Folders */}
-                    <div className="space-y-4">
-                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-2">Repositório</h3>
-                        {visibleFolders.map(folder => (
-                            <button
-                                key={folder.id}
-                                onClick={() => setSelectedFolderId(folder.id)}
-                                className={`
-                                    w-full flex items-center justify-between p-5 rounded-2xl transition-all border
-                                    ${currentFolderId === folder.id
-                                        ? 'bg-blue-600 border-blue-600 shadow-2xl shadow-blue-200 text-white translate-x-1'
-                                        : 'bg-white/80 backdrop-blur-md border-gray-100 text-gray-700 hover:border-blue-300 hover:bg-blue-50/10'}
-                                `}
-                            >
-                                <div className="flex items-center gap-4">
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${currentFolderId === folder.id ? 'bg-white/20' : 'bg-blue-50 text-blue-600'}`}>
-                                        <Folder size={18} />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="font-black text-xs uppercase tracking-tight flex items-center gap-2">
-                                            {folder.name}
-                                            {folder.private && <Lock size={12} className={currentFolderId === folder.id ? 'text-white/50' : 'text-gray-400'} />}
+                        {canSeeAudit && (
+                            <>
+                                <div className="h-px bg-gray-100" />
+                                <div data-testid="claim-last-activity">
+                                    <div className="lbl">Última atividade</div>
+                                    {lastActivity ? (
+                                        <p className="text-[11px] text-gray-600 mt-1 leading-snug flex items-start gap-1.5">
+                                            <Activity size={14} className="text-secondary mt-0.5 shrink-0" />
+                                            <span>
+                                                <span className="font-semibold text-gray-700">{lastActivity.actor}</span>{' '}
+                                                {lastActivity.text || (ACTION_LABELS[lastActivity.action] || lastActivity.action || '').toLowerCase()}
+                                                <br />
+                                                <span className="text-gray-400">
+                                                    {lastActivity.when || formatWhen(lastActivity.timestamp)} ·{' '}
+                                                    <button type="button" onClick={() => setTab(AUDIT_TAB)} className="text-secondary font-semibold hover:underline">ver auditoria</button>
+                                                </span>
+                                            </span>
                                         </p>
-                                    </div>
+                                    ) : (
+                                        <p className="text-[11px] text-gray-400 mt-1">
+                                            {lastActivity === undefined ? 'Carregando…' : 'Nenhuma atividade registrada.'}
+                                        </p>
+                                    )}
                                 </div>
-                                {folder.category !== 'gerencial' && (
-                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${currentFolderId === folder.id ? 'bg-white/20 border-white/20' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
-                                        {folder.completion}%
+                            </>
+                        )}
+                    </div>
+                </aside>
+
+                <div className="flex-1 min-w-0">
+                    <div role="tablist" aria-label="Seções do sinistro" className="flex items-center gap-1 border-b border-gray-200/80 overflow-x-auto">
+                        {folderTabs.map(folder => (
+                            <button key={folder.id} type="button" role="tab" aria-selected={activeTab === folder.id}
+                                onClick={() => setTab(folder.id)} className={tabClass(activeTab === folder.id)}>
+                                {folder.name} <span className="text-gray-400 font-semibold">({folder.completion}%)</span>
+                            </button>
+                        ))}
+                        {canSeeLoose && (
+                            <button type="button" role="tab" data-testid="folder-avulsos" aria-selected={activeTab === LOOSE_FOLDER_ID}
+                                onClick={() => setTab(LOOSE_FOLDER_ID)} className={tabClass(activeTab === LOOSE_FOLDER_ID)}>
+                                <FolderInput size={14} />
+                                Documentos avulsos
+                                {looseCount != null && (
+                                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full border ${looseCount > 0 ? 'bg-amber-50 border-amber-100 text-amber-700' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
+                                        {looseCount}
                                     </span>
                                 )}
                             </button>
-                        ))}
-
-                        {/* Documentos avulsos: no sinistro, sem tarefa. Só faz sentido
-                            onde se vincula, que é o board. */}
-                        {viewMode === 'decks' && canManageDocuments && !gerencialSelected && (
-                            <button
-                                type="button"
-                                data-testid="folder-avulsos"
-                                onClick={() => setSelectedFolderId(LOOSE_FOLDER_ID)}
-                                className={`
-                                    w-full flex items-center justify-between p-5 rounded-2xl transition-all border
-                                    ${looseSelected
-                                        ? 'bg-blue-600 border-blue-600 shadow-2xl shadow-blue-200 text-white translate-x-1'
-                                        : 'bg-white/80 backdrop-blur-md border-dashed border-gray-200 text-gray-700 hover:border-blue-300 hover:bg-blue-50/10'}
-                                `}
-                            >
-                                <div className="flex items-center gap-4">
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${looseSelected ? 'bg-white/20' : 'bg-gray-100 text-gray-500'}`}>
-                                        <FolderInput size={18} />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="font-black text-xs uppercase tracking-tight">Documentos avulsos</p>
-                                    </div>
-                                </div>
-                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${looseSelected ? 'bg-white/20 border-white/20' : looseCount > 0 ? 'bg-amber-50 border-amber-100 text-amber-700' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
-                                    {looseCount}
-                                </span>
+                        )}
+                        {canSeeGerencial && (
+                            <button type="button" role="tab" aria-selected={activeTab === GERENCIAL_TAB}
+                                onClick={() => setTab(GERENCIAL_TAB)} className={tabClass(activeTab === GERENCIAL_TAB)}>
+                                Gerencial <Lock size={12} className="text-gray-400" />
+                            </button>
+                        )}
+                        {canSeeAudit && (
+                            <button type="button" role="tab" aria-selected={activeTab === AUDIT_TAB}
+                                onClick={() => setTab(AUDIT_TAB)} className={tabClass(activeTab === AUDIT_TAB)}>
+                                Auditoria
                             </button>
                         )}
                     </div>
 
-                </div>
-
-                {/* Content Area */}
-                <div className="lg:col-span-3 space-y-6">
-                    {gerencialSelected ? (
-                        <GerencialTree claim={claim} />
-                    ) : viewMode === 'decks' ? (
-                        <KanbanBoard claim={claim} currentUser={currentUser} folderId={looseSelected ? LOOSE_FOLDER_ID : currentFolderId}
-                            onLooseCount={setLooseCount}
-                            onCreateTask={canEditClaimMeta ? (fid, name) => addChecklistItem(claim.id, fid, name) : null} />
-                    ) : viewMode === 'checklist' ? (
-                        <ChecklistPanel claim={claim} />
-                    ) : (
-                        <div className="space-y-6">
-                            {/* Management View: Workflow / Status */}
-                            <div className="card border-l-[6px] border-purple-600">
-                                <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
-                                    <Shield size={22} className="text-purple-600" /> Workflow do Sinistro
-                                </h3>
-                                <p className="text-xs text-gray-500 font-medium mb-6">Status atual: <span className="font-black text-gray-900">{STATUS_LABELS_PT[claim.backStatus] || claim.backStatus}</span>.</p>
-                                {claim.backStatus === 'archived' ? (
-                                    <p className="text-xs text-amber-700 font-medium">Sinistro arquivado — não aceita mais movimentação.</p>
-                                ) : canArchive ? (
-                                    <button
-                                        type="button"
-                                        onClick={handleArchive}
-                                        className="px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all bg-red-50 text-red-600 hover:bg-red-100 border border-red-100"
-                                    >
-                                        Arquivar
+                    <div className="mt-4 space-y-4" role="tabpanel">
+                        {currentFolder ? (
+                            <>
+                                <div className="flex p-1 bg-gray-100 rounded-xl border border-gray-200 w-fit max-w-full overflow-x-auto" role="group" aria-label="Modo de visualização">
+                                    <button type="button" onClick={() => setViewMode('checklist')} aria-pressed={viewMode === 'checklist'} className={segClass(viewMode === 'checklist')}>
+                                        <ListChecks size={13} />
+                                        Checklist
                                     </button>
-                                ) : (
-                                    <p className="text-xs text-amber-700 font-medium">Seu perfil não pode arquivar sinistros.</p>
-                                )}
-                            </div>
-
-                            {/* Management View: External Sharing & Invite */}
-                            <div className="card border-l-[6px] border-blue-600">
-                                <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
-                                    <Share2 size={22} className="text-blue-600" /> Links Públicos por Documento
-                                </h3>
-                                <p className="text-xs text-gray-500 font-medium mb-6">Cada link aponta para um arquivo específico do sinistro. O destinatário não precisa de login; cada acesso é registrado na auditoria.</p>
-
-                                {!canManageShares && (
-                                    <p className="text-xs text-amber-700 font-medium">Apenas perfis manager+ podem gerenciar links.</p>
-                                )}
-
-                                {canManageShares && (
-                                    <>
-                                        <form onSubmit={handleCreateShare} className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                                            <select
-                                                value={shareForm.fileVerId}
-                                                onChange={(e) => setShareForm({ ...shareForm, fileVerId: e.target.value })}
-                                                className="md:col-span-5 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                            >
-                                                <option value="">Selecione um arquivo...</option>
-                                                {allFiles.map(f => (
-                                                    <option key={f.backFileVerId} value={f.backFileVerId}>{f.name}</option>
-                                                ))}
-                                            </select>
-                                            <input
-                                                type="text"
-                                                value={shareForm.label}
-                                                onChange={(e) => setShareForm({ ...shareForm, label: e.target.value })}
-                                                placeholder="Rótulo (opcional)"
-                                                className="md:col-span-3 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                            />
-                                            <select
-                                                value={shareForm.expiresInDays}
-                                                onChange={(e) => setShareForm({ ...shareForm, expiresInDays: e.target.value })}
-                                                className="md:col-span-2 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                            >
-                                                <option value="7">7 dias</option>
-                                                <option value="30">30 dias</option>
-                                                <option value="90">90 dias</option>
-                                                <option value="0">Sem expiração</option>
-                                            </select>
-                                            <button
-                                                type="submit"
-                                                disabled={!shareForm.fileVerId}
-                                                className={`md:col-span-2 px-4 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 ${shareForm.fileVerId ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
-                                            >
-                                                Gerar Link
-                                            </button>
-                                        </form>
-
-                                        {sharesLoading && <p className="text-xs text-gray-400">Carregando links...</p>}
-
-                                        {!sharesLoading && shares.length === 0 && (
-                                            <p className="text-xs text-gray-500 text-center py-6">Nenhum link público criado ainda. Use o formulário acima.</p>
-                                        )}
-
-                                        {shares.map(s => {
-                                            const url = `${window.location.origin}/portal/${s.token}`;
-                                            const expires = s.expires_at ? new Date(s.expires_at).toLocaleDateString('pt-BR') : 'sem expiração';
-                                            const creatorLabel = s.created_by ? (resolveActorLabel?.(s.created_by) || actorLabelFromDbId(s.created_by, '—')) : '—';
-                                            return (
-                                                <div key={s.id} className={`flex flex-col gap-2 p-4 rounded-2xl border mb-3 ${s.revoked ? 'bg-red-50/40 border-red-100' : 'bg-white border-gray-100'}`}>
-                                                    <div className="flex items-center justify-between gap-3">
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-xs font-black text-gray-900 truncate">{s._file?.name || s.file_ver_id}</p>
-                                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-                                                                {s.label || 'sem rótulo'} · expira {expires} · criado por {creatorLabel} · {s.revoked ? 'REVOGADO' : 'ATIVO'}
-                                                            </p>
-                                                        </div>
-                                                        {!s.revoked && (
-                                                            <>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => { navigator.clipboard.writeText(url); alert('Link copiado!'); }}
-                                                                    className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-100"
-                                                                >
-                                                                    Copiar
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleRevokeShare(s.id)}
-                                                                    className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-100"
-                                                                >
-                                                                    Revogar
-                                                                </button>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                    <input readOnly value={url} className="w-full bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-[11px] font-mono text-gray-600" />
-                                                </div>
-                                            );
-                                        })}
-                                    </>
-                                )}
-                            </div>
-
-                            {/* Management View: Administrator Observations */}
-                            <div className="card border-l-[6px] border-amber-500">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3">
-                                        <MessageSquare size={24} className="text-amber-500" /> Observações do Gestor
-                                    </h3>
-                                    <button
-                                        onClick={handleSaveObs}
-                                        className="text-[10px] font-black uppercase text-blue-600 hover:underline tracking-widest"
-                                    >
-                                        Salvar Alterações
+                                    <button type="button" onClick={() => setViewMode('decks')} aria-pressed={viewMode === 'decks'} className={segClass(viewMode === 'decks')}>
+                                        Decks
                                     </button>
+                                    {canManageDocuments && (
+                                        <button type="button" onClick={() => setViewMode('management')} aria-pressed={viewMode === 'management'} className={segClass(viewMode === 'management')}>
+                                            Gerenciamento
+                                        </button>
+                                    )}
                                 </div>
-                                <textarea
-                                    value={localObs}
-                                    onChange={(e) => setLocalObs(e.target.value)}
-                                    placeholder="Adicione notas internas sobre o andamento do processo, ligações com seguradoras ou orientações para o perito..."
-                                    className="w-full h-40 p-6 bg-amber-50/30 border border-amber-100 rounded-2xl text-sm font-medium text-gray-700 outline-none focus:ring-4 focus:ring-amber-50 transition-all shadow-inner"
-                                />
-                                <p className="mt-4 text-[10px] text-amber-600 font-bold uppercase tracking-widest italic flex items-center gap-2">
-                                    <Info size={12} /> Notas internas não são visíveis para Usuários Tipo 1.
-                                </p>
-                            </div>
-
-
-                            {/* Management View: SLA History */}
-                            <div className="card border-gray-100">
-                                <h3 className="text-lg font-black text-gray-900 mb-6 font-display uppercase tracking-tight flex items-center gap-3">
-                                    <Clock size={24} className="text-amber-600" /> Trilha de Prazos (SLA)
-                                </h3>
-                                <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-inner">
-                                    <table className="w-full text-left">
-                                        <thead>
-                                            <tr className="bg-gray-50/80 border-b border-gray-100">
-                                                <th className="px-6 py-4 font-black text-gray-400 uppercase text-[10px] tracking-widest">Data</th>
-                                                <th className="px-6 py-4 font-black text-gray-400 uppercase text-[10px] tracking-widest">Ação / Evento</th>
-                                                <th className="px-6 py-4 font-black text-gray-400 uppercase text-[10px] tracking-widest">Responsável</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-50">
-                                            {claim.deadline?.history?.map((entry, idx) => (
-                                                <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="px-6 py-4 text-xs font-black text-gray-700">{entry.date}</td>
-                                                    <td className="px-6 py-4">
-                                                        <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ring-4 ring-opacity-10 ${entry.action.includes('Suspenso') ? 'bg-red-50 text-red-600 ring-red-50' : 'bg-green-50 text-green-600 ring-green-50'}`}>
-                                                            {entry.action}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">ArquivoSeg Admin</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                                {renderFolderContent()}
+                            </>
+                        ) : activeTab === LOOSE_FOLDER_ID ? (
+                            <KanbanBoard claim={claim} currentUser={currentUser} folderId={LOOSE_FOLDER_ID}
+                                onLooseCount={setLooseCount}
+                                onCreateTask={canEditClaimMeta ? (fid, name) => addChecklistItem(claim.id, fid, name) : null} />
+                        ) : activeTab === GERENCIAL_TAB ? (
+                            <GerencialTree claim={claim} />
+                        ) : activeTab === AUDIT_TAB ? (
+                            <ClaimAuditTrail processId={claim.id} />
+                        ) : (
+                            <p className="text-sm text-gray-500 py-10 text-center">Este sinistro não tem pastas.</p>
+                        )}
+                    </div>
                 </div>
             </div>
 

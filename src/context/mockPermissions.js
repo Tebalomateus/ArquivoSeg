@@ -59,6 +59,7 @@ const PERITO = [
 const CORRETOR = [
     ...PERITO,
     'processo.verGerencial',
+    'processo.verAuditoria',
     'arquivo.excluir',
     'comentario.editarQualquer',
     'comentario.excluirQualquer',

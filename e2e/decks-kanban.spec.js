@@ -164,7 +164,7 @@ test('o board é por pasta: um deck da Causa não aparece no Prejuízo', async (
 
     await expect(page.getByTestId('column-pendente').getByTestId('deck-DECK-01')).toBeVisible();
 
-    await page.getByRole('button', { name: /Prejuízo/ }).click();
+    await page.getByRole('tab', { name: /Prejuízo/ }).click();
     await expect(page.getByTestId('column-pendente').getByTestId('deck-DECK-01')).toHaveCount(0);
     await expect(page.getByTestId(`task-${TASK.orcamento}`)).toBeVisible();
 });

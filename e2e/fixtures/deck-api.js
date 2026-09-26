@@ -101,6 +101,8 @@ export function initialState() {
         // board monta sem saber ainda o que o usuário pode. Sem poder forçar
         // essa ordem, o teste só pega o bug quando a corrida sai mal.
         slowPermissions: 0,
+        // Trilha do sinistro (GET /processes/:id/audit), mais recente primeiro.
+        audit: [],
         requests: [],
         nextId: 1,
     };
@@ -432,6 +434,18 @@ function handle(state, method, seg, body) {
         state.files.push(fv);
         const { content, ...view } = fv;
         return ok(view);
+    }
+
+    // Armazenamento: soma das versões de arquivo do processo.
+    if (c === 'storage' && method === 'GET') {
+        return ok({ data: { bytes: state.files.reduce((n, fv) => n + (fv.size_bytes || 0), 0), file_count: state.files.length } });
+    }
+
+    if (c === 'audit' && method === 'GET') {
+        if (!state.permissions.includes('processo.verAuditoria')) {
+            return { status: 403, body: { error: { code: 'INSUFFICIENT_PERMISSION', message: 'insufficient permission', required_action: 'processo.verAuditoria', request_id: 'e2e' } } };
+        }
+        return ok({ data: state.audit, total: state.audit.length });
     }
 
     // A visão gerencial, montada como o servidor monta (handler/gerencial.go):

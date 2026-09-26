@@ -18,7 +18,7 @@ const comGerencial = (s) => {
 };
 
 async function abrirGerencial(page) {
-    await page.getByRole('button', { name: 'Gerencial' }).click();
+    await page.getByRole('tab', { name: 'Gerencial' }).click();
     const tree = page.getByTestId('gerencial-tree');
     await expect(tree).toBeVisible();
     await expect(tree.getByRole('heading', { name: 'Visão gerencial' })).toBeVisible();
@@ -39,12 +39,12 @@ test('a árvore mostra pasta, tarefa com estado e deck, e os arquivos do deck', 
 
     const tree = await abrirGerencial(page);
 
-    // O kanban ficou para trás: nem colunas, nem o cartão de progresso, nem os avulsos da lateral.
+    // O kanban ficou para trás: nem colunas, nem o cartão de progresso, nem o seletor de modo.
     await expect(page.getByTestId('column-pendente')).toHaveCount(0);
     await expect(page.getByText(/Atendidas em/)).toHaveCount(0);
-    await expect(page.getByTestId('folder-avulsos')).toHaveCount(0);
+    await expect(page.getByRole('group', { name: 'Modo de visualização' })).toHaveCount(0);
     // Voltar a uma pasta devolve o board; a visão gerencial reabre igual.
-    await page.getByRole('button', { name: /^Causa \d+%$/ }).click();
+    await page.getByRole('tab', { name: /^Causa \(\d+%\)$/ }).click();
     await expect(page.getByRole('heading', { name: 'Relação de documentos' })).toBeVisible();
     await abrirGerencial(page);
 
@@ -155,8 +155,8 @@ test('sem processo.verGerencial a pasta não existe na lateral — e a rota nem 
         },
     });
 
-    await expect(page.getByRole('button', { name: /^Causa \d+%$/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Gerencial' })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: /^Causa \(\d+%\)$/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Gerencial' })).toHaveCount(0);
     await expect(page.getByTestId('gerencial-tree')).toHaveCount(0);
     expect(state.requests.some((r) => r.path.endsWith('/gerencial'))).toBe(false);
 });
