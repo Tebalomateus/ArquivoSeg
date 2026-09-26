@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Filter, Plus, FileText, ChevronRight, ChevronDown, X, Calendar, Building2, AlertCircle, Circle, ArrowLeft, Briefcase } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Search, Filter, Plus, ChevronDown, X, Calendar, Building2, AlertCircle, Circle, ArrowLeft, Briefcase, RefreshCw, Clock, CalendarDays } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { useCan } from '../context/PermissionsContext';
 import { STATUS_COLORS, INSURERS_CONFIG } from '../constants/config';
@@ -20,47 +20,96 @@ const parseDate = (dateStr) => {
 };
 
 /**
+ * Quanto falta do prazo, dito como o cartão mostra. Usa o `deadline` que a
+ * lista já tem — buscar o prazo de cada cartão seria uma chamada por sinistro.
+ */
+function prazoInfo(claim) {
+    if (claim.status === 'Concluído') return { text: 'Encerrado', tone: 'text-gray-400' };
+    const d = claim.deadline;
+    if (!d || typeof d.remainingDays !== 'number') return { text: '—', tone: 'text-gray-400' };
+    if (d.isSuspended) return { text: 'Suspenso', tone: 'text-amber-600' };
+    const n = d.remainingDays;
+    if (n <= 0) return { text: 'Vencido', tone: 'text-red-600' };
+    const text = `${n} ${n === 1 ? 'dia' : 'dias'}`;
+    if (n < 5) return { text, tone: 'text-red-600' };
+    if (n < 10) return { text, tone: 'text-amber-600' };
+    return { text, tone: 'text-secondary' };
+}
+
+function ClaimCard({ claim }) {
+    const progress = Math.max(0, Math.min(100, Number(claim.progress) || 0));
+    const prazo = prazoInfo(claim);
+    return (
+        <Link
+            to={`${claim.id}`}
+            data-testid="album-card"
+            aria-label={`SD - ${claim.number}: ${claim.title}`}
+            className="group h-full flex flex-col gap-4 p-5 rounded-2xl bg-white/70 backdrop-blur-md border border-white/60 shadow-[0_10px_30px_-12px_rgba(26,43,83,0.12)] hover:shadow-[0_18px_40px_-14px_rgba(26,43,83,0.25)] hover:-translate-y-0.5 hover:border-secondary/30 transition-all outline-none focus-visible:ring-4 focus-visible:ring-secondary/20"
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="font-display text-lg font-extrabold text-primary leading-tight group-hover:text-secondary transition-colors truncate">SD - {claim.number}</p>
+                    <p className="text-sm font-semibold text-gray-700 mt-1 line-clamp-2">{claim.title}</p>
+                </div>
+                <span className="shrink-0"><Badge colorClass={STATUS_COLORS[claim.status] || 'bg-gray-100 text-gray-700'}>{claim.status}</Badge></span>
+            </div>
+
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 min-w-0">
+                <Building2 size={14} className="text-secondary shrink-0" />
+                <span className="truncate">{claim.insurer || 'Seguradora não informada'}</span>
+            </p>
+
+            <div>
+                <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Completude</span>
+                    <span className="text-xs font-extrabold text-primary" data-testid="album-progress">{progress}%</span>
+                </div>
+                <div className="mt-1.5 h-1.5 rounded-full bg-gray-200 overflow-hidden" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Completude">
+                    <div className="h-full bg-secondary rounded-full transition-all duration-700" style={{ width: `${progress}%` }} />
+                </div>
+            </div>
+
+            <div className="mt-auto pt-3 border-t border-gray-100 grid grid-cols-2 gap-3">
+                <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 flex items-center gap-1"><Clock size={11} /> Prazo</p>
+                    <p className={`text-sm font-extrabold mt-0.5 ${prazo.tone}`} data-testid="album-prazo">{prazo.text}</p>
+                </div>
+                <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 flex items-center gap-1"><CalendarDays size={11} /> Aberto em</p>
+                    <p className="text-sm font-extrabold text-primary mt-0.5">{claim.date || '—'}</p>
+                </div>
+            </div>
+        </Link>
+    );
+}
+
+/**
  * Claims List Page Component.
  * centralized work queue with advanced filtering and robust sorting.
  */
 export default function ClaimsList() {
-    const { claims, claimsLoading, claimsError, claimsTotal, refreshClaims, currentUser, backendUsers } = useClaims();
+    const { claims, claimsLoading, claimsError, claimsTotal, refreshClaims } = useClaims();
     const can = useCan();
-    const location = useLocation();
-    const navigate = useNavigate();
 
     const [searchTerm, setSearchTerm] = useState('');
     const [showFilters, setShowFilters] = useState(false);
     const [activeTab, setActiveTab] = useState('ativos');
-    const [onlyMine, setOnlyMine] = useState(false);
     const [page, setPage] = useState(1);
     const PAGE_SIZE = 20;
 
-    // Resolve "current user db UUID" by matching the front-only INITIAL_USERS
-    // email against the real backend list (manager+ only). Viewer/contributor
-    // can't fetch /users so the toggle is hidden for them.
-    const myDbId = (() => {
-        if (!currentUser?.email || !Array.isArray(backendUsers) || backendUsers.length === 0) return null;
-        const hit = backendUsers.find(u => (u.email || '').toLowerCase() === currentUser.email.toLowerCase());
-        return hit?.id || null;
-    })();
-
-    // Push tab + assignment filter to backend query.
+    // A aba vai para o servidor como filtro de status.
     useEffect(() => {
         if (!refreshClaims) return;
-        const opts = {
+        refreshClaims({
             page,
             limit: PAGE_SIZE,
             ...(activeTab === 'concluidos' ? { status: 'done' } : {}),
-            ...(onlyMine && myDbId ? { assignedTo: myDbId } : {}),
-        };
-        refreshClaims(opts);
+        });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeTab, onlyMine, page, myDbId]);
+    }, [activeTab, page]);
 
-    // Reset to page 1 whenever filters change (the dependency below keeps
-    // page=1 stable on first mount).
-    useEffect(() => { setPage(1); }, [activeTab, onlyMine]);
+    // Trocar de aba volta para a primeira página.
+    useEffect(() => { setPage(1); }, [activeTab]);
 
     const [filterInsurer, setFilterInsurer] = useState('');
     const [filterBroker, setFilterBroker] = useState('');
@@ -103,7 +152,7 @@ export default function ClaimsList() {
             // Tie-breaker: Urgency by SLA
             return (a.deadline?.remainingDays || 30) - (b.deadline?.remainingDays || 30);
         });
-    }, [claims, searchTerm, filterInsurer, filterStatus, filterCritico, activeTab]);
+    }, [claims, searchTerm, filterInsurer, filterBroker, filterStatus, filterCritico, dateRange, activeTab]);
 
     return (
         <div className="space-y-8 relative z-10 animate-fade-in pb-20">
@@ -161,15 +210,6 @@ export default function ClaimsList() {
                     >
                         Concluídos
                     </button>
-                    {myDbId && (
-                        <button
-                            onClick={() => setOnlyMine(!onlyMine)}
-                            className={`ml-1 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${onlyMine ? 'bg-indigo-600 shadow-lg text-white scale-[1.02]' : 'text-gray-500 hover:text-gray-700'}`}
-                            title="Filtrar sinistros atribuídos a você (server-side via /processes?assigned_to=)"
-                        >
-                            Atribuídos a mim
-                        </button>
-                    )}
                 </div>
 
                 <div className="flex flex-1 items-center gap-3">
@@ -192,6 +232,16 @@ export default function ClaimsList() {
                         {(filterInsurer || filterBroker || filterStatus || filterCritico || dateRange.start || dateRange.end) && (
                             <span className="ml-1 w-2 h-2 bg-secondary rounded-full border-2 border-white animate-pulse"></span>
                         )}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => refreshClaims?.()}
+                        disabled={claimsLoading}
+                        aria-label="Atualizar lista de sinistros"
+                        title="Atualizar"
+                        className="px-4 py-4 rounded-2xl border bg-white border-gray-200 text-gray-600 hover:border-secondary hover:text-secondary hover:shadow-md transition-all disabled:opacity-50"
+                    >
+                        <RefreshCw size={18} className={claimsLoading ? 'animate-spin' : ''} />
                     </button>
                 </div>
             </div>
@@ -364,106 +414,46 @@ export default function ClaimsList() {
                 </div>
             )}
 
-            {/* Claims Table Section */}
-            <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-xl overflow-hidden animate-slide-up">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead className="bg-gray-50/40">
-                            <tr className="text-left border-b border-gray-100">
-                                <th className="p-7 font-black text-gray-400 text-[10px] uppercase tracking-widest">Processo nº</th>
-                                <th className="p-7 font-black text-gray-400 text-[10px] uppercase tracking-widest">Parceiro / Seguradora</th>
-                                <th className="p-7 font-black text-gray-400 text-[10px] uppercase tracking-widest">Status / Fase</th>
-                                <th className="p-7 font-black text-gray-400 text-[10px] uppercase tracking-widest">SLA / Evolução</th>
-                                <th className="p-7"></th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50/50">
-                            {filteredClaims.length > 0 ? (
-                                filteredClaims.map((claim) => (
-                                    <tr
-                                        key={claim.id}
-                                        onClick={() => navigate(`${claim.id}`)}
-                                        className="hover:bg-secondary/[0.02] transition-all cursor-pointer group"
-                                    >
-                                        <td className="p-7">
-                                            <div className="flex items-center gap-5">
-                                                <div className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center font-bold text-xs shadow-lg shadow-primary/10 group-hover:scale-105 transition-all">
-                                                    SD
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="font-bold text-primary text-base group-hover:text-secondary transition-colors underline-offset-4 group-hover:underline">{claim.number}</span>
-                                                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider truncate max-w-[200px]">{claim.title}</span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="p-7">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-2 h-2 rounded-full bg-secondary shadow-lg shadow-secondary/40 animate-pulse"></div>
-                                                <span className="text-xs font-bold text-gray-600">{claim.insurer}</span>
-                                            </div>
-                                        </td>
-                                        <td className="p-7">
-                                            <Badge colorClass={STATUS_COLORS[claim.status]}>{claim.status}</Badge>
-                                        </td>
-                                        <td className="p-7">
-                                            <div className="space-y-3">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Completude: {claim.progress}%</span>
-                                                </div>
-                                                <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden shadow-inner">
-                                                    <div
-                                                        className="bg-secondary h-full transition-all duration-700 shadow-[0_0_12px_rgba(38,166,154,0.4)]"
-                                                        style={{ width: `${claim.progress}%` }}
-                                                    ></div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="p-7 text-right">
-                                            <div className="flex items-center justify-end gap-3 translate-x-4 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-300">
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[10px] font-black text-secondary uppercase tracking-widest">Visualizar</span>
-                                                    <span className="text-[8px] font-bold text-gray-300 uppercase tracking-tighter">Detalhes do Sinistro</span>
-                                                </div>
-                                                <div className="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary">
-                                                    <ChevronRight size={20} />
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
-                                <tr>
-                                    <td colSpan="5" className="p-32 text-center">
-                                        <div className="flex flex-col items-center gap-6 animate-fade-in">
-                                            <div className="w-24 h-24 rounded-[2rem] bg-gray-50 flex items-center justify-center text-gray-200 border border-gray-100 shadow-inner">
-                                                <Search size={48} className="rotate-12" />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <h4 className="text-lg font-bold text-gray-900">Nenhum resultado encontrado</h4>
-                                                <p className="text-sm text-gray-400 max-w-xs mx-auto">Tente ajustar seus filtros ou termos de pesquisa para encontrar o que procura.</p>
-                                            </div>
-                                            <button
-                                                onClick={() => {
-                                                    setSearchTerm('');
-                                                    setFilterInsurer('');
-                                                    setFilterStatus('');
-                                                    setFilterCritico(false);
-                                                }}
-                                                className="px-6 py-3 bg-primary/5 hover:bg-primary/10 text-primary text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl transition-all border border-primary/5"
-                                            >
-                                                Redefinir Filtros
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+            {/* Álbum: um cartão por sinistro */}
+            <div className="animate-slide-up">
+                {filteredClaims.length > 0 ? (
+                    <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5" data-testid="album-sinistros">
+                        {filteredClaims.map((claim) => (
+                            <li key={claim.id}>
+                                <ClaimCard claim={claim} />
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <div className="py-24 px-6 text-center bg-white/70 backdrop-blur-md rounded-2xl border border-white/60 shadow-sm">
+                        <div className="flex flex-col items-center gap-6 animate-fade-in">
+                            <div className="w-24 h-24 rounded-[2rem] bg-gray-50 flex items-center justify-center text-gray-200 border border-gray-100 shadow-inner">
+                                <Search size={48} className="rotate-12" />
+                            </div>
+                            <div className="space-y-2">
+                                <h4 className="text-lg font-bold text-gray-900">Nenhum resultado encontrado</h4>
+                                <p className="text-sm text-gray-400 max-w-xs mx-auto">Tente ajustar seus filtros ou termos de pesquisa para encontrar o que procura.</p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setSearchTerm('');
+                                    setFilterInsurer('');
+                                    setFilterBroker('');
+                                    setFilterStatus('');
+                                    setFilterCritico(false);
+                                    setDateRange({ start: '', end: '' });
+                                }}
+                                className="px-6 py-3 bg-primary/5 hover:bg-primary/10 text-primary text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl transition-all border border-primary/5"
+                            >
+                                Redefinir Filtros
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Pagination — driven by backend total. Hidden when result fits a single page. */}
                 {claimsTotal > PAGE_SIZE && (
-                    <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+                    <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 rounded-2xl bg-white/70 border border-white/60 shadow-sm">
                         <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
                             Página {page} de {Math.max(1, Math.ceil(claimsTotal / PAGE_SIZE))} · {claimsTotal} sinistros no total
                         </p>
