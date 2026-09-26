@@ -4,6 +4,7 @@ import { useClaims } from '../context/ClaimsContext';
 import { usePermissions } from '../context/PermissionsContext';
 import { useNavigate } from 'react-router-dom';
 import RelatorioGerencialCard from '../components/RelatorioGerencialCard';
+import StorageUsageCard from '../components/StorageUsageCard';
 
 /**
  * Individual Stat Card for the Dashboard.
@@ -200,6 +201,8 @@ export default function Dashboard() {
                     onClick={() => navigate('/app/sinistros?filter=critico')}
                 />
             </div>
+
+            <StorageUsageCard />
 
             <RelatorioGerencialCard claims={myClaims} />
 
