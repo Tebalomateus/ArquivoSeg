@@ -56,11 +56,11 @@ export default defineConfig({
         },
         {
             // As telas que leem contratos novos do servidor — a trilha de
-            // auditoria do sinistro, e o que vier depois dela — com a API falsa
+            // auditoria do sinistro, o álbum de sinistros — com a API falsa
             // de fixtures/sinistro-api.js. Nomes exatos e ancorados: specs
             // sinistro-* de outras frentes rodam no modo mock.
             name: 'contratos',
-            testMatch: /[\\/](trilha-auditoria)\.spec\.js$/,
+            testMatch: /[\\/](trilha-auditoria|album-sinistros)\.spec\.js$/,
             use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${API_PORT}` },
         },
     ],
