@@ -228,7 +228,7 @@ export default function ClaimDetails() {
     if (!currentUser) return null;
 
     const canManageDocuments = can('arquivo.subir');
-    const canSeeLoose = canManageDocuments;
+    const canSeeLoose = can('arquivo.listar');
 
     // Abas do sinistro: uma por pasta de trabalho, depois os avulsos, a visão
     // gerencial e a auditoria. A pasta "gerencial" do metadata não vira aba de

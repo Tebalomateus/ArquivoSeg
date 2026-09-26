@@ -108,9 +108,22 @@ test('a tarefa que o checklist não previu nasce solta em Pendente', async ({ pa
         .toContain('Nota fiscal do guincho');
 });
 
-test('sem permissão de subir arquivo não há aba de avulsos', async ({ page }) => {
-    await openBoard(page, { mutate: (s) => { s.permissions = s.permissions.filter((p) => p !== 'arquivo.subir'); } });
+test('sem permissão de subir arquivo a aba de avulsos só lista', async ({ page }) => {
+    await openBoard(page, {
+        mutate: (s) => {
+            s.permissions = s.permissions.filter((p) => p !== 'arquivo.subir');
+            // Um avulso que alguém com permissão já subiu.
+            s.files.push({
+                id: 'fv-avulso', file_name: 'foto-do-veiculo.pdf', mime_type: 'application/pdf',
+                size_bytes: 4, version: 1, created_at: new Date().toISOString(), uploaded_by: 'outro', content: Buffer.from('foto'),
+            });
+        },
+    });
 
-    await expect(page.getByTestId('folder-avulsos')).toHaveCount(0);
-    await expect(page.getByTestId('loose-panel')).toHaveCount(0);
+    // Quem lista arquivos vê o que está esperando uma tarefa; só não mexe nisso.
+    await abrirAvulsos(page);
+    await expect(page.getByTestId('loose-file-fv-avulso')).toContainText('foto-do-veiculo.pdf');
+    await expect(page.getByTestId('loose-file-fv-avulso').getByRole('button', { name: 'Ver' })).toBeVisible();
+    await expect(page.getByTestId('loose-file-fv-avulso').getByRole('button', { name: 'Vincular' })).toHaveCount(0);
+    await expect(page.getByTestId('loose-upload')).toHaveCount(0);
 });

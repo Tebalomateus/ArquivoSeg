@@ -576,10 +576,10 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
 
             {/* Documentos avulsos: no sinistro, fora de qualquer tarefa. É uma
                 aba própria na lateral, não um painel em cima do board. */}
+            {/* Listar basta para ver a aba; subir e vincular continuam com arquivo.subir. */}
             {isLoose && (
-                can('arquivo.subir')
-                    ? <LoosePanel files={looseFiles} onUpload={openUploadLoose} onLink={setLinking} onView={viewFile} />
-                    : <Empty>Sem permissão para subir documentos neste sinistro.</Empty>
+                <LoosePanel files={looseFiles} canUpload={can('arquivo.subir')}
+                    onUpload={openUploadLoose} onLink={setLinking} onView={viewFile} />
             )}
 
             {/* Board: 3 columns (the active group is driven by the folder sidebar) */}
@@ -705,7 +705,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
 // manda uma foto no WhatsApp, o corretor encaminha o e-mail da oficina. Ter de
 // escolher a tarefa na hora do upload fazia a pessoa chutar uma — e um chute
 // dentro de um deck é mais caro de desfazer do que um arquivo esperando aqui.
-function LoosePanel({ files, onUpload, onLink, onView }) {
+function LoosePanel({ files, canUpload, onUpload, onLink, onView }) {
     return (
         <div data-testid="loose-panel" className="rounded-[18px] border border-[#E4EAF3] bg-white p-[14px_16px]">
             <div className="flex flex-wrap items-center gap-3">
@@ -716,14 +716,18 @@ function LoosePanel({ files, onUpload, onLink, onView }) {
                     <p className="text-[12.5px] font-extrabold text-slate-800">Documentos avulsos</p>
                     <p className="text-[11.5px] font-semibold text-slate-400">
                         {files.length === 0
-                            ? 'Suba um documento agora e diga depois a qual tarefa ele responde.'
+                            ? (canUpload
+                                ? 'Suba um documento agora e diga depois a qual tarefa ele responde.'
+                                : 'Nenhum documento fora de tarefa neste sinistro.')
                             : `${plural(files.length, 'documento à espera', 'documentos à espera')} de uma tarefa.`}
                     </p>
                 </div>
+                {canUpload && (
                 <button type="button" onClick={onUpload} data-testid="loose-upload"
                     className="rounded-[10px] border border-[#D7E0EC] bg-white px-[13px] py-[8px] text-[11.5px] font-extrabold text-slate-700 hover:border-[#12A08B] hover:text-[#0E8A78]">
                     Enviar sem tarefa
                 </button>
+                )}
             </div>
 
             {files.length > 0 && (
@@ -737,9 +741,11 @@ function LoosePanel({ files, onUpload, onLink, onView }) {
                             <button type="button" onClick={() => onView(f)} className="flex items-center gap-1 text-[11px] font-extrabold text-slate-400 hover:text-[#2563EB]">
                                 <Eye size={12} /> Ver
                             </button>
+                            {canUpload && (
                             <button type="button" onClick={() => onLink(f)} className="flex items-center gap-1 text-[11px] font-extrabold text-[#2563EB] hover:underline">
                                 <Link2 size={12} /> Vincular
                             </button>
+                            )}
                         </div>
                     ))}
                 </div>
