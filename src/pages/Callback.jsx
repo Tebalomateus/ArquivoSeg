@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { zitadel } from '../api/zitadel';
-import { uiRoleFor, logoutSession } from '../api/auth';
+import { logoutSession, takeDestination } from '../api/auth';
 import { setToken } from '../api/client';
 import { useClaims } from '../context/ClaimsContext';
 
@@ -21,20 +21,28 @@ export default function Callback() {
                 return;
             }
 
+            // The claim now answers exactly one question: is this person the
+            // tenant admin? Everything else comes from GET /me/permissions, which
+            // is the authority. Asking the claim by key beats picking "the first
+            // role that is not backoffice" — that heuristic depended on the order
+            // the claim happened to arrive in.
             const roles = oidcUser.profile['urn:zitadel:iam:org:project:roles'] || {};
-            const roleKeys = Object.keys(roles);
-            const backRole = roleKeys.find((r) => r !== 'backoffice') || 'viewer';
-            const uiRole = uiRoleFor(backRole);
+            const isAdmin = Object.keys(roles).includes('admin');
 
             setToken(oidcUser.access_token);
             setCurrentUser({
                 id: oidcUser.profile.sub,
                 email: oidcUser.profile.email,
                 name: oidcUser.profile.name || oidcUser.profile.email,
-                role: uiRole,
-                backRole,
+                isAdmin,
+                // The account type, shown as a badge. It is not what the user
+                // can do — that is GET /me/permissions, and only that.
+                role: isAdmin ? 'ADMIN' : 'USUÁRIO',
             });
-            navigate('/');
+            // O destino que o portão guardou antes de mandar para o Zitadel.
+            // É aqui que ele importa: esta é a única volta do login de verdade,
+            // e sem isto todo deep-link termina no dashboard.
+            navigate(takeDestination() || '/', { replace: true });
         }).catch(() => {
             logoutSession();
             navigate('/login');

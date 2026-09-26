@@ -11,6 +11,12 @@ const randId = () => (typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2, 11));
 
+// Onde o modo mock guarda o board e os arquivos do sinistro (sessionStorage).
+// Duas telas leem daqui — o kanban, que escreve, e a visão gerencial, que só lê —
+// e a chave tem de ser a mesma nas duas ou cada uma vê um sinistro diferente.
+export const persistKey = (claimId) => `deckboard_${claimId}`;
+export const filesKey = (claimId) => `deckfiles_${claimId}`;
+
 export function emptyBoard() {
     return { decks: [], seq: 0, taskStatus: {}, taskReturns: {} };
 }

@@ -187,21 +187,13 @@ export const ClaimsProvider = ({ children }) => {
         } catch { return null; }
     });
 
-    const [settings, setSettings] = useState(() => {
-        try {
-            const saved = localStorage.getItem('arquivoseg_settings');
-            return saved ? JSON.parse(saved) : { notificationInterval: '3h', weeklyReport: true };
-        } catch { return { notificationInterval: '3h', weeklyReport: true }; }
-    });
-
-    // Persistence (mock-only data + cache + settings)
+    // Persistence (mock-only data + cache)
     useEffect(() => {
         if (isMockEnabled()) {
             localStorage.setItem('arquivoseg_claims', JSON.stringify(claims));
             localStorage.setItem('arquivoseg_clients', JSON.stringify(clients));
         }
         localStorage.setItem('arquivoseg_users', JSON.stringify(users));
-        localStorage.setItem('arquivoseg_settings', JSON.stringify(settings));
         localStorage.setItem('arquivoseg_claims_cache', JSON.stringify(claimsCache));
         if (currentUser) {
             localStorage.setItem('arquivoseg_current_user', JSON.stringify(currentUser));
@@ -210,7 +202,14 @@ export const ClaimsProvider = ({ children }) => {
             localStorage.removeItem('arquivoseg_current_user');
             localStorage.removeItem('arquivoseg_authenticated');
         }
-    }, [claims, users, clients, settings, currentUser, claimsCache]);
+    }, [claims, users, clients, currentUser, claimsCache]);
+
+    // Quantas vezes o token da API foi (re)estabelecido nesta sessão. Quem
+    // depende do token — as permissões, por exemplo — observa este contador
+    // em vez de ler o sessionStorage no render: ao recarregar a página o token
+    // só chega depois do primeiro render, e sem o sinal a busca de permissões
+    // rodava antes dele e nunca mais.
+    const [tokenEpoch, setTokenEpoch] = useState(0);
 
     // Re-establish API token on reload when session is still active
     useEffect(() => {
@@ -218,6 +217,7 @@ export const ClaimsProvider = ({ children }) => {
         zitadel.userManager.getUser().then((oidcUser) => {
             if (oidcUser && !oidcUser.expired) {
                 setToken(oidcUser.access_token);
+                setTokenEpoch((n) => n + 1);
             } else {
                 setCurrentUser(null);
             }
@@ -719,8 +719,11 @@ export const ClaimsProvider = ({ children }) => {
 
     const refreshUsers = useCallback(async () => {
         if (isMockEnabled() || !getToken()) return;
-        // GET /users requires manager+; gracefully degrade for viewer/contributor.
-        if (currentUser?.backRole !== 'manager' && currentUser?.backRole !== 'admin') return;
+        // GET /users requires usuario.listar. This cannot ask usePermissions —
+        // PermissionsProvider is mounted inside this one — so it stays a cheap
+        // pre-filter on the admin claim, and a 403 degrades gracefully anyway
+        // for a non-admin who was granted the permission by a custom role.
+        if (!currentUser?.isAdmin) return;
         setUsersLoading(true);
         try {
             const res = await claimsService.listUsers();
@@ -799,11 +802,6 @@ export const ClaimsProvider = ({ children }) => {
         return created;
     };
 
-    const updateUserRoleAction = async (id, role) => {
-        await claimsService.updateUserRole(id, role);
-        await refreshUsers();
-    };
-
     const deactivateUserAction = async (id) => {
         await claimsService.deactivateUser(id);
         await refreshUsers();
@@ -813,13 +811,11 @@ export const ClaimsProvider = ({ children }) => {
         return claimsService.resendInvite(id);
     };
 
-    const updateSettings = (newSettings) => setSettings(newSettings);
-
     const isGuestVerified = (token) => sessionStorage.getItem(`verified_guest_${token}`) === 'true';
 
     return (
         <ClaimsContext.Provider value={{
-            currentUser, setCurrentUser, logout,
+            currentUser, setCurrentUser, logout, tokenEpoch,
             claims, addClaim, updateChecklistStatus, markFileReviewed, addChecklistItem,
             transitionStatus, archiveClaim, assignClaim, updateClaimFields, fetchSingleClaim,
             toggleDeadline, logView, setComplexStatus, updateClaimObservations,
@@ -831,10 +827,9 @@ export const ClaimsProvider = ({ children }) => {
             claimsLoading, claimsError, claimsTotal, refreshClaims, claimsFilter,
             users,
             backendUsers, usersLoading, refreshUsers, resolveActorLabel,
-            inviteUser: inviteUserAction, updateUserRole: updateUserRoleAction,
+            inviteUser: inviteUserAction,
             deactivateUser: deactivateUserAction, resendInvite: resendInviteAction,
             clients, clientsLoading, addClientEntity, updateClientEntity, deleteClientEntity, refreshClients,
-            settings, updateSettings,
             isGuestVerified,
         }}>
             {children}

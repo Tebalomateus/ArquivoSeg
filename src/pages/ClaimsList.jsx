@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Search, Filter, Plus, FileText, ChevronRight, ChevronDown, X, Calendar, Building2, AlertCircle, Circle, ArrowLeft, Briefcase } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
+import { useCan } from '../context/PermissionsContext';
 import { STATUS_COLORS, INSURERS_CONFIG } from '../constants/config';
 import Badge from '../components/Badge';
 
@@ -24,6 +25,7 @@ const parseDate = (dateStr) => {
  */
 export default function ClaimsList() {
     const { claims, claimsLoading, claimsError, claimsTotal, refreshClaims, currentUser, backendUsers } = useClaims();
+    const can = useCan();
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -136,7 +138,7 @@ export default function ClaimsList() {
                         </span>
                     </h1>
                 </div>
-                {(currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin') && (
+                {can('processo.criar') && (
                     <Link to="novo" className="w-full lg:w-auto bg-secondary text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-secondary-hover transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-2 group">
                         <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" />
                         Novo Sinistro

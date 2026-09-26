@@ -3,7 +3,6 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard,
     Users,
-    Settings as SettingsIcon,
     LogOut,
     ShieldCheck,
     Search,
@@ -13,6 +12,7 @@ import {
     Building2,
     History,
     FileText,
+    ShieldHalf,
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 import NotificationBell from '../NotificationBell';
@@ -62,10 +62,9 @@ export default function AdminLayout() {
         { icon: FileCheck2, label: 'Auditoria de Sinistros', path: '/admin/sinistros' },
         { icon: Building2, label: 'Gestão de Clientes', path: '/admin/clientes' },
         { icon: LinkIcon, label: 'Rastreamento de Links', path: '/admin/links' },
-        { icon: Users, label: 'Gestão de Usuários', path: '/admin/usuarios' },
+        { icon: ShieldHalf, label: 'Usuários e Acessos', path: '/admin/acessos' },
         { icon: History, label: 'Auditoria Global', path: '/admin/audit' },
         { icon: Database, label: 'Compliance Data Center', path: '/admin/compliance' },
-        { icon: SettingsIcon, label: 'Configurações do Sistema', path: '/admin/configuracoes' },
     ];
 
     const handleLogout = () => {

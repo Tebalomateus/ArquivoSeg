@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Bell, Check, Filter, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
+import { usePermissions } from '../context/PermissionsContext';
 import { listAudit, ACTION_LABELS } from '../api/audit';
 
 const LAST_SEEN_KEY = 'arquivoseg_notifications_last_seen';
@@ -22,6 +23,7 @@ const RELEVANT_ACTIONS = new Set([
 
 export default function Notifications() {
     const { currentUser, claims, backendUsers } = useClaims();
+    const { isAdmin, can } = usePermissions();
     const navigate = useNavigate();
 
     const [entries, setEntries] = useState([]);
@@ -32,7 +34,7 @@ export default function Notifications() {
         try { return localStorage.getItem(LAST_SEEN_KEY) || null; } catch { return null; }
     });
 
-    const basePath = currentUser?.role === 'ADMIN' ? '/admin' : '/app';
+    const basePath = isAdmin ? '/admin' : '/app';
 
     const load = useCallback(async () => {
         if (!currentUser) return;
@@ -61,7 +63,8 @@ export default function Notifications() {
         () => backendUsers.find((u) => u.email?.toLowerCase() === currentUser?.email?.toLowerCase())?.id,
         [backendUsers, currentUser]
     );
-    const isManagerPlus = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
+    // Same rule as the bell: the feed is the audit trail.
+    const seesEverything = can('auditoria.listar');
 
     const notifications = useMemo(() => {
         const myClaimIds = new Set(
@@ -71,7 +74,7 @@ export default function Notifications() {
             .filter((e) => RELEVANT_ACTIONS.has(e.action))
             .filter((e) => e.actor_user_id !== me)
             .filter((e) => {
-                if (isManagerPlus) return true;
+                if (seesEverything) return true;
                 if (e.resource_type === 'process') return myClaimIds.has(e.resource_id);
                 return false;
             })
@@ -86,7 +89,7 @@ export default function Notifications() {
                 };
             })
             .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    }, [entries, claims, backendUsers, me, isManagerPlus]);
+    }, [entries, claims, backendUsers, me, seesEverything]);
 
     const filtered = useMemo(() => {
         if (filter === 'alerts') return notifications.filter((n) => n.action === 'access.denied');

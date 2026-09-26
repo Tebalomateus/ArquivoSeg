@@ -1,10 +1,14 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check, ChevronRight } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
+import { useCan } from '../context/PermissionsContext';
 import { listAudit, ACTION_LABELS } from '../api/audit';
 
 const LAST_SEEN_KEY = 'arquivoseg_notifications_last_seen';
+const PANEL_WIDTH = 384; // w-96
+const PANEL_MARGIN = 8; // keep the panel on-screen at narrow widths
 const RELEVANT_ACTIONS = new Set([
     'process.created',
     'process.updated',
@@ -21,19 +25,17 @@ const RELEVANT_ACTIONS = new Set([
 ]);
 
 // Generates a notification list from raw audit entries — filters out the
-// current user's own actions, keeps only events relevant to the user's
-// claims (when contributor) or all tenant events (when manager+).
-function buildNotifications({ entries, currentUser, claims, backendUsers }) {
+// current user's own actions, keeps only events relevant to the user's own
+// claims — unless seesEverything, in which case the whole tenant's activity.
+function buildNotifications({ entries, currentUser, claims, backendUsers, seesEverything }) {
     // currentUser doesn't carry a dbId directly; resolve it by matching email
-    // against the backendUsers list (only available for manager+).
+    // against the backendUsers list (only available to whoever may list users).
     const me = backendUsers.find((u) => u.email?.toLowerCase() === currentUser?.email?.toLowerCase())?.id;
     const myClaimIds = new Set(
         claims
             .filter((c) => c.assignedTo === me || c.backCreatedBy === me)
             .map((c) => c.id)
     );
-
-    const isManagerPlus = currentUser?.backRole === 'manager' || currentUser?.backRole === 'admin';
 
     const findClaim = (id) => claims.find((c) => c.id === id);
     const labelFor = (uuid) => backendUsers.find((u) => u.id === uuid)?.email || 'Usuário';
@@ -42,7 +44,7 @@ function buildNotifications({ entries, currentUser, claims, backendUsers }) {
         .filter((e) => RELEVANT_ACTIONS.has(e.action))
         .filter((e) => e.actor_user_id !== me)
         .filter((e) => {
-            if (isManagerPlus) return true;
+            if (seesEverything) return true;
             if (e.resource_type === 'process') return myClaimIds.has(e.resource_id);
             return false;
         })
@@ -69,6 +71,9 @@ function buildNotifications({ entries, currentUser, claims, backendUsers }) {
 
 export default function NotificationBell({ basePath = '/app' }) {
     const { currentUser, claims, backendUsers } = useClaims();
+    // The feed is the audit trail, so whoever may read the audit sees the whole
+    // tenant's activity; everyone else sees only what touches their own work.
+    const seesEverything = useCan()('auditoria.listar');
     const navigate = useNavigate();
     const [open, setOpen] = useState(false);
     const [entries, setEntries] = useState([]);
@@ -77,6 +82,11 @@ export default function NotificationBell({ basePath = '/app' }) {
         try { return localStorage.getItem(LAST_SEEN_KEY) || null; } catch { return null; }
     });
     const ref = useRef(null);
+    const panelRef = useRef(null);
+    // Panel position in viewport coords: the panel is portaled to <body> so the
+    // header's backdrop-filter stacking context (trapped under <main>'s z-10,
+    // below the page's own z-10 blocks) can't paint page content over it.
+    const [pos, setPos] = useState({ top: 0, left: 0 });
 
     const load = useCallback(async () => {
         if (!currentUser) return;
@@ -100,19 +110,41 @@ export default function NotificationBell({ basePath = '/app' }) {
         return () => clearInterval(t);
     }, [load]);
 
-    // close dropdown on outside click
+    // close dropdown on outside click — the panel lives in a portal, so "inside"
+    // means the bell wrapper or the panel itself
     useEffect(() => {
         if (!open) return;
         const onClick = (e) => {
-            if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+            const inBell = ref.current?.contains(e.target);
+            const inPanel = panelRef.current?.contains(e.target);
+            if (!inBell && !inPanel) setOpen(false);
         };
         document.addEventListener('mousedown', onClick);
         return () => document.removeEventListener('mousedown', onClick);
     }, [open]);
 
+    // anchor the fixed panel under the bell's right edge; follow resize/scroll
+    useEffect(() => {
+        if (!open) return;
+        const place = () => {
+            const rect = ref.current?.getBoundingClientRect();
+            if (!rect) return;
+            const width = Math.min(PANEL_WIDTH, window.innerWidth - 2 * PANEL_MARGIN);
+            const left = Math.min(Math.max(PANEL_MARGIN, rect.right - width), window.innerWidth - PANEL_MARGIN - width);
+            setPos({ top: rect.bottom + 8, left, width });
+        };
+        place();
+        window.addEventListener('resize', place);
+        window.addEventListener('scroll', place, true);
+        return () => {
+            window.removeEventListener('resize', place);
+            window.removeEventListener('scroll', place, true);
+        };
+    }, [open]);
+
     const notifications = useMemo(
-        () => buildNotifications({ entries, currentUser, claims, backendUsers }),
-        [entries, currentUser, claims, backendUsers]
+        () => buildNotifications({ entries, currentUser, claims, backendUsers, seesEverything }),
+        [entries, currentUser, claims, backendUsers, seesEverything]
     );
 
     const unreadCount = useMemo(() => {
@@ -158,8 +190,12 @@ export default function NotificationBell({ basePath = '/app' }) {
                 )}
             </button>
 
-            {open && (
-                <div className="absolute right-0 mt-2 w-96 bg-white rounded-2xl border border-slate-100 shadow-2xl z-50 overflow-hidden animate-fade-in">
+            {open && createPortal(
+                <div
+                    ref={panelRef}
+                    style={{ top: pos.top, left: pos.left, width: pos.width || PANEL_WIDTH }}
+                    className="fixed w-96 max-w-[calc(100vw-16px)] bg-white rounded-2xl border border-slate-100 shadow-2xl z-50 overflow-hidden animate-fade-in"
+                >
                     <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                         <div>
                             <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Notificações</h3>
@@ -220,7 +256,8 @@ export default function NotificationBell({ basePath = '/app' }) {
                     >
                         Ver todas as notificações
                     </button>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

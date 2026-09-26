@@ -13,8 +13,10 @@ import {
     Briefcase
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 export default function ClientManagement() {
+    const ask = useConfirm();
     const { clients, clientsLoading, addClientEntity, updateClientEntity, deleteClientEntity, refreshClients } = useClaims();
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -67,7 +69,11 @@ export default function ClientManagement() {
     };
 
     const handleDelete = async (id) => {
-        if (!confirm('Excluir este cliente?')) return;
+        if (!await ask({
+            title: 'Excluir este cliente?',
+            message: 'O cadastro sai da lista. Sinistros já abertos para ele continuam onde estão.',
+            confirmLabel: 'Excluir cliente', tone: 'danger',
+        })) return;
         try { await deleteClientEntity(id); }
         catch (err) { alert(err?.message || 'Falha ao excluir.'); }
     };

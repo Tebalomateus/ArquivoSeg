@@ -4,9 +4,9 @@ import { ShieldCheck, Download, Lock, ExternalLink, AlertCircle } from 'lucide-r
 /**
  * Portal público de download de documento compartilhado.
  *
- * O backend expõe `GET /s/:token` que valida o token e responde com 302 para
- * um presigned URL do MinIO/S3. Aqui apenas oferecemos o link — o browser
- * segue o redirect e baixa o arquivo. Sem upload anônimo (back não suporta).
+ * O backend expõe `GET /s/:token` — sem autenticação — que valida o token e
+ * responde com o arquivo em `content-disposition: attachment`. Aqui apenas
+ * oferecemos o link. Sem upload anônimo (back não suporta).
  */
 export default function PublicShare() {
     const { token } = useParams();
@@ -27,7 +27,12 @@ export default function PublicShare() {
         );
     }
 
-    const downloadHref = `/s/${token}`;
+    // O endpoint vive na API, não neste host. Relativo, o href virava
+    // https://www.arquivoseg.com.br/s/<token>: o CloudFront não acha o objeto,
+    // o custom_error_response troca o 404 por index.html com 200, o SPA não tem
+    // rota /s/ e cai no catch-all → /login. O download virava tela de login.
+    const apiBase = import.meta.env.VITE_API_BASE_URL ?? '';
+    const downloadHref = `${apiBase}/s/${token}`;
 
     return (
         <div className="min-h-screen bg-[#F8FAFC] font-sans flex items-center justify-center p-6">
