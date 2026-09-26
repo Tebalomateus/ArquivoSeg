@@ -38,9 +38,6 @@ export const ACTION_GROUPS = [
             'deck.task_detached': 'Tarefa retirada do deck',
             'deck.submitted': 'Deck enviado para análise',
             'deck.analyzed': 'Deck analisado',
-            'deck.approved': 'Deck aprovado',
-            'deck.rejected': 'Deck recusado',
-            'deck.returned': 'Deck devolvido',
             'deck.downloaded': 'Arquivos do deck baixados',
         },
     },
@@ -128,12 +125,13 @@ export function describeEvent(event) {
             out.subject = meta.label ?? meta.name ?? meta.item_key ?? null;
             out.note = meta.reason || null;
             break;
-        case 'deck.analyzed':
-        case 'deck.returned':
-        case 'deck.rejected': {
+        // A análise é o único evento de decisão do deck: aprovar e devolver
+        // são o mesmo deck.analyzed, e o que foi devolvido vem em devolvidas.
+        case 'deck.analyzed': {
             out.subject = deckCode(meta);
             const devolvidas = Array.isArray(meta.devolvidas) ? meta.devolvidas.length : null;
             if (devolvidas) out.detail = `${devolvidas} ${devolvidas === 1 ? 'tarefa devolvida' : 'tarefas devolvidas'}`;
+            else if (devolvidas === 0) out.detail = 'tudo aceito';
             out.note = meta.motivo || meta.reason || null;
             break;
         }
@@ -154,8 +152,9 @@ export function describeEvent(event) {
     if (event?.action === 'deck.downloaded' && Array.isArray(meta.arquivos)) {
         out.detail = `${meta.arquivos.length} ${meta.arquivos.length === 1 ? 'arquivo' : 'arquivos'}`;
     }
-    if ((event?.action === 'share.accessed' || event?.action === 'canary.pinged') && meta.ip_address) {
-        out.detail = `IP ${meta.ip_address}`;
+    // O IP é coluna do log (ip_address no evento), não metadata.
+    if ((event?.action === 'share.accessed' || event?.action === 'canary.pinged') && event.ip_address) {
+        out.detail = `IP ${event.ip_address}`;
     }
     if (event?.action === 'deck.submitted' && Array.isArray(meta.tarefas)) {
         out.detail = `${meta.tarefas.length} ${meta.tarefas.length === 1 ? 'tarefa' : 'tarefas'}`;

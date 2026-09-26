@@ -19,18 +19,18 @@ const SCRIPT = [
     [339, 'ricardo', 'share.created', 'share_token', { file_name: 'causa__apolice-2026.pdf', label: 'Segurado' }],
     [316, 'ana', 'file.uploaded', 'file_version', { file_name: 'causa__boletim-ocorrencia.pdf', version: 1 }],
     [315, 'ana', 'file.uploaded', 'file_version', { file_name: 'causa__laudo-bombeiros.pdf', version: 1 }],
-    [300, 'externo', 'share.accessed', 'share_token', { file_name: 'causa__apolice-2026.pdf', ip_address: '189.40.12.7' }],
+    [300, 'externo', 'share.accessed', 'share_token', { file_name: 'causa__apolice-2026.pdf' }, '189.40.12.7'],
     [290, 'ana', 'deck.created', 'deck', { codigo: 'DECK-01', tarefa_ids: ['causa.bo', 'causa.laudo'] }],
     [289, 'ana', 'deck.submitted', 'deck', { codigo: 'DECK-01', tarefas: ['causa.bo', 'causa.laudo'] }],
     [260, 'maria', 'file.downloaded', 'file_version', { file_name: 'causa__laudo-bombeiros.pdf' }],
-    [258, 'maria', 'deck.returned', 'deck', { codigo: 'DECK-01', devolvidas: ['causa.laudo'], motivo: 'Laudo sem assinatura do responsável técnico.' }],
+    [258, 'maria', 'deck.analyzed', 'deck', { codigo: 'DECK-01', devolvidas: ['causa.laudo'], motivo: 'Laudo sem assinatura do responsável técnico.' }],
     [240, 'maria', 'comment.created', 'comment', { body: 'Falta a assinatura na página 3 do laudo.' }],
     [210, 'ana', 'file.uploaded', 'file_version', { file_name: 'causa__laudo-bombeiros.pdf', version: 2 }],
     [209, 'ana', 'deck.submitted', 'deck', { codigo: 'DECK-01', tarefas: ['causa.laudo'] }],
-    [190, 'maria', 'deck.approved', 'deck', { codigo: 'DECK-01' }],
+    [190, 'maria', 'deck.analyzed', 'deck', { codigo: 'DECK-01', devolvidas: [] }],
     [170, 'ricardo', 'process.deadline_started', 'process', { start_at: isoHoursAgo(170), due_at: isoHoursAgo(170 - 24 * 30), source: 'auto' }],
     [150, 'ricardo', 'process.status_changed', 'process', { old_status: 'ready', new_status: 'ongoing' }],
-    [120, 'externo', 'canary.pinged', 'file_version', { file_name: 'prejuizo__planilha-bens.xlsx', ip_address: '177.92.3.201' }],
+    [120, 'externo', 'canary.pinged', 'file_version', { file_name: 'prejuizo__planilha-bens.xlsx' }, '177.92.3.201'],
     [100, 'ana', 'file.uploaded', 'file_version', { file_name: 'prejuizo__planilha-bens.xlsx', version: 1 }],
     [96, 'ana', 'deck.created', 'deck', { codigo: 'DECK-02', tarefa_ids: ['prejuizo.planilha'] }],
     [72, 'carlos', 'process.deadline_adjusted', 'process', {
@@ -41,7 +41,7 @@ const SCRIPT = [
     [48, 'ricardo', 'comment.created', 'comment', { body: 'Prorrogação aceita pela seguradora.' }],
     [30, 'ana', 'deck.submitted', 'deck', { codigo: 'DECK-02', tarefas: ['prejuizo.planilha'] }],
     [26, 'maria', 'file.downloaded', 'file_version', { file_name: 'prejuizo__planilha-bens.xlsx' }],
-    [5, 'maria', 'deck.approved', 'deck', { codigo: 'DECK-02' }],
+    [5, 'maria', 'deck.analyzed', 'deck', { codigo: 'DECK-02', devolvidas: [] }],
     [2, 'ricardo', 'file.deleted', 'file_version', { file_name: 'gerencial__rascunho-parecer.docx' }],
     [0.3, 'ricardo', 'process.updated', 'process', {}],
 ];
@@ -51,13 +51,14 @@ function isoHoursAgo(h) {
 }
 
 function buildEvents(processId) {
-    return SCRIPT.map(([h, who, action, resource_type, metadata], i) => ({
+    return SCRIPT.map(([h, who, action, resource_type, metadata, ip_address = null], i) => ({
         id: `mock-audit-${i + 1}`,
         timestamp: isoHoursAgo(h),
         action,
         resource_type,
         resource_id: resource_type === 'process' ? processId : `mock-${resource_type}-${i + 1}`,
         share_token_id: who === 'externo' && action === 'share.accessed' ? 'mock-share-1' : null,
+        ip_address,
         metadata,
         ...PEOPLE[who],
     })).reverse();
