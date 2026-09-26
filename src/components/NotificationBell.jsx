@@ -88,8 +88,12 @@ export default function NotificationBell({ basePath = '/app' }) {
     // below the page's own z-10 blocks) can't paint page content over it.
     const [pos, setPos] = useState({ top: 0, left: 0 });
 
+    // O sino lê /audit, que só quem tem auditoria.listar pode ler: para os
+    // demais a chamada é um 403 garantido. Também não há mais polling — a cada
+    // minuto, em toda aba aberta, isso virava uma tempestade de 403 no servidor.
+    // Carrega ao montar e de novo sempre que o painel abre.
     const load = useCallback(async () => {
-        if (!currentUser) return;
+        if (!currentUser || !seesEverything) { setEntries([]); return; }
         setLoading(true);
         try {
             const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -102,13 +106,10 @@ export default function NotificationBell({ basePath = '/app' }) {
         } finally {
             setLoading(false);
         }
-    }, [currentUser]);
+    }, [currentUser, seesEverything]);
 
-    useEffect(() => {
-        load();
-        const t = setInterval(load, 60 * 1000);
-        return () => clearInterval(t);
-    }, [load]);
+    useEffect(() => { load(); }, [load]);
+    useEffect(() => { if (open) load(); }, [open, load]);
 
     // close dropdown on outside click — the panel lives in a portal, so "inside"
     // means the bell wrapper or the panel itself

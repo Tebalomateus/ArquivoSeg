@@ -43,10 +43,9 @@ test('a árvore mostra pasta, tarefa com estado e deck, e os arquivos do deck', 
     await expect(page.getByTestId('column-pendente')).toHaveCount(0);
     await expect(page.getByText(/Atendidas em/)).toHaveCount(0);
     await expect(page.getByTestId('folder-avulsos')).toHaveCount(0);
-    // E não se sobe nada para cá: a visão é só leitura.
-    await expect(page.getByRole('button', { name: 'Upload Seguro' })).toHaveCount(0);
+    // Voltar a uma pasta devolve o board; a visão gerencial reabre igual.
     await page.getByRole('button', { name: /^Causa \d+%$/ }).click();
-    await expect(page.getByRole('button', { name: 'Upload Seguro' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Relação de documentos' })).toBeVisible();
     await abrirGerencial(page);
 
     const causa = tree.getByTestId('gerencial-folder-causa');

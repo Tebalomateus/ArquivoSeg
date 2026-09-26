@@ -38,9 +38,11 @@ const buildFolders = (initialChecklist) => [
     { id: 'f4-' + Date.now(), name: 'Gerencial', category: 'gerencial', completion: 0, private: true, documents: [], checklist: [] },
 ];
 
-// Computes SLA from process.created_at + 30 (or 120 for complex) days, no persisted suspensions.
-const computeDeadline = (createdAtISO, isComplex) => {
-    const totalDays = isComplex ? 120 : 30;
+// Computes SLA from process.created_at + 30 days, no persisted suspensions.
+// O prazo de verdade vem de GET /processes/:id/deadline; isto só alimenta os
+// resumos das listas enquanto elas não leem o endpoint.
+const computeDeadline = (createdAtISO) => {
+    const totalDays = 30;
     const created = createdAtISO ? new Date(createdAtISO) : new Date();
     const elapsedDays = Math.floor((Date.now() - created.getTime()) / 86_400_000);
     return {
@@ -59,7 +61,7 @@ const computeDeadline = (createdAtISO, isComplex) => {
 const METADATA_KEYS = [
     'number', 'insurer', 'insuredName', 'policyNumber', 'policyStartDate', 'policyEndDate',
     'retroactiveDate', 'modality', 'brokerName', 'brokerClaimId', 'adjusterName', 'adjusterClaimId',
-    'occurrenceDate', 'occurrenceLocation', 'observations', 'isComplex', 'progress',
+    'occurrenceDate', 'occurrenceLocation', 'observations', 'progress',
     'deadline', 'shareToken', 'activities', 'reviewedFiles',
 ];
 
@@ -81,7 +83,6 @@ const adaptProcessToClaim = (proc, cached) => {
     const created = proc.created_at ? new Date(proc.created_at) : new Date();
     const updated = proc.updated_at ? new Date(proc.updated_at) : created;
     const meta = (proc.metadata && Object.keys(proc.metadata).length > 0) ? proc.metadata : (cached || {});
-    const isComplex = !!meta.isComplex;
     const baseFolders = Array.isArray(meta.folders) && meta.folders.length > 0
         ? meta.folders.map(f => ({ documents: [], ...f }))
         : buildFolders([]);
@@ -121,8 +122,7 @@ const adaptProcessToClaim = (proc, cached) => {
         occurrenceLocation: meta.occurrenceLocation || '',
         observations: meta.observations || '',
         progress: meta.progress ?? 0,
-        isComplex,
-        deadline: meta.deadline || computeDeadline(proc.created_at, isComplex),
+        deadline: meta.deadline || computeDeadline(proc.created_at),
         activities: Array.isArray(meta.activities) ? meta.activities : [],
         reviewedFiles: meta.reviewedFiles || {},
         folders: baseFolders,
@@ -152,7 +152,6 @@ export const ClaimsProvider = ({ children }) => {
     const [claimsLoading, setClaimsLoading] = useState(false);
     const [claimsError, setClaimsError] = useState(null);
     const [claimsTotal, setClaimsTotal] = useState(0);
-    const [auditByClaim, setAuditByClaim] = useState({});
 
     // INITIAL_USERS is the *front-only* roster used by the Login screen to map
     // an email to a PAT in dev. It does not necessarily match the backend `users`
@@ -302,8 +301,7 @@ export const ClaimsProvider = ({ children }) => {
             title,
             description,
             progress: 0,
-            isComplex: false,
-            deadline: computeDeadline(now.toISOString(), false),
+            deadline: computeDeadline(now.toISOString()),
             activities: [{
                 id: 'a-' + Date.now(),
                 user: currentUser?.name || 'Sistema',
@@ -341,7 +339,7 @@ export const ClaimsProvider = ({ children }) => {
             backCreatedAt,
             date: now.toLocaleDateString('pt-BR'),
             lastModified: now.toLocaleDateString('pt-BR'),
-            deadline: computeDeadline(backCreatedAt, false),
+            deadline: computeDeadline(backCreatedAt),
         };
 
         setClaims(prev => [localClaim, ...prev]);
@@ -415,19 +413,6 @@ export const ClaimsProvider = ({ children }) => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    const assignClaim = async (claimId, userId) => {
-        if (isMockEnabled() || !getToken()) return;
-        try {
-            const proc = await claimsService.updateClaim(claimId, { assigned_to: userId });
-            setClaims(prev => prev.map(c => c.id === claimId
-                ? { ...c, assignedTo: proc.assigned_to, lastModified: new Date().toLocaleDateString('pt-BR') }
-                : c));
-        } catch (err) {
-            alert(`Falha ao atribuir: ${err?.message || err}`);
-            throw err;
-        }
-    };
 
     const updateClaimLocal = (claimId, updater, { syncToBack = true } = {}) => {
         setClaims(prev => prev.map(c => {
@@ -633,25 +618,6 @@ export const ClaimsProvider = ({ children }) => {
         }
     }, []);
 
-    const fetchAudit = useCallback(async (claimId) => {
-        if (!claimId) return [];
-        if (isMockEnabled() || !getToken()) return [];
-        try {
-            const res = await claimsService.listAudit(claimId);
-            const entries = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
-            setAuditByClaim(prev => ({ ...prev, [claimId]: entries }));
-            return entries;
-        } catch (err) {
-            // 403 is expected for viewer/contributor — surface empty list.
-            if (err?.status === 403) {
-                setAuditByClaim(prev => ({ ...prev, [claimId]: null }));
-                return null;
-            }
-            console.error('[ClaimsContext] failed to fetch audit for', claimId, err);
-            return [];
-        }
-    }, []);
-
     const updateChecklistStatus = (claimId, folderId, itemId, received) => {
         updateClaimLocal(claimId, c => {
             const folders = c.folders.map(f => {
@@ -712,8 +678,6 @@ export const ClaimsProvider = ({ children }) => {
             return { ...c, deadline: { ...c.deadline, isSuspended, suspensionCount: isSuspended ? c.deadline.suspensionCount + 1 : c.deadline.suspensionCount, history: [entry, ...c.deadline.history] } };
         });
     };
-
-    const setComplexStatus = (id, isComplex) => updateClaimLocal(id, c => ({ ...c, isComplex, deadline: { ...c.deadline, totalDays: isComplex ? 120 : 30 } }));
 
     const updateClaimObservations = (id, observations) => updateClaimLocal(id, c => ({ ...c, observations }));
 
@@ -817,13 +781,12 @@ export const ClaimsProvider = ({ children }) => {
         <ClaimsContext.Provider value={{
             currentUser, setCurrentUser, logout, tokenEpoch,
             claims, addClaim, updateChecklistStatus, markFileReviewed, addChecklistItem,
-            transitionStatus, archiveClaim, assignClaim, updateClaimFields, fetchSingleClaim,
-            toggleDeadline, logView, setComplexStatus, updateClaimObservations,
+            transitionStatus, archiveClaim, updateClaimFields, fetchSingleClaim,
+            toggleDeadline, logView, updateClaimObservations,
             uploadFileToClaim, addCommentToClaim, refreshClaimFiles, openDocument, downloadDocument,
             deleteDocument, listFileVersions,
             updateAnnotation, deleteAnnotation,
             listFileShares, createFileShare, revokeFileShare, countShareAccesses,
-            fetchAudit, auditByClaim,
             claimsLoading, claimsError, claimsTotal, refreshClaims, claimsFilter,
             users,
             backendUsers, usersLoading, refreshUsers, resolveActorLabel,
