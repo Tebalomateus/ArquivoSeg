@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { CheckCircle2, Circle, ChevronDown, ChevronRight, AlertCircle, Loader2, Plus, Trash2, X, History } from 'lucide-react';
 import { getChecklistDef, updateChecklistState, addChecklistItem, removeChecklistItem } from '../api/checklist';
 import { useConfirm } from './ConfirmDialog';
+import { markDeadlineStale } from '../services/claimSidebar';
 
 export default function ChecklistPanel({ claim }) {
     const ask = useConfirm();
@@ -44,7 +45,10 @@ export default function ChecklistPanel({ claim }) {
     const persistState = useCallback((nextState) => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
-            updateChecklistState(claim.id, nextState).catch(console.error);
+            // Só depois do PATCH: é nele que o servidor pode iniciar o prazo.
+            updateChecklistState(claim.id, nextState)
+                .then(() => markDeadlineStale(claim.id))
+                .catch(console.error);
         }, 500);
     }, [claim.id]);
 
@@ -85,6 +89,7 @@ export default function ChecklistPanel({ claim }) {
         try {
             const item = await addChecklistItem(claim.id, { stageId, label });
             setAdhocItems(prev => [...prev, item]);
+            markDeadlineStale(claim.id);
             setAddingToStage(null);
             setNewItemLabel('');
         } catch (err) {
@@ -109,6 +114,8 @@ export default function ChecklistPanel({ claim }) {
         try {
             const removal = await removeChecklistItem(claim.id, itemKey, answer.reason);
             setRemovedItems(prev => [...prev.filter(r => r.itemKey !== removal.itemKey), removal]);
+            // Tirar o último obrigatório pendente também pode completar a lista.
+            markDeadlineStale(claim.id);
             setState(prev => {
                 if (!(itemKey in prev)) return prev;
                 const next = { ...prev };

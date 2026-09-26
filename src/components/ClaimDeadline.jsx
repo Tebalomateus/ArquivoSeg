@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Clock, X } from 'lucide-react';
-import { loadDeadline, saveDeadlineAdjust } from '../services/claimSidebar';
+import { loadDeadline, saveDeadlineAdjust, onDeadlineStale } from '../services/claimSidebar';
 import { daysUntil, CRITICAL_DAYS } from '../constants/deadline';
 
 /**
@@ -43,8 +43,12 @@ export default function ClaimDeadline({ claim, currentUser, onChange }) {
     const [modalOpen, setModalOpen] = useState(false);
     const [showAll, setShowAll] = useState(false);
 
-    // O início é gravado pelo servidor quando o último obrigatório é cumprido,
-    // então o progresso mudar é motivo para reler.
+    // O início é gravado pelo servidor quando o último obrigatório é cumprido
+    // (checklist ou arquivo no deck); checklist e board avisam por
+    // markDeadlineStale depois de salvar, e aí o cartão relê.
+    const [staleTick, setStaleTick] = useState(0);
+    useEffect(() => onDeadlineStale(claim.id, () => setStaleTick(t => t + 1)), [claim.id]);
+
     useEffect(() => {
         let off = false;
         loadDeadline(claim).then(d => {
@@ -54,7 +58,7 @@ export default function ClaimDeadline({ claim, currentUser, onChange }) {
         }).catch(() => { if (!off) setDeadline(null); });
         return () => { off = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [claim.id, claim.progress]);
+    }, [claim.id, staleTick]);
 
     const history = deadline?.history || [];
     const visible = showAll ? history : history.slice(0, 2);

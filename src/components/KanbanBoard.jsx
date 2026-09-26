@@ -8,6 +8,7 @@ import * as board from '../api/deckBoard';
 import { useCan } from '../context/PermissionsContext';
 import { useConfirm } from '../components/ConfirmDialog';
 import { FileActions, ShareFileModal, extBadge } from './FileActions';
+import { markDeadlineStale } from '../services/claimSidebar';
 
 const { STATUS, persistKey, filesKey } = board;
 
@@ -116,6 +117,8 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     useEffect(() => {
         if (!online && !loading) {
             try { sessionStorage.setItem(persistKey(claim.id), JSON.stringify(state)); } catch { /* ignore */ }
+            // O prazo mock lê o board salvo; só depois de salvar ele está certo.
+            markDeadlineStale(claim.id);
         }
     }, [state, online, loading, claim.id]);
 
@@ -208,13 +211,16 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
         try {
             const raw = await remote();
             if (raw) setState(board.normalizeBoard(raw));
+            // Arquivo em deck cumpre a tarefa para o prazo: o servidor pode ter
+            // acabado de iniciá-lo.
+            markDeadlineStale(claim.id);
         } catch (err) {
             setState(prev); // rollback — the board never lies about persisted state
             alert(err?.message || 'Falha ao salvar. Recarregue e tente de novo.');
         } finally {
             setBusy(false);
         }
-    }, [busy, state, online]);
+    }, [busy, state, online, claim.id]);
 
     // Turn selected File objects into deck file refs (real upload, or mock stub).
     const toRefs = useCallback(async (files) => {
