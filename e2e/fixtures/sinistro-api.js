@@ -78,6 +78,8 @@ function proc(id, title, metadata) {
     return {
         id, title, status: 'ongoing', created_at: '2026-09-01T12:00:00Z', updated_at: '2026-09-20T12:00:00Z',
         assigned_to: null, created_by: null, claim_type: null, metadata,
+        // Prazo: o servidor manda os dois em todo processo; null = aguardando.
+        deadline_start_at: null, deadline_due_at: null,
     };
 }
 

@@ -4,6 +4,7 @@ import { Search, Filter, Plus, ChevronDown, X, Calendar, Building2, AlertCircle,
 import { useClaims } from '../context/ClaimsContext';
 import { useCan } from '../context/PermissionsContext';
 import { STATUS_COLORS, INSURERS_CONFIG } from '../constants/config';
+import { deadlineInfo, isCriticalClaim, urgencyKey, CRITICAL_DAYS } from '../constants/deadline';
 import Badge from '../components/Badge';
 
 /**
@@ -20,18 +21,17 @@ const parseDate = (dateStr) => {
 };
 
 /**
- * Quanto falta do prazo, dito como o cartão mostra. Usa o `deadline` que a
- * lista já tem — buscar o prazo de cada cartão seria uma chamada por sinistro.
+ * Quanto falta do prazo, dito como o cartão mostra. Usa o início e o
+ * vencimento que vêm em cada processo da lista — buscar o prazo de cada cartão
+ * seria uma chamada por sinistro.
  */
 function prazoInfo(claim) {
-    if (claim.status === 'Concluído') return { text: 'Encerrado', tone: 'text-gray-400' };
-    const d = claim.deadline;
-    if (!d || typeof d.remainingDays !== 'number') return { text: '—', tone: 'text-gray-400' };
-    if (d.isSuspended) return { text: 'Suspenso', tone: 'text-amber-600' };
-    const n = d.remainingDays;
-    if (n <= 0) return { text: 'Vencido', tone: 'text-red-600' };
-    const text = `${n} ${n === 1 ? 'dia' : 'dias'}`;
-    if (n < 5) return { text, tone: 'text-red-600' };
+    const { state, daysLeft: n } = deadlineInfo(claim);
+    if (state === 'closed') return { text: 'Encerrado', tone: 'text-gray-400' };
+    if (state === 'waiting') return { text: 'Aguardando documentos', tone: 'text-gray-500' };
+    if (state === 'overdue') return { text: 'Vencido', tone: 'text-red-600' };
+    const text = n === 0 ? 'Vence hoje' : `${n} ${n === 1 ? 'dia' : 'dias'}`;
+    if (n <= CRITICAL_DAYS) return { text, tone: 'text-red-600' };
     if (n < 10) return { text, tone: 'text-amber-600' };
     return { text, tone: 'text-secondary' };
 }
@@ -136,8 +136,7 @@ export default function ClaimsList() {
             const matchesDate = (!dateRange.start || claimDate >= new Date(dateRange.start).getTime()) &&
                 (!dateRange.end || claimDate <= new Date(dateRange.end).getTime());
 
-            const isCritico = (c.deadline?.remainingDays || 30) < 5 && !c.deadline?.isSuspended && c.status !== 'Concluído';
-            const matchesCritico = !filterCritico || isCritico;
+            const matchesCritico = !filterCritico || isCriticalClaim(c);
 
             return matchesSearch && matchesInsurer && matchesBroker && matchesStatus && matchesCritico && matchesDate;
         });
@@ -150,7 +149,7 @@ export default function ClaimsList() {
             if (dateB !== dateA) return dateB - dateA;
 
             // Tie-breaker: Urgency by SLA
-            return (a.deadline?.remainingDays || 30) - (b.deadline?.remainingDays || 30);
+            return urgencyKey(a) - urgencyKey(b);
         });
     }, [claims, searchTerm, filterInsurer, filterBroker, filterStatus, filterCritico, dateRange, activeTab]);
 
@@ -361,7 +360,7 @@ export default function ClaimsList() {
                                 className={`w-full p-4 rounded-2xl border font-bold text-xs transition-all flex items-center justify-center gap-3 ${filterCritico ? 'bg-red-50 border-red-200 text-red-600 shadow-inner translate-y-0.5' : 'bg-gray-50/50 border-gray-100 text-gray-400 hover:bg-white hover:border-gray-200 shadow-sm'}`}
                             >
                                 <div className={`w-2.5 h-2.5 rounded-full ${filterCritico ? 'bg-red-600 animate-pulse' : 'bg-gray-300'}`}></div>
-                                Sinistros Críticos (&lt; 5 dias)
+                                Sinistros Críticos (até {CRITICAL_DAYS} dias)
                             </button>
                         </div>
                     </div>

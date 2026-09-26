@@ -75,6 +75,7 @@ export default function ClaimDetails() {
         resolveActorLabel,
         addChecklistItem,
         updateClaimObservations,
+        setClaimDeadline,
     } = useClaims();
 
     const [tab, setTab] = useState(null); // id da pasta, LOOSE_FOLDER_ID, GERENCIAL_TAB ou AUDIT_TAB
@@ -468,7 +469,7 @@ export default function ClaimDetails() {
                                 </div>
                             </div>
                             <div className="col-span-2 lg:col-span-1">
-                                <ClaimDeadline claim={claim} currentUser={currentUser} />
+                                <ClaimDeadline claim={claim} currentUser={currentUser} onChange={(d) => setClaimDeadline(claim.id, d)} />
                             </div>
                             <div>
                                 <div className="lbl inline-flex items-center gap-1"><Calendar size={14} className="text-primary/70" />Data de abertura</div>

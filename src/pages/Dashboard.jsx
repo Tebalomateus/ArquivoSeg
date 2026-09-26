@@ -4,6 +4,7 @@ import { useClaims } from '../context/ClaimsContext';
 import { usePermissions } from '../context/PermissionsContext';
 import { useNavigate } from 'react-router-dom';
 import RelatorioGerencialCard from '../components/RelatorioGerencialCard';
+import { isCriticalClaim } from '../constants/deadline';
 import StorageUsageCard from '../components/StorageUsageCard';
 
 /**
@@ -73,7 +74,7 @@ export default function Dashboard() {
         const total = myClaims.length;
         const inAnal = myClaims.filter(c => c.status === 'Em Análise').length;
         const comp = myClaims.filter(c => c.status === 'Concluído').length;
-        const crit = myClaims.filter(c => (c.deadline?.remainingDays || 30) < 5 && !c.deadline?.isSuspended && c.status !== 'Concluído').length;
+        const crit = myClaims.filter(c => isCriticalClaim(c)).length;
         const avg = total > 0 ? Math.round(myClaims.reduce((acc, c) => acc + (c.progress || 0), 0) / total) : 0;
 
         return { total, inAnal, comp, crit, avg };

@@ -12,14 +12,10 @@ export const INITIAL_CLAIMS = [
         backStatus: 'ongoing',
         backCreatedByName: 'Ricardo Silva',
         backCreatedByEmail: 'ricardo@corretora.com',
-        deadline: {
-            totalDays: 30,
-            remainingDays: 18,
-            isSuspended: false,
-            suspensionCount: 0,
-            lastUpdated: Date.now(),
-            history: [{ date: '02/01/2026', action: 'Início do prazo de 30 dias.' }]
-        },
+        // Prazo regulatório como o servidor devolve: sem início até o último
+        // obrigatório chegar, e sem vencimento enquanto ninguém o ajustar.
+        deadlineStartAt: null,
+        deadlineDueAt: null,
         activities: [
             { id: 'a-1', user: 'Ana Souza', action: 'enviou "laudo_pericial.pdf" em Causa', date: '08/01/2026, 14:32', type: 'UPLOAD' },
         ],

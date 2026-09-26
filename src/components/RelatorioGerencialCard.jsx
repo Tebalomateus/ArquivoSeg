@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { deadlineInfo, isCriticalClaim, CRITICAL_DAYS } from '../constants/deadline';
 import { BarChart3, Clock, AlertTriangle, CalendarClock } from 'lucide-react';
 
 const STATUS_LABELS_PT = {
@@ -28,10 +29,11 @@ export default function RelatorioGerencialCard({ claims }) {
             byStatus[st] = (byStatus[st] || 0) + 1;
 
             const isOpen = st !== 'done' && st !== 'archived';
-            const remaining = c.deadline?.remainingDays ?? 30;
-            if (isOpen && !c.deadline?.isSuspended && remaining > 0) {
+            // Prazo ativo = aberto e já com vencimento (vencidos contam: o
+            // prazo deles continua sendo o problema de alguém).
+            if (isOpen && deadlineInfo(c).daysLeft !== null) {
                 activeDeadlineCount++;
-                if (remaining < 5) criticalCount++;
+                if (isCriticalClaim(c)) criticalCount++;
             }
 
             if (st === 'done' && c.backCreatedAt && c.backUpdatedAt) {
@@ -64,7 +66,7 @@ export default function RelatorioGerencialCard({ claims }) {
                 <MiniStat label="Casos abertos" value={stats.open} />
                 <MiniStat label="Casos fechados" value={stats.closed} />
                 <MiniStat label="Com prazo ativo" value={stats.activeDeadlineCount} icon={CalendarClock} />
-                <MiniStat label="SLA crítico (<5d)" value={stats.criticalCount} warn={stats.criticalCount > 0} icon={AlertTriangle} />
+                <MiniStat label={`SLA crítico (≤${CRITICAL_DAYS}d)`} value={stats.criticalCount} warn={stats.criticalCount > 0} icon={AlertTriangle} />
             </div>
 
             <div>
