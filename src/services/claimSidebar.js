@@ -126,3 +126,19 @@ export async function saveDeadlineAdjust(claim, body, currentUser) {
     try { sessionStorage.setItem(deadlineKey(claim.id), JSON.stringify(dl)); } catch { /* ignore */ }
     return { ...dl, can_adjust: true };
 }
+
+// ── Prazo desatualizado ─────────────────────────────────────────────────────────
+// O servidor inicia o prazo sozinho quando o último obrigatório é cumprido —
+// marcado no checklist ou com arquivo no deck da tarefa. Quem muda uma dessas
+// coisas avisa, e o cartão relê GET /deadline em vez de esperar o F5.
+const STALE_EVENT = 'arquivoseg:deadline-stale';
+
+export function markDeadlineStale(claimId) {
+    window.dispatchEvent(new CustomEvent(STALE_EVENT, { detail: { claimId: String(claimId) } }));
+}
+
+export function onDeadlineStale(claimId, fn) {
+    const handler = (e) => { if (e.detail?.claimId === String(claimId)) fn(); };
+    window.addEventListener(STALE_EVENT, handler);
+    return () => window.removeEventListener(STALE_EVENT, handler);
+}
