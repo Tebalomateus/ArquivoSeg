@@ -38,29 +38,14 @@ const buildFolders = (initialChecklist) => [
     { id: 'f4-' + Date.now(), name: 'Gerencial', category: 'gerencial', completion: 0, private: true, documents: [], checklist: [] },
 ];
 
-// Computes SLA from process.created_at + 30 (or 120 for complex) days, no persisted suspensions.
-const computeDeadline = (createdAtISO, isComplex) => {
-    const totalDays = isComplex ? 120 : 30;
-    const created = createdAtISO ? new Date(createdAtISO) : new Date();
-    const elapsedDays = Math.floor((Date.now() - created.getTime()) / 86_400_000);
-    return {
-        totalDays,
-        remainingDays: Math.max(0, totalDays - elapsedDays),
-        isSuspended: false,
-        suspensionCount: 0,
-        lastUpdated: Date.now(),
-        history: [{ date: created.toLocaleDateString('pt-BR'), action: 'Início do prazo legal.' }],
-    };
-};
-
 // Front-only fields that we serialize into process.metadata for cross-device persistence.
 // Documents are excluded — they come from /processes/:id/files. Backend-owned fields
 // (id, title, description, status, created_at, updated_at) are also excluded.
 const METADATA_KEYS = [
     'number', 'insurer', 'insuredName', 'policyNumber', 'policyStartDate', 'policyEndDate',
     'retroactiveDate', 'modality', 'brokerName', 'brokerClaimId', 'adjusterName', 'adjusterClaimId',
-    'occurrenceDate', 'occurrenceLocation', 'observations', 'isComplex', 'progress',
-    'deadline', 'shareToken', 'activities', 'reviewedFiles',
+    'occurrenceDate', 'occurrenceLocation', 'observations', 'progress',
+    'shareToken', 'activities', 'reviewedFiles',
 ];
 
 const extractMetadata = (claim) => {
@@ -81,7 +66,6 @@ const adaptProcessToClaim = (proc, cached) => {
     const created = proc.created_at ? new Date(proc.created_at) : new Date();
     const updated = proc.updated_at ? new Date(proc.updated_at) : created;
     const meta = (proc.metadata && Object.keys(proc.metadata).length > 0) ? proc.metadata : (cached || {});
-    const isComplex = !!meta.isComplex;
     const baseFolders = Array.isArray(meta.folders) && meta.folders.length > 0
         ? meta.folders.map(f => ({ documents: [], ...f }))
         : buildFolders([]);
@@ -97,7 +81,14 @@ const adaptProcessToClaim = (proc, cached) => {
         backUpdatedAt: proc.updated_at,
         assignedTo: proc.assigned_to || null,
         backCreatedBy: proc.created_by || null,
+        backCreatedByName: proc.created_by_name || null,
+        backCreatedByEmail: proc.created_by_email || null,
         claimType: proc.claim_type || null,
+        // Prazo regulatório: início (último obrigatório ou ajuste) e vencimento
+        // efetivo (manual, senão início + 30 dias, senão null). É o servidor
+        // quem calcula; as listas só leem (constants/deadline.js).
+        deadlineStartAt: proc.deadline_start_at || null,
+        deadlineDueAt: proc.deadline_due_at || null,
         checklistState: meta.checklist_state || {},
         checklistAdhocItems: Array.isArray(meta.checklist_adhoc_items) ? meta.checklist_adhoc_items : [],
         checklistRemovedItems: Array.isArray(meta.checklist_removed_items) ? meta.checklist_removed_items : [],
@@ -121,8 +112,6 @@ const adaptProcessToClaim = (proc, cached) => {
         occurrenceLocation: meta.occurrenceLocation || '',
         observations: meta.observations || '',
         progress: meta.progress ?? 0,
-        isComplex,
-        deadline: meta.deadline || computeDeadline(proc.created_at, isComplex),
         activities: Array.isArray(meta.activities) ? meta.activities : [],
         reviewedFiles: meta.reviewedFiles || {},
         folders: baseFolders,
@@ -152,7 +141,6 @@ export const ClaimsProvider = ({ children }) => {
     const [claimsLoading, setClaimsLoading] = useState(false);
     const [claimsError, setClaimsError] = useState(null);
     const [claimsTotal, setClaimsTotal] = useState(0);
-    const [auditByClaim, setAuditByClaim] = useState({});
 
     // INITIAL_USERS is the *front-only* roster used by the Login screen to map
     // an email to a PAT in dev. It does not necessarily match the backend `users`
@@ -302,8 +290,8 @@ export const ClaimsProvider = ({ children }) => {
             title,
             description,
             progress: 0,
-            isComplex: false,
-            deadline: computeDeadline(now.toISOString(), false),
+            deadlineStartAt: null,
+            deadlineDueAt: null,
             activities: [{
                 id: 'a-' + Date.now(),
                 user: currentUser?.name || 'Sistema',
@@ -339,9 +327,12 @@ export const ClaimsProvider = ({ children }) => {
             backStatus,
             status: STATUS_BACK_TO_UI[backStatus] || backStatus,
             backCreatedAt,
+            // Quem cria é quem está logado; o cartão lateral mostra isso antes
+            // de o processo voltar do servidor (e é o único dado no mock).
+            backCreatedByName: currentUser?.name || null,
+            backCreatedByEmail: currentUser?.email || null,
             date: now.toLocaleDateString('pt-BR'),
             lastModified: now.toLocaleDateString('pt-BR'),
-            deadline: computeDeadline(backCreatedAt, false),
         };
 
         setClaims(prev => [localClaim, ...prev]);
@@ -415,19 +406,6 @@ export const ClaimsProvider = ({ children }) => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    const assignClaim = async (claimId, userId) => {
-        if (isMockEnabled() || !getToken()) return;
-        try {
-            const proc = await claimsService.updateClaim(claimId, { assigned_to: userId });
-            setClaims(prev => prev.map(c => c.id === claimId
-                ? { ...c, assignedTo: proc.assigned_to, lastModified: new Date().toLocaleDateString('pt-BR') }
-                : c));
-        } catch (err) {
-            alert(`Falha ao atribuir: ${err?.message || err}`);
-            throw err;
-        }
-    };
 
     const updateClaimLocal = (claimId, updater, { syncToBack = true } = {}) => {
         setClaims(prev => prev.map(c => {
@@ -633,25 +611,6 @@ export const ClaimsProvider = ({ children }) => {
         }
     }, []);
 
-    const fetchAudit = useCallback(async (claimId) => {
-        if (!claimId) return [];
-        if (isMockEnabled() || !getToken()) return [];
-        try {
-            const res = await claimsService.listAudit(claimId);
-            const entries = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
-            setAuditByClaim(prev => ({ ...prev, [claimId]: entries }));
-            return entries;
-        } catch (err) {
-            // 403 is expected for viewer/contributor — surface empty list.
-            if (err?.status === 403) {
-                setAuditByClaim(prev => ({ ...prev, [claimId]: null }));
-                return null;
-            }
-            console.error('[ClaimsContext] failed to fetch audit for', claimId, err);
-            return [];
-        }
-    }, []);
-
     const updateChecklistStatus = (claimId, folderId, itemId, received) => {
         updateClaimLocal(claimId, c => {
             const folders = c.folders.map(f => {
@@ -705,15 +664,17 @@ export const ClaimsProvider = ({ children }) => {
         }));
     };
 
-    const toggleDeadline = (claimId, reason) => {
-        updateClaimLocal(claimId, c => {
-            const isSuspended = !c.deadline.isSuspended;
-            const entry = { date: new Date().toLocaleDateString('pt-BR'), action: isSuspended ? `Suspensão: ${reason}` : 'Retomada.' };
-            return { ...c, deadline: { ...c.deadline, isSuspended, suspensionCount: isSuspended ? c.deadline.suspensionCount + 1 : c.deadline.suspensionCount, history: [entry, ...c.deadline.history] } };
-        });
-    };
-
-    const setComplexStatus = (id, isComplex) => updateClaimLocal(id, c => ({ ...c, isComplex, deadline: { ...c.deadline, totalDays: isComplex ? 120 : 30 } }));
+    // O cartão do sinistro relê o prazo (GET /deadline) depois de ajustes e de
+    // entregas; as listas leem os campos do processo. Espelhar aqui evita a
+    // lista mostrar o prazo antigo até o próximo refresh. Não vai para o
+    // metadata: início e vencimento são colunas do servidor.
+    const setClaimDeadline = (claimId, { start_at, due_at }) => updateClaimLocal(
+        claimId,
+        c => ((c.deadlineStartAt || null) === (start_at || null) && (c.deadlineDueAt || null) === (due_at || null)
+            ? c
+            : { ...c, deadlineStartAt: start_at || null, deadlineDueAt: due_at || null }),
+        { syncToBack: false },
+    );
 
     const updateClaimObservations = (id, observations) => updateClaimLocal(id, c => ({ ...c, observations }));
 
@@ -817,13 +778,12 @@ export const ClaimsProvider = ({ children }) => {
         <ClaimsContext.Provider value={{
             currentUser, setCurrentUser, logout, tokenEpoch,
             claims, addClaim, updateChecklistStatus, markFileReviewed, addChecklistItem,
-            transitionStatus, archiveClaim, assignClaim, updateClaimFields, fetchSingleClaim,
-            toggleDeadline, logView, setComplexStatus, updateClaimObservations,
+            transitionStatus, archiveClaim, updateClaimFields, fetchSingleClaim,
+            logView, updateClaimObservations, setClaimDeadline,
             uploadFileToClaim, addCommentToClaim, refreshClaimFiles, openDocument, downloadDocument,
             deleteDocument, listFileVersions,
             updateAnnotation, deleteAnnotation,
             listFileShares, createFileShare, revokeFileShare, countShareAccesses,
-            fetchAudit, auditByClaim,
             claimsLoading, claimsError, claimsTotal, refreshClaims, claimsFilter,
             users,
             backendUsers, usersLoading, refreshUsers, resolveActorLabel,

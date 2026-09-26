@@ -18,6 +18,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import PublicLinks from './pages/admin/PublicLinks';
 import ClientManagement from './pages/admin/ClientManagement';
 import AuditLog from './pages/admin/AuditLog';
+import StorageUsage from './pages/admin/StorageUsage';
 import ComplianceDataCenter from './pages/admin/ComplianceDataCenter';
 import AccessLayout from './pages/admin/access/AccessLayout';
 import AccessUsers from './pages/admin/access/AccessUsers';
@@ -123,6 +124,7 @@ function App() {
                 </Route>
                 <Route path="compliance" element={<ComplianceDataCenter />} />
                 <Route path="audit" element={<AuditLog />} />
+                <Route path="armazenamento" element={<StorageUsage />} />
                 <Route path="notificacoes" element={<Notifications />} />
             </Route>
 

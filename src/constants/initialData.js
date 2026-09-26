@@ -9,19 +9,29 @@ export const INITIAL_CLAIMS = [
         progress: 72,
         date: '02/01/2026',
         lastModified: '08/01/2026',
-        isComplex: false,
-        deadline: {
-            totalDays: 30,
-            remainingDays: 18,
-            isSuspended: false,
-            suspensionCount: 0,
-            lastUpdated: Date.now(),
-            history: [{ date: '02/01/2026', action: 'Início do prazo de 30 dias.' }]
-        },
-        activities: [],
+        backStatus: 'ongoing',
+        backCreatedByName: 'Ricardo Silva',
+        backCreatedByEmail: 'ricardo@corretora.com',
+        // Prazo regulatório como o servidor devolve: sem início até o último
+        // obrigatório chegar, e sem vencimento enquanto ninguém o ajustar.
+        deadlineStartAt: null,
+        deadlineDueAt: null,
+        activities: [
+            { id: 'a-1', user: 'Ana Souza', action: 'enviou "laudo_pericial.pdf" em Causa', date: '08/01/2026, 14:32', type: 'UPLOAD' },
+        ],
         folders: [
-            { id: 'f1-1', name: 'Causa', category: 'causa', completion: 80, documents: [], checklist: [] },
-            { id: 'f2-1', name: 'Prejuízo', category: 'prejuizo', completion: 60, documents: [], checklist: [] },
+            // Obrigatórios da demo: o prazo começa quando os três tiverem arquivo.
+            {
+                id: 'f1-1', name: 'Causa', category: 'causa', completion: 80, documents: [], checklist: [
+                    { id: 'bo', name: 'Boletim de ocorrência', folder: 'Causa', received: false },
+                    { id: 'laudo', name: 'Laudo do corpo de bombeiros', folder: 'Causa', received: false },
+                ],
+            },
+            {
+                id: 'f2-1', name: 'Prejuízo', category: 'prejuizo', completion: 60, documents: [], checklist: [
+                    { id: 'orcamento', name: 'Orçamento de reparo', folder: 'Prejuízo', received: false },
+                ],
+            },
             { id: 'f3-1', name: 'Liquidação', category: 'liquidacao', completion: 0, documents: [], checklist: [] },
             { id: 'f4-1', name: 'Gerencial', category: 'gerencial', completion: 100, private: true, documents: [], checklist: [] }
         ],

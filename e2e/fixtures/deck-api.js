@@ -101,6 +101,18 @@ export function initialState() {
         // board monta sem saber ainda o que o usuário pode. Sem poder forçar
         // essa ordem, o teste só pega o bug quando a corrida sai mal.
         slowPermissions: 0,
+        // Trilha do sinistro (GET /processes/:id/audit), mais recente primeiro.
+        audit: [],
+        // Prazo regulatório (GET/PUT /processes/:id/deadline). Nasce aguardando
+        // os obrigatórios; canAdjust diz se quem pede é criador ou admin.
+        deadline: {
+            start_at: null, start_source: null, total_days: 30,
+            due_at: null, due_source: null, history: [],
+        },
+        canAdjustDeadline: true,
+        // Definição do checklist do tipo (GET /checklists/:type), quando o
+        // processo tem claim_type.
+        checklistDef: null,
         requests: [],
         nextId: 1,
     };
@@ -357,6 +369,33 @@ function gerencialTree(state) {
     return { processId: state.process.id, pastas };
 }
 
+// A regra do servidor para iniciar o prazo: todo item obrigatório cumprido —
+// marcado no checklist_state ou com arquivo no deck da tarefa. Rodada na leitura: o efeito é o mesmo de ter rodado na escrita.
+function autoStartDeadline(state) {
+    if (state.deadline.start_at) return;
+    const meta = state.process.metadata || {};
+    // Com tipo de sinistro, os obrigatórios são os itens do checklist do tipo;
+    // sem ele, os itens das pastas (as chaves das tarefas do board).
+    const required = state.checklistDef
+        ? state.checklistDef.stages.flatMap((s) => s.items.map((i) => `${s.id}.${i.id}`))
+        : (meta.folders || [])
+            .filter((f) => f.category !== 'gerencial')
+            .flatMap((f) => (f.checklist || []).map((i) => `${f.id}.${i.id}`));
+    if (required.length === 0) return;
+    const checked = meta.checklist_state || {};
+    const withFile = new Set(state.board.decks.filter((d) => d.arquivos.length > 0).flatMap((d) => d.tarefaIds));
+    if (!required.every((k) => checked[k] || withFile.has(k))) return;
+    const at = now();
+    const dl = state.deadline;
+    dl.start_at = at;
+    dl.start_source = 'auto';
+    if (dl.due_source !== 'manual') {
+        dl.due_at = new Date(Date.parse(at) + dl.total_days * 86_400_000).toISOString();
+        dl.due_source = 'auto';
+    }
+    dl.history.unshift({ at, by: null, by_name: null, by_email: null, field: 'start_at', from: null, to: at, justification: 'Todos os documentos obrigatórios entregues', source: 'auto' });
+}
+
 function handle(state, method, seg, body) {
     const [a, b, c, d, e] = seg;
 
@@ -398,12 +437,21 @@ function handle(state, method, seg, body) {
         return { status: 201, body: st };
     }
 
+    if (a === 'checklists' && b && method === 'GET') {
+        return state.checklistDef ? ok(state.checklistDef) : fail(404, 'NOT_FOUND', 'checklist not found');
+    }
     if (a !== 'processes') return null;
 
     if (!b && method === 'GET') return ok({ data: [state.process], total: 1 });
     if (b !== state.process.id) return null;
 
     if (!c && method === 'GET') return ok(state.process);
+    // O checklist do tipo de sinistro guarda o estado no metadata, como o
+    // handler de checklist do servidor.
+    if (c === 'checklist' && !d && method === 'PATCH') {
+        state.process.metadata = { ...state.process.metadata, checklist_state: { ...(body || {}) } };
+        return ok({ data: state.process.metadata.checklist_state });
+    }
     if (!c && method === 'PATCH') {
         // O front sincroniza metadata em background; guardar é o bastante, e
         // devolver o processo inteiro é o que o servidor faz.
@@ -432,6 +480,50 @@ function handle(state, method, seg, body) {
         state.files.push(fv);
         const { content, ...view } = fv;
         return ok(view);
+    }
+
+    // Armazenamento: soma das versões de arquivo do processo.
+    if (c === 'storage' && method === 'GET') {
+        return ok({ data: { bytes: state.files.reduce((n, fv) => n + (fv.size_bytes || 0), 0), file_count: state.files.length } });
+    }
+
+    if (c === 'deadline' && method === 'GET') {
+        state.deadlineReads = (state.deadlineReads || 0) + 1;
+        autoStartDeadline(state);
+        return ok({ data: { ...state.deadline, can_adjust: state.canAdjustDeadline } });
+    }
+    if (c === 'deadline' && method === 'PUT') {
+        if (!state.canAdjustDeadline) return fail(403, 'DEADLINE_FORBIDDEN', 'só o criador do processo ou um admin ajusta o prazo');
+        const justification = String(body?.justification || '').trim();
+        if (justification.length < 5) return fail(400, 'VALIDATION_ERROR', 'justification must have at least 5 characters');
+        if (!body.start_at && !body.due_at) return fail(400, 'VALIDATION_ERROR', 'start_at or due_at is required');
+        const dl = state.deadline;
+        const push = (field, to) => dl.history.unshift({
+            at: now(), by: ACCOUNT_ID, by_name: 'Perito E2E', by_email: 'perito@e2e.test',
+            field, from: dl[field], to, justification, source: 'manual',
+        });
+        if (body.start_at) {
+            push('start_at', body.start_at);
+            dl.start_at = body.start_at;
+            dl.start_source = 'manual';
+            if (dl.due_source !== 'manual' && !body.due_at) {
+                dl.due_at = new Date(Date.parse(body.start_at) + dl.total_days * 86_400_000).toISOString();
+                dl.due_source = 'auto';
+            }
+        }
+        if (body.due_at) {
+            push('due_at', body.due_at);
+            dl.due_at = body.due_at;
+            dl.due_source = 'manual';
+        }
+        return ok({ data: { ...dl, can_adjust: true } });
+    }
+
+    if (c === 'audit' && method === 'GET') {
+        if (!state.permissions.includes('processo.verAuditoria')) {
+            return { status: 403, body: { error: { code: 'INSUFFICIENT_PERMISSION', message: 'insufficient permission', required_action: 'processo.verAuditoria', request_id: 'e2e' } } };
+        }
+        return ok({ data: state.audit, total: state.audit.length });
     }
 
     // A visão gerencial, montada como o servidor monta (handler/gerencial.go):

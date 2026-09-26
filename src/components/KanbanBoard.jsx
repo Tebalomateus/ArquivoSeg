@@ -8,6 +8,7 @@ import * as board from '../api/deckBoard';
 import { useCan } from '../context/PermissionsContext';
 import { useConfirm } from '../components/ConfirmDialog';
 import { FileActions, ShareFileModal, extBadge } from './FileActions';
+import { markDeadlineStale } from '../services/claimSidebar';
 
 const { STATUS, persistKey, filesKey } = board;
 
@@ -116,6 +117,8 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     useEffect(() => {
         if (!online && !loading) {
             try { sessionStorage.setItem(persistKey(claim.id), JSON.stringify(state)); } catch { /* ignore */ }
+            // O prazo mock lê o board salvo; só depois de salvar ele está certo.
+            markDeadlineStale(claim.id);
         }
     }, [state, online, loading, claim.id]);
 
@@ -208,13 +211,16 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
         try {
             const raw = await remote();
             if (raw) setState(board.normalizeBoard(raw));
+            // Arquivo em deck cumpre a tarefa para o prazo: o servidor pode ter
+            // acabado de iniciá-lo.
+            markDeadlineStale(claim.id);
         } catch (err) {
             setState(prev); // rollback — the board never lies about persisted state
             alert(err?.message || 'Falha ao salvar. Recarregue e tente de novo.');
         } finally {
             setBusy(false);
         }
-    }, [busy, state, online]);
+    }, [busy, state, online, claim.id]);
 
     // Turn selected File objects into deck file refs (real upload, or mock stub).
     const toRefs = useCallback(async (files) => {
@@ -576,10 +582,10 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
 
             {/* Documentos avulsos: no sinistro, fora de qualquer tarefa. É uma
                 aba própria na lateral, não um painel em cima do board. */}
+            {/* Listar basta para ver a aba; subir e vincular continuam com arquivo.subir. */}
             {isLoose && (
-                can('arquivo.subir')
-                    ? <LoosePanel files={looseFiles} onUpload={openUploadLoose} onLink={setLinking} onView={viewFile} />
-                    : <Empty>Sem permissão para subir documentos neste sinistro.</Empty>
+                <LoosePanel files={looseFiles} canUpload={can('arquivo.subir')}
+                    onUpload={openUploadLoose} onLink={setLinking} onView={viewFile} />
             )}
 
             {/* Board: 3 columns (the active group is driven by the folder sidebar) */}
@@ -705,7 +711,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
 // manda uma foto no WhatsApp, o corretor encaminha o e-mail da oficina. Ter de
 // escolher a tarefa na hora do upload fazia a pessoa chutar uma — e um chute
 // dentro de um deck é mais caro de desfazer do que um arquivo esperando aqui.
-function LoosePanel({ files, onUpload, onLink, onView }) {
+function LoosePanel({ files, canUpload, onUpload, onLink, onView }) {
     return (
         <div data-testid="loose-panel" className="rounded-[18px] border border-[#E4EAF3] bg-white p-[14px_16px]">
             <div className="flex flex-wrap items-center gap-3">
@@ -716,14 +722,18 @@ function LoosePanel({ files, onUpload, onLink, onView }) {
                     <p className="text-[12.5px] font-extrabold text-slate-800">Documentos avulsos</p>
                     <p className="text-[11.5px] font-semibold text-slate-400">
                         {files.length === 0
-                            ? 'Suba um documento agora e diga depois a qual tarefa ele responde.'
+                            ? (canUpload
+                                ? 'Suba um documento agora e diga depois a qual tarefa ele responde.'
+                                : 'Nenhum documento fora de tarefa neste sinistro.')
                             : `${plural(files.length, 'documento à espera', 'documentos à espera')} de uma tarefa.`}
                     </p>
                 </div>
+                {canUpload && (
                 <button type="button" onClick={onUpload} data-testid="loose-upload"
                     className="rounded-[10px] border border-[#D7E0EC] bg-white px-[13px] py-[8px] text-[11.5px] font-extrabold text-slate-700 hover:border-[#12A08B] hover:text-[#0E8A78]">
                     Enviar sem tarefa
                 </button>
+                )}
             </div>
 
             {files.length > 0 && (
@@ -737,9 +747,11 @@ function LoosePanel({ files, onUpload, onLink, onView }) {
                             <button type="button" onClick={() => onView(f)} className="flex items-center gap-1 text-[11px] font-extrabold text-slate-400 hover:text-[#2563EB]">
                                 <Eye size={12} /> Ver
                             </button>
+                            {canUpload && (
                             <button type="button" onClick={() => onLink(f)} className="flex items-center gap-1 text-[11px] font-extrabold text-[#2563EB] hover:underline">
                                 <Link2 size={12} /> Vincular
                             </button>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -1032,8 +1044,7 @@ function UploadModal({ title, note, busy, onClose, onConfirm }) {
                 transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }} onClick={(e) => e.stopPropagation()}
                 role="dialog" aria-label="Upload de arquivos do deck" data-testid="upload-modal"
                 className="w-full max-w-[520px] rounded-[20px] bg-white p-6 shadow-[0_40px_80px_-30px_rgba(15,23,42,.5)]">
-                <p className="text-[10px] font-extrabold tracking-[0.14em] text-slate-400 uppercase">Upload seguro</p>
-                <h3 className="mt-1 text-[19px] font-extrabold text-slate-900">{title}</h3>
+                <h3 className="text-[19px] font-extrabold text-slate-900">{title}</h3>
                 <p className="mt-1 text-[12.5px] text-slate-500">{note || 'O arquivo passa a comprovar esta tarefa. Depois você pode arrastar outras tarefas para o mesmo deck.'}</p>
 
                 <div className="mt-4 rounded-[14px] border-[1.5px] border-dashed border-[#C9DDFF] bg-[#F7FAFF] p-[22px] text-center">

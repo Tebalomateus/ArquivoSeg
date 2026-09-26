@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
 import { listAudit, ACTION_LABELS } from '../../api/audit';
+import { deadlineInfo } from '../../constants/deadline';
 import { actorLabelFromDbId } from '../../api/auth';
 
 const PERIOD_PRESETS = [
@@ -261,9 +262,9 @@ export default function ComplianceDataCenter() {
         return { pct: Math.round((within / completed.length) * 100), total: completed.length, within };
     }, [claims]);
 
-    const claimsWithSuspendedSla = useMemo(() => {
-        return claims.filter((c) => Array.isArray(c.deadline?.history) && (c.deadline?.suspensionCount || 0) > 0).length;
-    }, [claims]);
+    // O prazo não se suspende mais: o que interessa ao regulador é quem passou
+    // do vencimento (deadline_due_at no passado, sinistro ainda aberto).
+    const overdueClaims = useMemo(() => claims.filter((c) => deadlineInfo(c).state === 'overdue').length, [claims]);
 
     const accessDeniedCount = useMemo(
         () => auditEntries.filter((e) => e.action === 'access.denied').length,
@@ -501,11 +502,11 @@ export default function ComplianceDataCenter() {
                 <KpiCard
                     icon={AlertTriangle}
                     color="bg-amber-500"
-                    title="Sinistros suspensos"
-                    value={claimsWithSuspendedSla}
-                    detail="Processos com SLA pausado (justificativa registrada)"
-                    regulator="CNSP 416/2021 — controles operacionais"
-                    onClick={() => setDrilldown({ type: 'suspended' })}
+                    title="Prazos vencidos"
+                    value={overdueClaims}
+                    detail="Sinistros abertos que passaram do vencimento"
+                    regulator="SUSEP 621/2021 — art. 41 (prazo de 30 dias)"
+                    onClick={() => setDrilldown({ type: 'overdue' })}
                 />
                 <KpiCard
                     icon={Lock}
@@ -945,11 +946,11 @@ function DrilldownDrawer({ drilldown, onClose, auditEntries, claims, shares, bac
         title = 'SLA SUSEP — sinistros concluídos';
         subtitle = `SUSEP Circular 621/2021 art. 41 · prazo de ${SUSEP_SLA_DAYS} dias entre criação e liquidação`;
         body = <ClaimSlaList claims={completed} backendUsers={backendUsers} />;
-    } else if (type === 'suspended') {
-        const susp = claims.filter((c) => Array.isArray(c.deadline?.history) && (c.deadline?.suspensionCount || 0) > 0);
-        title = 'Sinistros com SLA suspenso';
-        subtitle = `CNSP 416/2021 — ${susp.length} processo${susp.length === 1 ? '' : 's'} pausado${susp.length === 1 ? '' : 's'}`;
-        body = <SuspensionList claims={susp} />;
+    } else if (type === 'overdue') {
+        const overdue = claims.filter((c) => deadlineInfo(c).state === 'overdue');
+        title = 'Sinistros com prazo vencido';
+        subtitle = `SUSEP 621/2021 art. 41 — ${overdue.length} processo${overdue.length === 1 ? '' : 's'} além do vencimento`;
+        body = <OverdueList claims={overdue} />;
     } else if (type === 'shares_active') {
         const now = Date.now();
         const items = shares.filter((s) => !s.revoked && (!s.expires_at || new Date(s.expires_at).getTime() > now));
@@ -1133,37 +1134,33 @@ function ClaimSlaList({ claims }) {
     );
 }
 
-function SuspensionList({ claims }) {
+function OverdueList({ claims }) {
     if (claims.length === 0) {
-        return <p className="text-xs text-slate-400 font-medium text-center py-12">Nenhum sinistro com SLA suspenso.</p>;
+        return <p className="text-xs text-slate-400 font-medium text-center py-12">Nenhum sinistro com prazo vencido.</p>;
     }
     return (
         <div className="space-y-3">
-            {claims.map((c) => (
-                <div key={c.id} className="p-4 bg-slate-50/60 rounded-xl border border-slate-100">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-800 truncate">{c.title || c.number}</p>
-                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.insurer || '—'}</p>
+            {claims.map((c) => {
+                const { daysLeft, startAt, dueAt } = deadlineInfo(c);
+                const late = -daysLeft;
+                return (
+                    <div key={c.id} className="p-4 bg-slate-50/60 rounded-xl border border-slate-100">
+                        <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-800 truncate">{c.title || c.number}</p>
+                                <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                                    {c.insurer || '—'}
+                                    {startAt && ` · início ${new Date(startAt).toLocaleDateString('pt-BR')}`}
+                                    {` · venceu em ${new Date(dueAt).toLocaleDateString('pt-BR')}`}
+                                </p>
+                            </div>
+                            <span className="shrink-0 px-2 py-1 rounded-md bg-red-100 text-red-700 text-[9px] font-black uppercase tracking-widest">
+                                {late} dia{late === 1 ? '' : 's'} de atraso
+                            </span>
                         </div>
-                        <span className="shrink-0 px-2 py-1 rounded-md bg-amber-100 text-amber-700 text-[9px] font-black uppercase tracking-widest">
-                            {c.deadline?.suspensionCount || 0}× pausado
-                        </span>
                     </div>
-                    {Array.isArray(c.deadline?.history) && c.deadline.history.length > 0 ? (
-                        <ul className="space-y-1.5 mt-2 border-l-2 border-amber-200 pl-3">
-                            {c.deadline.history.map((h, i) => (
-                                <li key={i} className="text-[10px] text-slate-600">
-                                    <span className="font-bold text-slate-400">{h.date}</span>
-                                    <span className="ml-2">{h.action}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <p className="text-[10px] text-slate-400 italic">Histórico de suspensões não disponível.</p>
-                    )}
-                </div>
-            ))}
+                );
+            })}
         </div>
     );
 }

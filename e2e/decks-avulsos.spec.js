@@ -39,7 +39,7 @@ test('o documento sem tarefa fica esperando no painel de avulsos', async ({ page
     // O arquivo está no processo — só não comprova nada ainda. A lateral conta.
     await expect(page.getByTestId('loose-panel')).toContainText('foto-do-veiculo.pdf');
     await expect(page.getByTestId('folder-avulsos')).toContainText('1');
-    await page.getByRole('button', { name: /^Causa \d+%$/ }).click();
+    await page.getByRole('tab', { name: /^Causa \(\d+%\)$/ }).click();
     await expect(page.getByTestId('deck-DECK-01')).toHaveCount(0);
     expect(state.files.map((f) => f.file_name)).toEqual(['foto-do-veiculo.pdf']);
     expect(state.board.decks).toHaveLength(0);
@@ -58,7 +58,7 @@ test('vincular o avulso a uma tarefa abre o deck com ele dentro', async ({ page 
     await expect(page.getByTestId(`loose-file-${fileId}`)).toHaveCount(0);
     await expect(page.getByTestId('folder-avulsos')).toContainText('0');
 
-    await page.getByRole('button', { name: /^Causa \d+%$/ }).click();
+    await page.getByRole('tab', { name: /^Causa \(\d+%\)$/ }).click();
     const deck = page.getByTestId('deck-DECK-01');
     await expect(deck).toContainText('foto-do-veiculo.pdf');
     // Vincular reaproveita o arquivo que já subiu: um segundo upload aqui criaria
@@ -76,7 +76,7 @@ test('vincular a um deck pendente não cria um segundo deck', async ({ page }) =
     await page.getByTestId(`loose-file-${fileId}`).getByRole('button', { name: 'Vincular' }).click();
     await page.getByTestId('link-modal').getByRole('button', { name: 'DECK-01' }).click();
 
-    await page.getByRole('button', { name: /^Causa \d+%$/ }).click();
+    await page.getByRole('tab', { name: /^Causa \(\d+%\)$/ }).click();
     await expect(page.getByTestId('deck-DECK-01')).toContainText('1 tarefa · 2 arquivos');
     expect(state.board.decks).toHaveLength(1);
     expect(state.board.decks[0].arquivos.map((f) => f.nome)).toEqual(['laudo.pdf', 'complemento.pdf']);
@@ -108,9 +108,22 @@ test('a tarefa que o checklist não previu nasce solta em Pendente', async ({ pa
         .toContain('Nota fiscal do guincho');
 });
 
-test('sem permissão de subir arquivo não há aba de avulsos', async ({ page }) => {
-    await openBoard(page, { mutate: (s) => { s.permissions = s.permissions.filter((p) => p !== 'arquivo.subir'); } });
+test('sem permissão de subir arquivo a aba de avulsos só lista', async ({ page }) => {
+    await openBoard(page, {
+        mutate: (s) => {
+            s.permissions = s.permissions.filter((p) => p !== 'arquivo.subir');
+            // Um avulso que alguém com permissão já subiu.
+            s.files.push({
+                id: 'fv-avulso', file_name: 'foto-do-veiculo.pdf', mime_type: 'application/pdf',
+                size_bytes: 4, version: 1, created_at: new Date().toISOString(), uploaded_by: 'outro', content: Buffer.from('foto'),
+            });
+        },
+    });
 
-    await expect(page.getByTestId('folder-avulsos')).toHaveCount(0);
-    await expect(page.getByTestId('loose-panel')).toHaveCount(0);
+    // Quem lista arquivos vê o que está esperando uma tarefa; só não mexe nisso.
+    await abrirAvulsos(page);
+    await expect(page.getByTestId('loose-file-fv-avulso')).toContainText('foto-do-veiculo.pdf');
+    await expect(page.getByTestId('loose-file-fv-avulso').getByRole('button', { name: 'Ver' })).toBeVisible();
+    await expect(page.getByTestId('loose-file-fv-avulso').getByRole('button', { name: 'Vincular' })).toHaveCount(0);
+    await expect(page.getByTestId('loose-upload')).toHaveCount(0);
 });
