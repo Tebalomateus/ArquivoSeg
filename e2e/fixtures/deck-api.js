@@ -103,6 +103,13 @@ export function initialState() {
         slowPermissions: 0,
         // Trilha do sinistro (GET /processes/:id/audit), mais recente primeiro.
         audit: [],
+        // Prazo regulatório (GET/PUT /processes/:id/deadline). Nasce aguardando
+        // os obrigatórios; canAdjust diz se quem pede é criador ou admin.
+        deadline: {
+            start_at: null, start_source: null, total_days: 30,
+            due_at: null, due_source: null, history: [],
+        },
+        canAdjustDeadline: true,
         requests: [],
         nextId: 1,
     };
@@ -439,6 +446,36 @@ function handle(state, method, seg, body) {
     // Armazenamento: soma das versões de arquivo do processo.
     if (c === 'storage' && method === 'GET') {
         return ok({ data: { bytes: state.files.reduce((n, fv) => n + (fv.size_bytes || 0), 0), file_count: state.files.length } });
+    }
+
+    if (c === 'deadline' && method === 'GET') {
+        return ok({ data: { ...state.deadline, can_adjust: state.canAdjustDeadline } });
+    }
+    if (c === 'deadline' && method === 'PUT') {
+        if (!state.canAdjustDeadline) return fail(403, 'DEADLINE_FORBIDDEN', 'só o criador do processo ou um admin ajusta o prazo');
+        const justification = String(body?.justification || '').trim();
+        if (justification.length < 5) return fail(400, 'VALIDATION_ERROR', 'justification must have at least 5 characters');
+        if (!body.start_at && !body.due_at) return fail(400, 'VALIDATION_ERROR', 'start_at or due_at is required');
+        const dl = state.deadline;
+        const push = (field, to) => dl.history.unshift({
+            at: now(), by: ACCOUNT_ID, by_name: 'Perito E2E', by_email: 'perito@e2e.test',
+            field, from: dl[field], to, justification, source: 'manual',
+        });
+        if (body.start_at) {
+            push('start_at', body.start_at);
+            dl.start_at = body.start_at;
+            dl.start_source = 'manual';
+            if (dl.due_source !== 'manual' && !body.due_at) {
+                dl.due_at = new Date(Date.parse(body.start_at) + dl.total_days * 86_400_000).toISOString();
+                dl.due_source = 'auto';
+            }
+        }
+        if (body.due_at) {
+            push('due_at', body.due_at);
+            dl.due_at = body.due_at;
+            dl.due_source = 'manual';
+        }
+        return ok({ data: { ...dl, can_adjust: true } });
     }
 
     if (c === 'audit' && method === 'GET') {

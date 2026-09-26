@@ -677,14 +677,6 @@ export const ClaimsProvider = ({ children }) => {
         }));
     };
 
-    const toggleDeadline = (claimId, reason) => {
-        updateClaimLocal(claimId, c => {
-            const isSuspended = !c.deadline.isSuspended;
-            const entry = { date: new Date().toLocaleDateString('pt-BR'), action: isSuspended ? `Suspensão: ${reason}` : 'Retomada.' };
-            return { ...c, deadline: { ...c.deadline, isSuspended, suspensionCount: isSuspended ? c.deadline.suspensionCount + 1 : c.deadline.suspensionCount, history: [entry, ...c.deadline.history] } };
-        });
-    };
-
     const updateClaimObservations = (id, observations) => updateClaimLocal(id, c => ({ ...c, observations }));
 
     const refreshUsers = useCallback(async () => {
@@ -788,7 +780,7 @@ export const ClaimsProvider = ({ children }) => {
             currentUser, setCurrentUser, logout, tokenEpoch,
             claims, addClaim, updateChecklistStatus, markFileReviewed, addChecklistItem,
             transitionStatus, archiveClaim, updateClaimFields, fetchSingleClaim,
-            toggleDeadline, logView, updateClaimObservations,
+            logView, updateClaimObservations,
             uploadFileToClaim, addCommentToClaim, refreshClaimFiles, openDocument, downloadDocument,
             deleteDocument, listFileVersions,
             updateAnnotation, deleteAnnotation,
