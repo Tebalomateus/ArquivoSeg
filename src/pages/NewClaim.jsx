@@ -237,6 +237,11 @@ export default function NewClaim() {
         if (!effectiveInsurer.trim()) { e.insurer = 'Selecione ou digite a seguradora.'; f.add('insurer'); }
         if (!insuredName.trim()) { e.insuredName = 'Informe o nome do segurado.'; f.add('insuredName'); }
 
+        // Sinistro se abre em apólice que já está valendo; início no futuro é
+        // data digitada errada.
+        if (policyStartDate && policyStartDate > hoje) {
+            e.policyStartDate = 'O início da vigência não pode estar no futuro.';
+        }
         if (policyStartDate && policyEndDate && policyEndDate < policyStartDate) {
             e.policyEndDate = 'O fim da vigência é anterior ao início.';
         }
@@ -525,7 +530,9 @@ export default function NewClaim() {
                                 type="date"
                                 value={policyStartDate}
                                 onChange={(e) => setPolicyStartDate(e.target.value)}
-                                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"
+                                max={hoje}
+                                aria-invalid={!!erroDe('policyStartDate')}
+                                className={`w-full px-3 py-2.5 border rounded-xl focus:ring-2 outline-none transition-all text-sm ${erroDe('policyStartDate') ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500'}`}
                             />
                         </div>
                         <div>
@@ -540,6 +547,7 @@ export default function NewClaim() {
                             />
                         </div>
                         <div className="col-span-2">
+                            <FieldNote error={erroDe('policyStartDate')} />
                             <FieldNote error={erroDe('policyEndDate')} warning={avisos.policyEndDate} />
                         </div>
                     </div>

@@ -96,6 +96,15 @@ test('a retroativa posterior ao início da vigência é data trocada de campo', 
     await expect(page.getByText('A retroativa é anterior ao início da vigência, não posterior.')).toBeVisible();
 });
 
+test('início de vigência no futuro não passa', async ({ page }) => {
+    await abrir(page);
+
+    const futuro = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+    await page.locator('#campo-policyStartDate').fill(futuro);
+
+    await expect(page.getByText('O início da vigência não pode estar no futuro.')).toBeVisible();
+});
+
 test('fim de vigência antes do início não passa', async ({ page }) => {
     await abrir(page);
 
