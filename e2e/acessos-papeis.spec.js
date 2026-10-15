@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
 
 test('admin cria um papel, marca permissões e ele aparece na lista', async ({ page }) => {
     const state = await installIamApi(page);
-    await page.goto('/admin/acessos/papeis');
+    await page.goto('/app/acessos/papeis');
 
     await page.getByRole('button', { name: 'Novo papel' }).click();
     const dialog = page.getByRole('dialog');
@@ -36,7 +36,7 @@ test('admin cria um papel, marca permissões e ele aparece na lista', async ({ p
 
 test('papel de sistema não pode ser editado nem excluído', async ({ page }) => {
     await installIamApi(page);
-    await page.goto('/admin/acessos/papeis');
+    await page.goto('/app/acessos/papeis');
 
     const row = page.getByTestId('role-admin');
     await expect(row).toContainText('sistema');
@@ -50,7 +50,7 @@ test('excluir um papel em uso mostra quantas atribuições vão junto', async ({
     const state = await installIamApi(page, (s) => {
         s.userRoles['u-ana'] = ['r-leitor'];
     });
-    await page.goto('/admin/acessos/papeis');
+    await page.goto('/app/acessos/papeis');
 
     // r-leitor está com a Ana e com o grupo (que tem um membro): duas atribuições.
     // O primeiro Excluir tenta sem força; a recusa do servidor é que vira a

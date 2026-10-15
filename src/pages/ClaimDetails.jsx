@@ -420,7 +420,7 @@ export default function ClaimDetails() {
         <div className="relative z-10 animate-fade-in pb-20">
             {/* "sinistros/:id" é um segmento de rota só: ".." sobe para o
                 portal e o link dizia "Lista de Sinistros" levando ao
-                dashboard. Relativo continua valendo sob /app e /admin. */}
+                dashboard. */}
             <Link to="../sinistros" className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-primary transition">
                 <ArrowLeft size={14} strokeWidth={2.5} />
                 Lista de Sinistros

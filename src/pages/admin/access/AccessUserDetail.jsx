@@ -230,7 +230,7 @@ export default function AccessUserDetail() {
                                 </button>
                             )}
                             <Link
-                                to={`/admin/audit?actor_user_id=${id}`}
+                                to={`/app/audit?actor_user_id=${id}`}
                                 className="flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50"
                             >
                                 <Activity size={13} /> Ver atividade

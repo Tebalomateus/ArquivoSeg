@@ -13,8 +13,7 @@ const STATUS_LABELS_PT = {
 // "Relatório Gerencial" pedido pelo usuário final para os 4 papéis — casos
 // aberto/fechados, status do processo, contagem de prazo ativo e tempo médio
 // de conclusão. Tudo computado client-side a partir dos `claims` já carregados,
-// sem chamada nova ao backend. Componente único, reaproveitado em
-// Dashboard.jsx (/app) e AdminDashboard.jsx (/admin) para valer pros 4 papéis.
+// sem chamada nova ao backend. Mostrado no Dashboard.jsx para os 4 papéis.
 export default function RelatorioGerencialCard({ claims }) {
     const stats = useMemo(() => {
         const list = claims || [];

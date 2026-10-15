@@ -37,7 +37,7 @@ test('a página do sinistro não oferece mais os caminhos paralelos ao board', a
 
 test('quem pode arquivar vê só o Arquivar no painel de status', async ({ page }) => {
     await signIn(page, 'admin');
-    await page.goto('/admin/sinistros/1');
+    await page.goto('/app/sinistros/1');
     await page.getByRole('button', { name: 'Gerenciamento' }).click();
 
     await expect(page.getByRole('button', { name: 'Arquivar' })).toBeVisible();

@@ -420,7 +420,7 @@ export default function ComplianceDataCenter() {
             {/* ========= Header ========= */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
-                    <Link to="/admin" className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-blue-500 mb-2 tracking-widest">
+                    <Link to="/app" className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-blue-500 mb-2 tracking-widest">
                         <ArrowLeft size={16} />
                         Voltar ao Painel
                     </Link>

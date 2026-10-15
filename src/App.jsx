@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet, useLocation, useParams } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import ClaimsList from './pages/ClaimsList';
@@ -13,8 +13,6 @@ import { useClaims } from './context/ClaimsContext';
 import { usePermissions } from './context/PermissionsContext';
 import { rememberDestination } from './api/auth';
 
-import AdminLayout from './components/layout/AdminLayout';
-import AdminDashboard from './pages/admin/AdminDashboard';
 import PublicLinks from './pages/admin/PublicLinks';
 import ClientManagement from './pages/admin/ClientManagement';
 import AuditLog from './pages/admin/AuditLog';
@@ -46,9 +44,9 @@ function Aguardando() {
  * ProtectedRoute gates a route on being signed in and, optionally, on a
  * permission (requiredAction) or on being the tenant admin (requireAdmin).
  *
- * requireAdmin is deliberately not a permission: the backoffice area is where an
- * admin fixes a broken IAM configuration, so gating it on the IAM data it edits
- * is how a tenant locks itself out. Everything else uses can().
+ * requireAdmin is deliberately not a permission: the management screens are where
+ * an admin fixes a broken IAM configuration, so gating them on the IAM data they
+ * edit is how a tenant locks itself out. Everything else uses can().
  */
 function ProtectedRoute({ children, requiredAction, requireAdmin = false }) {
     const { currentUser } = useClaims();
@@ -68,10 +66,22 @@ function ProtectedRoute({ children, requiredAction, requireAdmin = false }) {
 
     const allowed = (!requireAdmin || isAdmin) && (!requiredAction || can(requiredAction));
     if (!allowed) {
-        return <Navigate to={isAdmin ? '/admin' : '/app'} replace />;
+        return <Navigate to="/app" replace />;
     }
 
     return children;
+}
+
+/**
+ * O backoffice /admin foi absorvido pelo /app: as mesmas telas, com o mesmo
+ * nome de caminho. O redirect fica porque /admin está em links salvos e em
+ * e-mails já enviados — e quem não é admin cai no portão do /app.
+ */
+function AdminRedirect() {
+    const { '*': rest } = useParams();
+    const { search } = useLocation();
+    const path = rest ? `/app/${rest}` : '/app';
+    return <Navigate to={path + search} replace />;
 }
 
 // UI-only gate: the backend is the authority and answers 403 to whoever forces
@@ -88,7 +98,6 @@ function RequireCreateAccess({ children }) {
 
 function App() {
     const { currentUser } = useClaims();
-    const { isAdmin } = usePermissions();
 
     return (
         <Routes>
@@ -97,36 +106,8 @@ function App() {
             <Route path="/signup" element={<Signup />} />
             <Route path="/signup/retorno" element={<SignupPending />} />
 
-            {/* BACKOFFICE / ADMIN PORTAL */}
-            <Route
-                path="/admin"
-                element={
-                    <ProtectedRoute requireAdmin>
-                        <AdminLayout />
-                    </ProtectedRoute>
-                }
-            >
-                <Route index element={<AdminDashboard />} />
-                <Route path="sinistros" element={<ClaimsList />} />
-                <Route path="sinistros/novo" element={<NewClaim />} />
-                <Route path="sinistros/:id" element={<ClaimDetails />} />
-                <Route path="clientes" element={<ClientManagement />} />
-                <Route path="links" element={<PublicLinks />} />
-                {/* Gestão de Usuários virou a aba Usuários de Acessos: era a mesma
-                    lista de pessoas em duas telas. O redirect fica porque o caminho
-                    antigo está em links salvos e em e-mails já enviados. */}
-                <Route path="usuarios" element={<Navigate to="/admin/acessos/usuarios" replace />} />
-                <Route path="acessos" element={<AccessLayout />}>
-                    <Route path="usuarios" element={<AccessUsers />} />
-                    <Route path="usuarios/:id" element={<AccessUserDetail />} />
-                    <Route path="papeis" element={<AccessRoles />} />
-                    <Route path="grupos" element={<AccessGroups />} />
-                </Route>
-                <Route path="compliance" element={<ComplianceDataCenter />} />
-                <Route path="audit" element={<AuditLog />} />
-                <Route path="armazenamento" element={<StorageUsage />} />
-                <Route path="notificacoes" element={<Notifications />} />
-            </Route>
+            {/* O antigo backoffice: só redireciona. */}
+            <Route path="/admin/*" element={<AdminRedirect />} />
 
             {/* SAAS / CLIENT PORTAL */}
             <Route
@@ -145,6 +126,23 @@ function App() {
                     fica porque o caminho antigo está em links salvos. */}
                 <Route path="configuracoes" element={<Navigate to="/app" replace />} />
                 <Route path="notificacoes" element={<Notifications />} />
+
+                {/* Gestão do tenant: só o admin. */}
+                <Route element={<ProtectedRoute requireAdmin><Outlet /></ProtectedRoute>}>
+                    <Route path="clientes" element={<ClientManagement />} />
+                    <Route path="links" element={<PublicLinks />} />
+                    {/* Gestão de Usuários virou a aba Usuários de Acessos. */}
+                    <Route path="usuarios" element={<Navigate to="/app/acessos/usuarios" replace />} />
+                    <Route path="acessos" element={<AccessLayout />}>
+                        <Route path="usuarios" element={<AccessUsers />} />
+                        <Route path="usuarios/:id" element={<AccessUserDetail />} />
+                        <Route path="papeis" element={<AccessRoles />} />
+                        <Route path="grupos" element={<AccessGroups />} />
+                    </Route>
+                    <Route path="compliance" element={<ComplianceDataCenter />} />
+                    <Route path="audit" element={<AuditLog />} />
+                    <Route path="armazenamento" element={<StorageUsage />} />
+                </Route>
             </Route>
 
             {/* SHARED & REDIRECTS */}
@@ -153,7 +151,7 @@ function App() {
                 path="/"
                 element={
                     currentUser
-                        ? <Navigate to={isAdmin ? "/admin" : "/app"} replace />
+                        ? <Navigate to="/app" replace />
                         : <Navigate to="/login" replace />
                 }
             />

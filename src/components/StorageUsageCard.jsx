@@ -48,7 +48,7 @@ export default function StorageUsageCard() {
             </div>
             {isAdmin && (
                 <Link
-                    to="/admin/armazenamento"
+                    to="/app/armazenamento"
                     className="self-start sm:self-center inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary/5 hover:bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest transition-colors"
                 >
                     Por sinistro <ArrowRight size={12} />

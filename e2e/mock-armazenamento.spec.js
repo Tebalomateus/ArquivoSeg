@@ -24,7 +24,7 @@ for (const width of [1440, 360]) {
             await page.screenshot({ path: `${shots}/c-dashboard-${width}.png`, fullPage: true, animations: 'disabled' });
         }
 
-        await page.goto('/admin/armazenamento');
+        await page.goto('/app/armazenamento');
         await expect(page.getByTestId('storage-row')).toHaveCount(1);
         await expect(page.getByTestId('storage-row')).toContainText('Incêndio Depósito Norte');
         await expect(page.getByTestId('storage-row-bar')).toHaveAttribute('style', /width: 100%/);

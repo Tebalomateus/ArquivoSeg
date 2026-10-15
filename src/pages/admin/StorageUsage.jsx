@@ -35,7 +35,7 @@ export default function StorageUsage() {
         <div className="space-y-8 animate-fade-in relative z-10">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div>
-                    <Link to="/admin" className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-secondary transition-colors">
+                    <Link to="/app" className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-secondary transition-colors">
                         <ArrowLeft size={12} /> Painel Global
                     </Link>
                     <h1 className="mt-2 text-3xl sm:text-4xl font-black text-primary font-display tracking-tight">Armazenamento</h1>
@@ -101,7 +101,7 @@ export default function StorageUsage() {
                                         return (
                                             <tr key={r.process_id} data-testid="storage-row" className="group hover:bg-secondary/5 transition-colors">
                                                 <td className="px-5 sm:px-6 py-4 min-w-0">
-                                                    <Link to={`/admin/sinistros/${r.process_id}`} className="flex items-center gap-2 min-w-0 outline-none focus-visible:underline">
+                                                    <Link to={`/app/sinistros/${r.process_id}`} className="flex items-center gap-2 min-w-0 outline-none focus-visible:underline">
                                                         <span className="min-w-0">
                                                             {number && <span className="block text-[10px] font-black uppercase tracking-widest text-gray-400">SD - {number}</span>}
                                                             <span className="block truncate text-sm font-bold text-primary group-hover:text-secondary transition-colors">{r.title || r.process_id}</span>

@@ -370,8 +370,7 @@ export default function NewClaim() {
             return;
         }
 
-        // Relativo funciona sob /app e /admin — mas contra a rota, não contra a
-        // URL: "sinistros/novo" é um segmento só, então ".." é /app.
+        // Relativo contra a rota, não contra a URL: "sinistros/novo" é um segmento só, então ".." é /app.
         navigate(`../sinistros/${newClaimId}`);
     };
 

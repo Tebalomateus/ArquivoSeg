@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
     BarChart3,
     FileText,
@@ -9,8 +9,16 @@ import {
     ChevronDown,
     KeyRound,
     Check,
+    Settings2,
+    ShieldHalf,
+    History,
+    HardDrive,
+    Building2,
+    Link as LinkIcon,
+    Database,
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
+import { usePermissions } from '../../context/PermissionsContext';
 import NotificationBell from '../NotificationBell';
 
 // Uma aba do cabeçalho. Abaixo de `sm` o rótulo vira só o ícone: a 360px as
@@ -42,13 +50,16 @@ const HeaderTab = ({ to, icon: Icon, label, end = false }) => (
 const MENU_WIDTH = 288; // w-72
 const MENU_MARGIN = 8; // keep the menu on-screen at narrow widths
 
-const ProfileMenu = ({ user, onLogout }) => {
+/**
+ * Um menu suspenso preso ao gatilho. O painel vai para o <body> por portal,
+ * como o do NotificationBell, porque o backdrop-filter do cabeçalho cria um
+ * contexto de empilhamento que fica abaixo dos blocos z-10 da página.
+ * `align` diz qual borda do gatilho o painel acompanha.
+ */
+function useAnchoredMenu(align = 'right') {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
     const panelRef = useRef(null);
-    // Menu position in viewport coords: the panel is portaled to <body>, like
-    // NotificationBell's, because the header's backdrop-filter stacking context
-    // sits under the page's own z-10 blocks and they would paint over it.
     const [pos, setPos] = useState({ top: 0, left: 0 });
 
     // close on outside click / Escape — "inside" is the trigger or the portaled panel
@@ -68,14 +79,15 @@ const ProfileMenu = ({ user, onLogout }) => {
         };
     }, [open]);
 
-    // anchor the fixed panel under the trigger's right edge; follow resize/scroll
+    // anchor the fixed panel under the trigger; follow resize/scroll
     useEffect(() => {
         if (!open) return;
         const place = () => {
             const rect = ref.current?.getBoundingClientRect();
             if (!rect) return;
             const width = Math.min(MENU_WIDTH, window.innerWidth - 2 * MENU_MARGIN);
-            const left = Math.min(Math.max(MENU_MARGIN, rect.right - width), window.innerWidth - MENU_MARGIN - width);
+            const wanted = align === 'left' ? rect.left : rect.right - width;
+            const left = Math.min(Math.max(MENU_MARGIN, wanted), window.innerWidth - MENU_MARGIN - width);
             setPos({ top: rect.bottom + 8, left, width });
         };
         place();
@@ -85,7 +97,13 @@ const ProfileMenu = ({ user, onLogout }) => {
             window.removeEventListener('resize', place);
             window.removeEventListener('scroll', place, true);
         };
-    }, [open]);
+    }, [open, align]);
+
+    return { open, setOpen, ref, panelRef, pos };
+}
+
+const ProfileMenu = ({ user, onLogout }) => {
+    const { open, setOpen, ref, panelRef, pos } = useAnchoredMenu('right');
 
     const initials = user?.name?.split(' ').map(n => n[0]).join('');
 
@@ -150,8 +168,73 @@ const ProfileMenu = ({ user, onLogout }) => {
     );
 };
 
+// O que era o backoffice /admin: as telas de gestão do tenant, só para o admin.
+const GESTAO = [
+    { to: '/app/acessos', label: 'Usuários e Acessos', icon: ShieldHalf },
+    { to: '/app/audit', label: 'Auditoria', icon: History },
+    { to: '/app/armazenamento', label: 'Armazenamento', icon: HardDrive },
+    { to: '/app/clientes', label: 'Clientes', icon: Building2 },
+    { to: '/app/links', label: 'Links Públicos', icon: LinkIcon },
+    { to: '/app/compliance', label: 'Compliance', icon: Database },
+];
+
+const GestaoMenu = () => {
+    const { open, setOpen, ref, panelRef, pos } = useAnchoredMenu('left');
+    const { pathname } = useLocation();
+    const active = GESTAO.some(({ to }) => pathname.startsWith(to));
+
+    // Trocar de página fecha o menu.
+    useEffect(() => { setOpen(false); }, [pathname, setOpen]);
+
+    return (
+        <div className="relative h-full" ref={ref}>
+            <button
+                type="button"
+                onClick={() => setOpen(o => !o)}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                aria-label="Gestão"
+                data-testid="gestao-menu-trigger"
+                className={`relative h-full flex items-center gap-1.5 px-2 sm:px-3 text-sm transition-colors
+                    ${active
+                        ? 'font-bold text-primary after:absolute after:left-0 after:right-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-secondary'
+                        : 'font-semibold text-slate-500 hover:text-primary'}`}
+            >
+                <Settings2 size={18} className="sm:hidden" />
+                <span className="hidden sm:inline">Gestão</span>
+                <ChevronDown size={14} className={`hidden sm:block transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+
+            {open && createPortal(
+                <div
+                    ref={panelRef}
+                    role="menu"
+                    data-testid="gestao-menu"
+                    style={{ top: pos.top, left: pos.left, width: pos.width || MENU_WIDTH }}
+                    className="fixed w-72 max-w-[calc(100vw-16px)] bg-white rounded-2xl border border-slate-100 shadow-2xl z-50 overflow-hidden animate-fade-in py-2"
+                >
+                    {GESTAO.map(({ to, label, icon: Icon }) => (
+                        <NavLink
+                            key={to}
+                            to={to}
+                            role="menuitem"
+                            className={({ isActive }) => `flex items-center gap-3 px-5 py-2.5 text-sm transition-colors
+                                ${isActive ? 'font-bold text-primary bg-primary/5' : 'font-semibold text-slate-600 hover:text-primary hover:bg-slate-50'}`}
+                        >
+                            <Icon size={16} className="shrink-0" />
+                            {label}
+                        </NavLink>
+                    ))}
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+};
+
 export default function Layout() {
     const { currentUser, logout } = useClaims();
+    const { isAdmin } = usePermissions();
     const navigate = useNavigate();
 
     const handleLogout = () => {
@@ -172,6 +255,7 @@ export default function Layout() {
                     <nav className="flex items-center gap-1 h-full min-w-0" aria-label="Navegação principal">
                         <HeaderTab to="/app" end icon={BarChart3} label="Dashboard" />
                         <HeaderTab to="/app/sinistros" icon={FileText} label="Meus Sinistros" />
+                        {isAdmin && <GestaoMenu />}
                     </nav>
 
                     <Link to="/app" className="flex items-center gap-2.5 justify-self-center" title="Ir para o dashboard" aria-label="ArquivoSeg — ir para o dashboard">

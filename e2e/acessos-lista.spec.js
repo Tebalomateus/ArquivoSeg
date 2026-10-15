@@ -18,7 +18,7 @@ test('buscar pelo nome do papel encontra quem o tem direto', async ({ page }) =>
     await installIamApi(page, (s) => {
         s.userRoles['u-ana'] = ['r-leitor'];
     });
-    await page.goto('/admin/acessos/usuarios');
+    await page.goto('/app/acessos/usuarios');
 
     await expect(linha(page, 'ana.souza@allianz.com')).toContainText('Leitor');
 
@@ -30,7 +30,7 @@ test('buscar pelo nome do papel encontra quem o tem direto', async ({ page }) =>
 
 test('buscar pelo grupo encontra quem é membro, mesmo sem papel direto', async ({ page }) => {
     await installIamApi(page);
-    await page.goto('/admin/acessos/usuarios');
+    await page.goto('/app/acessos/usuarios');
 
     await page.getByPlaceholder('Buscar por e-mail, papel, grupo ou status').fill('regulação');
     // u-maria está no grupo Equipe de Regulação e não tem papel direto nenhum.
@@ -46,7 +46,7 @@ test('o prefixo papel: não deixa o termo vazar para o e-mail', async ({ page })
         s.individual['u-leitor'] = [];
         s.userRoles['u-ana'] = ['r-leitor'];
     });
-    await page.goto('/admin/acessos/usuarios');
+    await page.goto('/app/acessos/usuarios');
 
     const busca = page.getByPlaceholder('Buscar por e-mail, papel, grupo ou status');
     await busca.fill('leitor');
@@ -74,7 +74,7 @@ test('a linha colapsa o excesso de papéis em vez de crescer', async ({ page }) 
         }
         s.userRoles['u-ana'] = ids;
     });
-    await page.goto('/admin/acessos/usuarios');
+    await page.goto('/app/acessos/usuarios');
 
     const ana = linha(page, 'ana.souza@allianz.com');
     await expect(ana).toContainText('Papel Extra 1');
@@ -95,7 +95,7 @@ test('com muitos papéis o seletor da pessoa ganha filtro', async ({ page }) => 
             });
         }
     });
-    await page.goto('/admin/acessos/usuarios/u-ana');
+    await page.goto('/app/acessos/usuarios/u-ana');
 
     const filtro = page.getByPlaceholder(/Filtrar 12 papéis/);
     await expect(filtro).toBeVisible();
@@ -118,7 +118,7 @@ test('o que já está marcado continua visível durante o filtro', async ({ page
         }
         s.userRoles['u-ana'] = ['r-leitor'];
     });
-    await page.goto('/admin/acessos/usuarios/u-ana');
+    await page.goto('/app/acessos/usuarios/u-ana');
 
     await page.getByPlaceholder(/Filtrar 12 papéis/).fill('Extra 7');
     // Esconder o que está marcado é como um papel some sem ninguém querer.

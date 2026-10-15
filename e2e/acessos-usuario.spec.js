@@ -13,10 +13,10 @@ test.beforeEach(async ({ page }) => {
 
 test('atribuir um papel e ver de onde a permissão passa a vir', async ({ page }) => {
     const state = await installIamApi(page);
-    await page.goto('/admin/acessos/usuarios');
+    await page.goto('/app/acessos/usuarios');
 
     await page.getByText('ana.souza@allianz.com').click();
-    await expect(page).toHaveURL(/\/admin\/acessos\/usuarios\/u-ana$/);
+    await expect(page).toHaveURL(/\/app\/acessos\/usuarios\/u-ana$/);
 
     // Sem papéis, sem grupos: nada no painel de acessos efetivos.
     await expect(page.getByText('Não pertence a nenhum grupo')).toBeVisible();
@@ -35,7 +35,7 @@ test('atribuir um papel e ver de onde a permissão passa a vir', async ({ page }
 
 test('o papel emprestado por um grupo aparece nomeando o grupo', async ({ page }) => {
     await installIamApi(page);
-    await page.goto('/admin/acessos/usuarios/u-maria');
+    await page.goto('/app/acessos/usuarios/u-maria');
 
     // O grupo aparece como grupo (só leitura, editável do lado do grupo)…
     await expect(page.getByRole('link', { name: /Equipe de Regulação/ })).toBeVisible();
@@ -48,7 +48,7 @@ test('negar individualmente vence a permissão que o papel dava', async ({ page 
     const state = await installIamApi(page, (s) => {
         s.userRoles['u-ana'] = ['r-leitor'];
     });
-    await page.goto('/admin/acessos/usuarios/u-ana');
+    await page.goto('/app/acessos/usuarios/u-ana');
 
     await page.getByRole('button', { name: 'Adicionar' }).click();
     const dialog = page.getByRole('dialog');
@@ -76,7 +76,7 @@ test('o curinga aparece como curinga, não como a ação que ele expandiu', asyn
         });
         s.userRoles['u-ana'] = ['r-curinga'];
     });
-    await page.goto('/admin/acessos/usuarios/u-ana');
+    await page.goto('/app/acessos/usuarios/u-ana');
 
     const linha = page.locator('li', { has: page.getByText('processo.criar', { exact: true }) });
     await expect(linha).toContainText('(processo.*)');
@@ -84,7 +84,7 @@ test('o curinga aparece como curinga, não como a ação que ele expandiu', asyn
 
 test('tirar o próprio acesso pede confirmação antes de valer', async ({ page }) => {
     const state = await installIamApi(page);
-    await page.goto('/admin/acessos/usuarios/u-admin');
+    await page.goto('/app/acessos/usuarios/u-admin');
 
     // Uma negação individual em si mesmo — fora do IAM, senão é LAST_ADMIN.
     await page.getByRole('button', { name: 'Adicionar' }).click();

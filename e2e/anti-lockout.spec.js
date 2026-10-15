@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
 
 test('o último admin não consegue negar a si mesmo o acesso de IAM', async ({ page }) => {
     const state = await installIamApi(page);
-    await page.goto('/admin/acessos/usuarios/u-admin');
+    await page.goto('/app/acessos/usuarios/u-admin');
 
     await page.getByRole('button', { name: 'Adicionar' }).click();
     const dialog = page.getByRole('dialog');
@@ -32,7 +32,7 @@ test('o último admin não consegue negar a si mesmo o acesso de IAM', async ({ 
 
 test('o curinga de IAM também é barrado', async ({ page }) => {
     const state = await installIamApi(page);
-    await page.goto('/admin/acessos/usuarios/u-admin');
+    await page.goto('/app/acessos/usuarios/u-admin');
 
     await page.getByRole('button', { name: 'Adicionar' }).click();
     const dialog = page.getByRole('dialog');
@@ -48,7 +48,7 @@ test('com outro admin no tenant a mesma negação passa pela confirmação', asy
     const state = await installIamApi(page, (s) => {
         s.users.find((u) => u.id === 'u-ana').role = 'admin';
     });
-    await page.goto('/admin/acessos/usuarios/u-admin');
+    await page.goto('/app/acessos/usuarios/u-admin');
 
     await page.getByRole('button', { name: 'Adicionar' }).click();
     const dialog = page.getByRole('dialog');

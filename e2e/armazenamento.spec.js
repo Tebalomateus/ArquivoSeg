@@ -16,9 +16,10 @@ test('o admin vê o total e os sinistros do maior para o menor, com barra propor
         // Fora de ordem de propósito: a tela ordena por conta própria.
         s.storage.processes.reverse();
     });
-    await page.goto('/admin');
-    await page.getByRole('link', { name: 'Armazenamento' }).click();
-    await expect(page).toHaveURL(/\/admin\/armazenamento$/);
+    await page.goto('/app');
+    await page.getByRole('button', { name: 'Gestão' }).click();
+    await page.getByRole('menuitem', { name: 'Armazenamento' }).click();
+    await expect(page).toHaveURL(/\/app\/armazenamento$/);
 
     await expect(page.getByTestId('storage-total')).toHaveText('750.0 MB');
     await expect(page.getByTestId('storage-files')).toHaveText('41');
@@ -36,7 +37,7 @@ test('o admin vê o total e os sinistros do maior para o menor, com barra propor
     expect(widths).toEqual(['100%', '7%', '1%']);
 
     await rows.nth(0).getByRole('link').click();
-    await expect(page).toHaveURL(new RegExp(`/admin/sinistros/${ROUBO}$`));
+    await expect(page).toHaveURL(new RegExp(`/app/sinistros/${ROUBO}$`));
 });
 
 test('o dashboard mostra o total e a contagem de arquivos', async ({ page }) => {
@@ -61,7 +62,7 @@ test('sem permissão o card some do dashboard e a página do admin diz por quê'
     await expect(page.getByText('Timeline de Atualizações')).toBeVisible();
     await expect(page.getByTestId('storage-card')).toHaveCount(0);
 
-    await page.goto('/admin/armazenamento');
+    await page.goto('/app/armazenamento');
     await expect(page.getByTestId('storage-forbidden')).toContainText('Você não tem permissão para ver o uso de armazenamento.');
     await expect(page.getByTestId('storage-row')).toHaveCount(0);
 });
@@ -82,7 +83,7 @@ test('em 360px a página do admin não vaza para o lado', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
     await signIn(page, 'admin', { token: 'e2e-token' });
     await installSinistroApi(page);
-    await page.goto('/admin/armazenamento');
+    await page.goto('/app/armazenamento');
     await expect(page.getByTestId('storage-row')).toHaveCount(3);
     await expect(page.getByTestId('storage-row').first()).toContainText('30 arquivos');
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

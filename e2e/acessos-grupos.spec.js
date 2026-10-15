@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
 
 test('admin cria um grupo, empresta um papel e escolhe os membros', async ({ page }) => {
     const state = await installIamApi(page);
-    await page.goto('/admin/acessos/grupos');
+    await page.goto('/app/acessos/grupos');
 
     await page.getByRole('button', { name: 'Novo grupo' }).click();
     const editor = page.getByRole('dialog');
@@ -50,14 +50,14 @@ test('grupo sem papel avisa que não concede nada', async ({ page }) => {
             member_ids: ['u-ana'],
         });
     });
-    await page.goto('/admin/acessos/grupos');
+    await page.goto('/app/acessos/grupos');
 
     await expect(page.getByTestId('group-row-e2e-vazio')).toContainText('sem papéis — não concede nada');
 });
 
 test('remover o membro de um grupo tira o acesso que vinha por ele', async ({ page }) => {
     const state = await installIamApi(page);
-    await page.goto('/admin/acessos/grupos');
+    await page.goto('/app/acessos/grupos');
 
     const row = page.getByTestId('group-row-equipe-regulacao');
     await row.getByRole('button', { name: '1 membros' }).click();
