@@ -29,7 +29,7 @@ test('sem início o prazo aguarda os obrigatórios, e a suspensão manual não e
     await expect(page.getByTitle(/Suspender prazo|Retomar prazo/)).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Gerenciamento' }).click();
-    await expect(page.getByText('Workflow do Sinistro')).toBeVisible();
+    await expect(page.getByText('Fluxo do Sinistro')).toBeVisible();
     await expect(page.getByText('Trilha de Prazos (SLA)')).toHaveCount(0);
 });
 

@@ -272,10 +272,10 @@ export default function ClaimDetails() {
         if (viewMode === 'checklist' || !canManageDocuments) return <ChecklistPanel claim={claim} />;
         return (
             <div className="space-y-6">
-                {/* Management View: Workflow / Status */}
+                {/* Management View: Fluxo / Status */}
                 <div className="card border-l-[6px] border-purple-600">
                     <h3 className="text-lg font-black text-gray-900 font-display uppercase tracking-tight flex items-center gap-3 mb-2">
-                        <Shield size={22} className="text-purple-600" /> Workflow do Sinistro
+                        <Shield size={22} className="text-purple-600" /> Fluxo do Sinistro
                     </h3>
                     <p className="text-xs text-gray-500 font-medium mb-6">Status atual: <span className="font-black text-gray-900">{STATUS_LABELS_PT[claim.backStatus] || claim.backStatus}</span>.</p>
                     {claim.backStatus === 'archived' ? (

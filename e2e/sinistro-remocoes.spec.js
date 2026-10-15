@@ -25,7 +25,7 @@ test('a página do sinistro não oferece mais os caminhos paralelos ao board', a
     await expect(page.getByText('Audit Trail Recente')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Gerenciamento' }).click();
-    await expect(page.getByText('Workflow do Sinistro')).toBeVisible();
+    await expect(page.getByText('Fluxo do Sinistro')).toBeVisible();
     await expect(page.getByRole('button', { name: /^Avançar para/ })).toHaveCount(0);
     await expect(page.getByRole('switch', { name: /Sinistro complexo/ })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Responsável' })).toHaveCount(0);
