@@ -60,3 +60,26 @@ test('tarefa opcional não entra na conta', async ({ page }) => {
     await expect(page.getByTestId('claim-progress-label')).toHaveText('67% atendido · 0% enviado');
     await expect(page.getByTestId('board-progress')).toHaveText('100% atendido · 0% enviado');
 });
+
+test('cartões mostram a data de inserção da tarefa e do deck', async ({ page }) => {
+    await openBoard(page, {
+        mutate: (s) => {
+            // Tarefa nova guarda a data em que entrou; as antigas não a têm e
+            // mostram a abertura do sinistro (created_at do processo).
+            s.process.metadata.folders[0].checklist[1].createdAt = '2026-10-05T12:00:00Z';
+            s.process.metadata.folders.push({
+                id: 'liquidacao', name: 'Liquidação', category: 'liquidacao', completion: 0,
+                checklist: [{ id: 'recibo', name: 'Recibo de quitação', received: false }],
+            });
+            const deck = seedDeck(s, { tarefaIds: [TASK.bo] });
+            deck.createdAt = '2026-10-03T12:00:00Z';
+        },
+    });
+
+    const pendente = page.getByTestId('column-pendente');
+    await expect(pendente.getByTestId(`task-${TASK.laudo}`).getByTestId('task-inserted')).toHaveText('Inserida em 05/10/2026');
+    await expect(pendente.getByTestId('deck-DECK-01').getByTestId('deck-inserted')).toHaveText('Inserido em 03/10/2026');
+
+    await page.getByRole('tab', { name: /Liquidação/ }).click();
+    await expect(pendente.getByTestId('task-liquidacao.recibo').getByTestId('task-inserted')).toHaveText('Inserida em 01/08/2026');
+});

@@ -9,7 +9,7 @@ import { useCan } from '../context/PermissionsContext';
 import { useConfirm } from '../components/ConfirmDialog';
 import { FileActions, ShareFileModal, extBadge } from './FileActions';
 import { markDeadlineStale } from '../services/claimSidebar';
-import { folderProgress, progressLabel } from '../services/claimProgress';
+import { folderProgress, progressLabel, formatDateBR } from '../services/claimProgress';
 import { useClaims } from '../context/ClaimsContext';
 
 const { STATUS, persistKey, filesKey } = board;
@@ -86,7 +86,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     // One group per folder; tasks come from that folder's checklist.
     useEffect(() => {
         const built = (claim.folders || [])
-            .map(f => ({ id: f.id, title: f.name, tasks: (f.checklist || []).map(i => ({ key: `${f.id}.${i.id}`, label: i.name })) }));
+            .map(f => ({ id: f.id, title: f.name, tasks: (f.checklist || []).map(i => ({ key: `${f.id}.${i.id}`, label: i.name, createdAt: i.createdAt })) }));
         setTabs(built);
     }, [claim.folders]);
 
@@ -209,6 +209,10 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
         () => folderProgress((claim.folders || []).find(f => f.id === tab), state),
         [claim.folders, tab, state],
     );
+    // Data de inserção (dd/mm/aaaa). As tarefas antigas não a guardavam: para
+    // elas vale a abertura do sinistro (`date` já vem em pt-BR).
+    const claimCreated = formatDateBR(claim.backCreatedAt || claim.createdAt) || claim.date || '';
+    const insertedOf = (t) => formatDateBR(t.createdAt) || claimCreated;
 
     const labelFor = useCallback((key) => {
         for (const t of tabs) { const hit = t.tasks.find(x => x.key === key); if (hit) return hit.label; }
@@ -638,7 +642,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                     ))}
 
                     {looseTasks.map(t => (
-                        <TaskCard key={t.key} task={t} accent={grupoAccent(tabs, tab)} selected={!!sel[t.key]} devolucao={state.taskReturns[t.key]}
+                        <TaskCard key={t.key} task={t} inserted={insertedOf(t)} accent={grupoAccent(tabs, tab)} selected={!!sel[t.key]} devolucao={state.taskReturns[t.key]}
                             onToggle={() => toggleSel(t.key)} onClick={() => clickTask(t.key)}
                             onDragStart={(e) => startDragTask(e, t.key)} onDragEnd={endDrag} />
                     ))}
@@ -904,7 +908,7 @@ function Empty({ children }) {
 }
 
 // ── Task card ─────────────────────────────────────────────────────────────────
-function TaskCard({ task, accent, selected, devolucao, onToggle, onClick, onDragStart, onDragEnd }) {
+function TaskCard({ task, inserted, accent, selected, devolucao, onToggle, onClick, onDragStart, onDragEnd }) {
     return (
         <div draggable onDragStart={onDragStart} onDragEnd={onDragEnd} onClick={onClick} data-testid={`task-${task.key}`}
             className={`cursor-grab rounded-[14px] border-[1.5px] bg-white p-[12px_13px] shadow-[0_1px_2px_rgba(15,23,42,.04)] transition-all hover:-translate-y-px ${selected ? 'border-[#12A08B] shadow-[0_10px_22px_-16px_rgba(18,160,139,.9)]' : 'border-[#E9EEF5] hover:border-[#B9CDF3]'}`}>
@@ -924,7 +928,10 @@ function TaskCard({ task, accent, selected, devolucao, onToggle, onClick, onDrag
             {devolucao && (
                 <p className="mt-2 rounded-[9px] border border-[#FBE3BF] bg-[#FEF9F1] p-[7px_9px] text-[11px] leading-snug text-[#B45309]">{devolucao.motivo}</p>
             )}
-            <p className="mt-2 flex items-center gap-1 text-[10.5px] font-bold text-slate-400"><Upload size={11} /> Clique para enviar arquivo</p>
+            <div className="mt-2 flex items-center justify-between gap-2 text-[10.5px] font-bold text-slate-400">
+                <p className="flex items-center gap-1"><Upload size={11} /> Clique para enviar arquivo</p>
+                {inserted && <span data-testid="task-inserted">Inserida em {inserted}</span>}
+            </div>
         </div>
     );
 }
@@ -957,6 +964,9 @@ function DeckCard({ deck, accentOf, labelFor, taskReturns, role, hot, selCount =
                         {plural(deck.tarefaIds.length, 'tarefa', 'tarefas')} · {plural(deck.arquivos.length, 'arquivo', 'arquivos')}
                     </span>
                 </div>
+                {formatDateBR(deck.createdAt) && (
+                    <p className="mt-1 text-right text-[10px] font-bold text-slate-400" data-testid="deck-inserted">Inserido em {formatDateBR(deck.createdAt)}</p>
+                )}
 
                 {/* tasks */}
                 <p className="mt-3 text-[9.5px] font-extrabold tracking-[0.12em] text-slate-400 uppercase">Tarefas comprovadas</p>

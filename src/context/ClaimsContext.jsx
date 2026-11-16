@@ -629,14 +629,15 @@ export const ClaimsProvider = ({ children }) => {
     };
 
     // Item complementar de checklist adicionado depois da criação do sinistro,
-    // persistido via metadata.folders.
+    // persistido via metadata.folders. `createdAt` é a data de inserção que o
+    // cartão da tarefa mostra no kanban.
     const addChecklistItem = (claimId, folderId, name) => {
         if (!name?.trim()) return;
         updateClaimLocal(claimId, c => ({
             ...c,
             folders: c.folders.map(f => (f.id !== folderId ? f : {
                 ...f,
-                checklist: [...f.checklist, { id: randId(), name: name.trim(), received: false }],
+                checklist: [...f.checklist, { id: randId(), name: name.trim(), received: false, createdAt: new Date().toISOString() }],
             })),
         }));
     };
