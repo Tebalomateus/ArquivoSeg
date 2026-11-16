@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ListChecks, Plus, ChevronRight, Loader2, AlertCircle, ArrowLeft, Trash2 } from 'lucide-react';
+import { ListChecks, Plus, ChevronRight, Loader2, AlertCircle, ArrowLeft, Trash2, Copy } from 'lucide-react';
 import { listChecklists, deleteChecklist } from '../api/backoffice';
 
 export default function ChecklistsPage() {
@@ -9,11 +9,16 @@ export default function ChecklistsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [deleting, setDeleting] = useState(null);
+    // slug → título, de `items` (servidor anterior só manda os slugs em `data`).
+    const [titles, setTitles] = useState({});
 
     const load = () => {
         setLoading(true);
         listChecklists(tenantId)
-            .then(res => setTypes(res?.data || []))
+            .then(res => {
+                setTypes(res?.data || []);
+                setTitles(Object.fromEntries((res?.items || []).map(it => [it.type, it.title])));
+            })
             .catch(err => setError(err.message))
             .finally(() => setLoading(false));
     };
@@ -45,13 +50,22 @@ export default function ChecklistsPage() {
                         <h1 className="text-2xl font-black text-slate-900">Checklists</h1>
                         <p className="text-slate-500 text-xs mt-1 font-mono">{tenantId}</p>
                     </div>
-                    <Link
-                        to={`/tenants/${tenantId}/checklists/novo`}
-                        className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-700 transition-colors"
-                    >
-                        <Plus size={16} />
-                        Nova Checklist
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <Link
+                            to={`/tenants/${tenantId}/checklists/novo?modelo=padrao`}
+                            className="flex items-center gap-2 bg-white border border-slate-200 text-slate-800 px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-100 transition-colors"
+                        >
+                            <Copy size={16} />
+                            Novo tipo a partir do modelo padrão
+                        </Link>
+                        <Link
+                            to={`/tenants/${tenantId}/checklists/novo`}
+                            className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-700 transition-colors"
+                        >
+                            <Plus size={16} />
+                            Nova Checklist
+                        </Link>
+                    </div>
                 </div>
 
                 {loading && (
@@ -72,13 +86,22 @@ export default function ChecklistsPage() {
                     <div className="text-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
                         <ListChecks size={40} className="mx-auto mb-3 opacity-40" />
                         <p>Nenhuma checklist cadastrada para esta empresa.</p>
-                        <Link
-                            to={`/tenants/${tenantId}/checklists/novo`}
-                            className="inline-flex items-center gap-2 mt-4 text-sm font-bold text-slate-700 hover:text-slate-900 transition-colors"
-                        >
-                            <Plus size={14} />
-                            Criar a primeira checklist
-                        </Link>
+                        <div className="flex items-center justify-center gap-6 mt-4">
+                            <Link
+                                to={`/tenants/${tenantId}/checklists/novo?modelo=padrao`}
+                                className="inline-flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-slate-900 transition-colors"
+                            >
+                                <Copy size={14} />
+                                Começar pelo modelo padrão
+                            </Link>
+                            <Link
+                                to={`/tenants/${tenantId}/checklists/novo`}
+                                className="inline-flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-slate-900 transition-colors"
+                            >
+                                <Plus size={14} />
+                                Criar a primeira checklist
+                            </Link>
+                        </div>
                     </div>
                 )}
 
@@ -93,7 +116,8 @@ export default function ChecklistsPage() {
                                     <ListChecks size={18} className="text-slate-600 group-hover:text-white transition-colors" />
                                 </div>
                                 <div>
-                                    <p className="font-bold text-slate-900 font-mono">{type}</p>
+                                    {titles[type] && titles[type] !== type && <p className="font-bold text-slate-900">{titles[type]}</p>}
+                                    <p className={titles[type] && titles[type] !== type ? 'text-xs text-slate-400 font-mono' : 'font-bold text-slate-900 font-mono'}>{type}</p>
                                 </div>
                                 <ChevronRight size={16} className="text-slate-300 ml-auto group-hover:text-slate-600 transition-colors" />
                             </Link>
