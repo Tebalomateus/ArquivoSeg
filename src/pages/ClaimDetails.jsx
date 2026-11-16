@@ -9,6 +9,7 @@ import {
     HardDrive,
     Info,
     Lock,
+    Megaphone,
     MessageSquare,
     Pencil,
     Share2,
@@ -58,6 +59,64 @@ const STATUS_LABELS_PT = {
  * documentos avulsos, a visão gerencial e a auditoria. Abaixo de ~1024px as
  * duas colunas empilham.
  */
+/**
+ * Disclaimer do sinistro (metadata.disclaimer): faixa no topo de toda etapa.
+ * Quem pode editar o sinistro edita ali mesmo; sem texto, só essa pessoa vê o
+ * botão de adicionar.
+ */
+function DisclaimerBanner({ text, canEdit, onSave }) {
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(text || '');
+    useEffect(() => { if (!editing) setDraft(text || ''); }, [text, editing]);
+
+    if (!text && !canEdit) return null;
+
+    if (editing) {
+        const save = (e) => {
+            e.preventDefault();
+            onSave(draft.trim());
+            setEditing(false);
+        };
+        return (
+            <form onSubmit={save} className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2" data-testid="claim-disclaimer">
+                <label htmlFor="disclaimer-edit" className="text-[10px] font-black uppercase tracking-widest text-amber-800 flex items-center gap-1.5">
+                    <Megaphone size={12} /> Disclaimer
+                </label>
+                <textarea id="disclaimer-edit" value={draft} autoFocus rows={3}
+                    onChange={(e) => setDraft(e.target.value.slice(0, 2000))}
+                    className="w-full px-3 py-2 text-sm border border-amber-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-amber-400 resize-none" />
+                <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setEditing(false)} className="px-3 py-1.5 text-xs font-bold text-gray-600 rounded-lg hover:bg-amber-100">Cancelar</button>
+                    <button type="submit" className="px-3 py-1.5 text-xs font-bold text-white bg-amber-600 rounded-lg hover:bg-amber-700">Salvar disclaimer</button>
+                </div>
+            </form>
+        );
+    }
+
+    if (!text) {
+        return (
+            <button type="button" onClick={() => setEditing(true)}
+                className="text-[11px] font-bold text-amber-700 hover:underline flex items-center gap-1.5">
+                <Megaphone size={12} /> Adicionar disclaimer
+            </button>
+        );
+    }
+
+    return (
+        <div role="note" aria-label="Disclaimer" data-testid="claim-disclaimer"
+            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
+            <Megaphone size={16} className="text-amber-600 mt-0.5 shrink-0" />
+            <p className="flex-1 text-sm text-amber-900 whitespace-pre-line">{text}</p>
+            {canEdit && (
+                <button type="button" onClick={() => setEditing(true)} aria-label="Editar disclaimer" title="Editar disclaimer"
+                    className="p-1 text-amber-600 hover:text-amber-800 shrink-0">
+                    <Pencil size={14} />
+                </button>
+            )}
+        </div>
+    );
+}
+
 export default function ClaimDetails() {
     const { id } = useParams();
     const {
@@ -73,6 +132,7 @@ export default function ClaimDetails() {
         resolveActorLabel,
         addChecklistItem,
         updateClaimObservations,
+        updateClaimDisclaimer,
         setClaimDeadline,
     } = useClaims();
 
@@ -567,6 +627,11 @@ export default function ClaimDetails() {
                     <div className="mt-4 space-y-4" role="tabpanel">
                         {currentFolder ? (
                             <>
+                                <DisclaimerBanner
+                                    text={claim.disclaimer}
+                                    canEdit={canEditClaimMeta}
+                                    onSave={(text) => updateClaimDisclaimer(claim.id, text)}
+                                />
                                 {canManageDocuments && (
                                     <div className="flex p-1 bg-gray-100 rounded-xl border border-gray-200 w-fit max-w-full overflow-x-auto" role="group" aria-label="Modo de visualização">
                                         <button type="button" onClick={() => setViewMode('decks')} aria-pressed={viewMode === 'decks'} className={segClass(viewMode === 'decks')}>

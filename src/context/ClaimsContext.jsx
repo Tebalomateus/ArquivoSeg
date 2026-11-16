@@ -48,7 +48,7 @@ const buildFolders = (initialChecklist) => [
 const METADATA_KEYS = [
     'number', 'insurer', 'insuredName', 'policyNumber', 'policyStartDate', 'policyEndDate',
     'retroactiveDate', 'modality', 'brokerName', 'brokerClaimId', 'adjusterName', 'adjusterClaimId',
-    'occurrenceDate', 'occurrenceLocation', 'observations', 'progress',
+    'occurrenceDate', 'occurrenceLocation', 'observations', 'disclaimer', 'progress',
     'shareToken', 'activities', 'reviewedFiles',
 ];
 
@@ -115,6 +115,7 @@ const adaptProcessToClaim = (proc, cached) => {
         occurrenceDate: meta.occurrenceDate || '',
         occurrenceLocation: meta.occurrenceLocation || '',
         observations: meta.observations || '',
+        disclaimer: meta.disclaimer || '',
         progress: meta.progress ?? 0,
         activities: Array.isArray(meta.activities) ? meta.activities : [],
         reviewedFiles: meta.reviewedFiles || {},
@@ -688,6 +689,7 @@ export const ClaimsProvider = ({ children }) => {
     );
 
     const updateClaimObservations = (id, observations) => updateClaimLocal(id, c => ({ ...c, observations }));
+    const updateClaimDisclaimer = (id, disclaimer) => updateClaimLocal(id, c => ({ ...c, disclaimer }));
 
     const refreshUsers = useCallback(async () => {
         if (isMockEnabled() || !getToken()) return;
@@ -790,7 +792,7 @@ export const ClaimsProvider = ({ children }) => {
             currentUser, setCurrentUser, logout, tokenEpoch,
             claims, addClaim, updateChecklistStatus, markFileReviewed, addChecklistItem,
             transitionStatus, archiveClaim, updateClaimFields, fetchSingleClaim,
-            logView, updateClaimObservations, setClaimDeadline,
+            logView, updateClaimObservations, updateClaimDisclaimer, setClaimDeadline,
             uploadFileToClaim, addCommentToClaim, refreshClaimFiles, openDocument, downloadDocument,
             deleteDocument, listFileVersions,
             updateAnnotation, deleteAnnotation,

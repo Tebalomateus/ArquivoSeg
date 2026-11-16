@@ -6,7 +6,7 @@ import { installDeckApi } from './fixtures/deck-api.js';
  * Abertura com a API: o tipo de sinistro vem de GET /checklists (com o título
  * em `items`) e de GET /checklists/{tipo}; ao criar, as etapas editadas vão
  * em metadata.folders, uma pasta por etapa mais a Gerencial privada, com o
- * claim_type.
+ * claim_type e o disclaimer.
  */
 
 const RCG = {
@@ -27,7 +27,7 @@ const RCG = {
 const abrir = async (page, mutate) => {
     await signIn(page, 'contributor', { token: 'e2e-token' });
     const state = await installDeckApi(page, (s) => {
-        s.permissions = [...s.permissions, 'processo.criar'];
+        s.permissions = [...s.permissions, 'processo.criar', 'processo.editar'];
         mutate?.(s);
     });
     await page.goto('/app/sinistros/novo');
@@ -51,11 +51,13 @@ test('o tipo do servidor vira as pastas do sinistro criado', async ({ page }) =>
     await page.locator('#campo-insurer').selectOption('__other__');
     await page.getByPlaceholder('Digite o nome da seguradora').fill('Seguradora E2E');
     await page.locator('#campo-insuredName').fill('Fulano de Tal');
+    await page.locator('#campo-disclaimer').fill('Obra embargada.');
     await page.getByRole('button', { name: 'Criar Sinistro' }).click();
 
     await expect(page).toHaveURL(/\/app\/sinistros\/22222222-/);
     const post = state.requests.find((r) => r.method === 'POST' && r.path === '/api/v1/processes');
     expect(post.body.claim_type).toBe('rcg_obras');
+    expect(post.body.metadata.disclaimer).toBe('Obra embargada.');
     const folders = post.body.metadata.folders.map(({ checklist, ...f }) => ({
         ...f, checklist: checklist.map(({ createdAt, ...i }) => ({ ...i, createdAt: typeof createdAt })),
     }));
@@ -71,6 +73,7 @@ test('o tipo do servidor vira as pastas do sinistro criado', async ({ page }) =>
     ]);
 
     await expect(page.getByTestId('step-selector').getByRole('tab')).toHaveText([/^Documentação/, /^Danos/]);
+    await expect(page.getByRole('note', { name: 'Disclaimer' })).toHaveText('Obra embargada.');
 });
 
 test('sem tipo cadastrado, o padrão embutido abre o sinistro', async ({ page }) => {

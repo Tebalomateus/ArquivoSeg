@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Save, X, Plus, Trash2, Info, Building2, User, FileText, Briefcase, ArrowLeft, ListChecks, AlertCircle, Loader2 } from 'lucide-react';
+import { Save, X, Plus, Trash2, Info, Building2, User, FileText, Briefcase, ArrowLeft, ListChecks, AlertCircle, Loader2, Megaphone } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
 import { INSURERS_CONFIG } from '../constants/config';
 import { DEFAULT_CLAIM_TYPE, defToSteps, draftKey } from '../constants/claimTypes';
@@ -44,6 +44,7 @@ export default function NewClaim() {
     const [stepsEdited, setStepsEdited] = useState(false);
     const [loadingDef, setLoadingDef] = useState(false);
     const [defError, setDefError] = useState(null);
+    const [disclaimer, setDisclaimer] = useState('');
 
     const applyType = async (type) => {
         setClaimType(type);
@@ -131,7 +132,7 @@ export default function NewClaim() {
         claimNumber, insurer, customInsurer, policyNumber, policyStartDate,
         policyEndDate, retroactiveDate, modality, customModality, insuredName, brokerName,
         brokerClaimId, adjusterName, adjusterClaimId, title, occurrenceDate,
-        occurrenceLocation, description,
+        occurrenceLocation, description, disclaimer,
     ].some(v => (v || '').trim() !== '') || stepsEdited;
 
     useUnsavedGuard(dirty);
@@ -295,6 +296,7 @@ export default function NewClaim() {
                 occurrenceLocation,
                 description,
                 steps,
+                disclaimer: disclaimer.trim(),
                 claimType: claimType || null,
             });
         } catch (e) {
@@ -742,6 +744,20 @@ export default function NewClaim() {
                     </ol>
                 )}
 
+                <div className="mt-6 pt-6 border-t border-gray-100">
+                    <label htmlFor="campo-disclaimer" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <Megaphone size={13} className="text-amber-500" />
+                        Disclaimer
+                    </label>
+                    <textarea
+                        id="campo-disclaimer"
+                        value={disclaimer}
+                        onChange={(e) => setDisclaimer(e.target.value.slice(0, 2000))}
+                        rows={3}
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-gray-300 resize-none"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Opcional. Aparece no topo de todas as etapas do sinistro.</p>
+                </div>
             </div>
 
             {/* O botão continua clicável de propósito: desabilitado, ele não conta

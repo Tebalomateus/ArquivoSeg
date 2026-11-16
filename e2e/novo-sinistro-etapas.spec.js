@@ -7,7 +7,7 @@ import { signIn } from './fixtures/session.js';
  * O tipo escolhido traz as etapas e os itens de cada uma; o que se edita aqui
  * (nome, item novo, item removido, obrigatório) vale só para este sinistro. Ao
  * criar, cada etapa vira uma pasta, e o sinistro mostra as etapas em ordem
- * num seletor.
+ * num seletor, com o disclaimer no topo de todas.
  *
  * Modo mock: os tipos são o Padrão e o Incêndio de src/constants/claimTypes.js.
  */
@@ -82,7 +82,7 @@ test('item sem nome impede criar e o erro aponta a linha', async ({ page }) => {
     await expect(page.locator('#campo-checklist')).toBeFocused();
 });
 
-test('o sinistro nasce com as etapas editadas', async ({ page }) => {
+test('o sinistro nasce com as etapas editadas e o disclaimer no topo', async ({ page }) => {
     await abrir(page);
     await preencherObrigatorios(page, '2026-881');
 
@@ -94,6 +94,7 @@ test('o sinistro nasce com as etapas editadas', async ({ page }) => {
     await aviso.getByRole('checkbox', { name: 'Obrigatório' }).last().uncheck();
     await etapa(page, 'Prejuízo').getByRole('button', { name: 'Remover Orçamentos de Reparo (3x)' }).click();
 
+    await page.locator('#campo-disclaimer').fill('Segurado só atende pela manhã.');
     await page.getByRole('button', { name: 'Criar Sinistro' }).click();
     await expect(page).toHaveURL(/\/app\/sinistros\/[^/]+$/);
 
@@ -102,6 +103,11 @@ test('o sinistro nasce com as etapas editadas', async ({ page }) => {
     await expect(steps).toHaveText([/^Aviso \(0%\)$/, /^Causa \(0%\)$/, /^Prejuízo \(0%\)$/, /^Liquidação \(0%\)$/]);
     await expect(steps.first()).toHaveAttribute('aria-selected', 'true');
 
+    const banner = page.getByRole('note', { name: 'Disclaimer' });
+    await expect(banner).toHaveText('Segurado só atende pela manhã.');
+    await page.getByRole('tab', { name: /^Prejuízo/ }).click();
+    await expect(banner).toBeVisible();
+
     // Os itens que ficaram viram as tarefas da etapa.
     await page.getByRole('tab', { name: /^Aviso/ }).click();
     await expect(page.getByRole('paragraph').filter({ hasText: 'Aviso de Sinistro assinado' })).toBeVisible();
@@ -109,4 +115,24 @@ test('o sinistro nasce com as etapas editadas', async ({ page }) => {
     await page.getByRole('tab', { name: /^Prejuízo/ }).click();
     await expect(page.getByRole('paragraph').filter({ hasText: 'Planilha de Bens Danificados' })).toBeVisible();
     await expect(page.getByRole('paragraph').filter({ hasText: 'Orçamentos de Reparo' })).toHaveCount(0);
+
+    // Quem edita o sinistro edita o disclaimer ali mesmo.
+    await banner.getByRole('button', { name: 'Editar disclaimer' }).click();
+    await page.locator('#disclaimer-edit').fill('Ligar só depois das 14h.');
+    await page.getByRole('button', { name: 'Salvar disclaimer' }).click();
+    await expect(page.getByRole('note', { name: 'Disclaimer' })).toHaveText('Ligar só depois das 14h.');
+});
+
+test('sem disclaimer não há faixa, só o botão de adicionar', async ({ page }) => {
+    await abrir(page);
+    await preencherObrigatorios(page, '2026-882');
+    await page.getByRole('button', { name: 'Criar Sinistro' }).click();
+    await expect(page).toHaveURL(/\/app\/sinistros\/[^/]+$/);
+
+    await expect(page.getByTestId('step-selector').getByRole('tab')).toHaveText([/^Causa/, /^Prejuízo/, /^Liquidação/]);
+    await expect(page.getByRole('note', { name: 'Disclaimer' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Adicionar disclaimer' }).click();
+    await page.locator('#disclaimer-edit').fill('Prioridade alta.');
+    await page.getByRole('button', { name: 'Salvar disclaimer' }).click();
+    await expect(page.getByRole('note', { name: 'Disclaimer' })).toHaveText('Prioridade alta.');
 });
