@@ -6,6 +6,8 @@ import { useCan } from '../context/PermissionsContext';
 import { STATUS_COLORS, INSURERS_CONFIG } from '../constants/config';
 import { deadlineInfo, isClosedClaim, isCriticalClaim, urgencyKey, CRITICAL_DAYS } from '../constants/deadline';
 import Badge from '../components/Badge';
+import ProgressBar from '../components/ProgressBar';
+import { claimProgress, progressLabel } from '../services/claimProgress';
 
 /**
  * Utility to parse 'DD/MM/YYYY' strings into Date objects.
@@ -37,7 +39,7 @@ function prazoInfo(claim) {
 }
 
 function ClaimCard({ claim }) {
-    const progress = Math.max(0, Math.min(100, Number(claim.progress) || 0));
+    const progress = claimProgress(claim);
     const prazo = prazoInfo(claim);
     return (
         <Link
@@ -62,10 +64,10 @@ function ClaimCard({ claim }) {
             <div>
                 <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Completude</span>
-                    <span className="text-xs font-extrabold text-primary" data-testid="album-progress">{progress}%</span>
+                    <span className="text-xs font-extrabold text-primary" data-testid="album-progress">{progressLabel(progress)}</span>
                 </div>
-                <div className="mt-1.5 h-1.5 rounded-full bg-gray-200 overflow-hidden" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Completude">
-                    <div className="h-full bg-secondary rounded-full transition-all duration-700" style={{ width: `${progress}%` }} />
+                <div className="mt-1.5">
+                    <ProgressBar progress={progress} label="Completude" />
                 </div>
             </div>
 

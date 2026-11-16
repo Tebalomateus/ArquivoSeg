@@ -54,9 +54,20 @@ export function initialState() {
     return {
         permissions: ['processo.listar', 'processo.ver', 'processo.verAuditoria'],
         processes: [
-            proc(PROCESS_ID, 'Incêndio galpão', { number: '2026-0101', insurer: 'Allianz', progress: 40 }),
-            proc('33333333-3333-4333-8333-333333333333', 'Roubo de carga', { number: '2026-0102', insurer: 'Porto Seguro', progress: 75 }),
-            proc('44444444-4444-4444-8444-444444444444', 'Alagamento loja', { number: '2026-0103', insurer: 'Tokio Marine', progress: 10 }),
+            // A conclusão é calculada do board que vem no metadata (decks,
+            // deck_task_status): 5 obrigatórias, 2 atendidas e 1 enviada.
+            proc(PROCESS_ID, 'Incêndio galpão', {
+                number: '2026-0101', insurer: 'Allianz',
+                folders: [
+                    { id: 'causa', name: 'Causa', category: 'causa', checklist: [{ id: 'bo', name: 'B.O.' }, { id: 'laudo', name: 'Laudo' }, { id: 'fotos', name: 'Fotos' }] },
+                    { id: 'prejuizo', name: 'Prejuízo', category: 'prejuizo', checklist: [{ id: 'orc', name: 'Orçamento' }, { id: 'nf', name: 'Notas fiscais' }] },
+                    { id: 'gerencial', name: 'Gerencial', category: 'gerencial', private: true, checklist: [{ id: 'interno', name: 'Parecer interno' }] },
+                ],
+                decks: [],
+                deck_task_status: { 'causa.bo': 'atendido', 'causa.laudo': 'atendido', 'causa.fotos': 'enviado', 'gerencial.interno': 'atendido' },
+            }),
+            proc('33333333-3333-4333-8333-333333333333', 'Roubo de carga', { number: '2026-0102', insurer: 'Porto Seguro' }),
+            proc('44444444-4444-4444-8444-444444444444', 'Alagamento loja', { number: '2026-0103', insurer: 'Tokio Marine' }),
         ],
         audit: defaultAudit(),
         storage: {

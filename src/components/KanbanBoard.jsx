@@ -11,6 +11,8 @@ import { FileActions, ShareFileModal, extBadge } from './FileActions';
 import { markDeadlineStale } from '../services/claimSidebar';
 import { mockCommentStats, commentsProve } from '../api/deckComments';
 import DeckComments from './DeckComments';
+import { folderProgress, progressLabel, formatDateBR } from '../services/claimProgress';
+import { useClaims } from '../context/ClaimsContext';
 
 const { STATUS, persistKey, filesKey } = board;
 
@@ -72,6 +74,9 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
 
     const can = useCan();
     const ask = useConfirm();
+    // Fora do provider (harness de componente) não há a quem avisar.
+    const setClaimBoard = useClaims()?.setClaimBoard;
+    const boardLoadFailed = useRef(false);
     const online = !isMockEnabled() && !!getToken();
     const actor = currentUser?.name || currentUser?.email || '';
     // Reviewing a deck is a permission, not a rung on the role ladder: a tenant
@@ -84,7 +89,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     // One group per folder; tasks come from that folder's checklist.
     useEffect(() => {
         const built = (claim.folders || [])
-            .map(f => ({ id: f.id, title: f.name, tasks: (f.checklist || []).map(i => ({ key: `${f.id}.${i.id}`, label: i.name })) }));
+            .map(f => ({ id: f.id, title: f.name, tasks: (f.checklist || []).map(i => ({ key: `${f.id}.${i.id}`, label: i.name, createdAt: i.createdAt })) }));
         setTabs(built);
     }, [claim.folders]);
 
@@ -97,12 +102,16 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     useEffect(() => {
         let cancelled = false;
         setLoading(true);
+        boardLoadFailed.current = false;
         const load = async () => {
             if (online) {
                 try {
                     const raw = await deckApi.listDecks(claim.id);
                     if (!cancelled) setState(board.normalizeBoard(raw));
                 } catch {
+                    // Board vazio por falha de leitura não é o board do sinistro:
+                    // não deve zerar a conclusão que veio no metadata.
+                    boardLoadFailed.current = true;
                     if (!cancelled) setState(board.emptyBoard());
                 }
             } else {
@@ -127,6 +136,13 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
             markDeadlineStale(claim.id);
         }
     }, [state, online, loading, claim.id]);
+
+    // O board mudou: o cartão lateral, as abas e o álbum recalculam a conclusão
+    // a partir dele (services/claimProgress.js). Depois de salvar, porque no
+    // mock quem lê é o sessionStorage.
+    useEffect(() => {
+        if (!loading && !boardLoadFailed.current) setClaimBoard?.(claim.id, state);
+    }, [state, loading, claim.id, setClaimBoard]);
 
     // ── Arquivos do processo ────────────────────────────────────────────────────
     // O que sobra depois de tirar o que já está em algum deck é o avulso. Guardar
@@ -194,12 +210,16 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     const reviewDeck = state.decks.find(d => d.id === reviewId) || null;
     const commentsDeck = state.decks.find(d => d.id === commentsId) || null;
 
-    // Per-tab progress = atendidas / total (scoped to the active tab).
-    const progress = useMemo(() => {
-        const tasks = activeTab?.tasks || [];
-        const done = tasks.filter(t => state.taskStatus[t.key] === STATUS.ATENDIDO).length;
-        return { done, total: tasks.length };
-    }, [activeTab, state.taskStatus]);
+    // Progresso da pasta aberta: tarefas obrigatórias atendidas e enviadas,
+    // a mesma conta do cartão lateral (services/claimProgress.js).
+    const progress = useMemo(
+        () => folderProgress((claim.folders || []).find(f => f.id === tab), state),
+        [claim.folders, tab, state],
+    );
+    // Data de inserção (dd/mm/aaaa). As tarefas antigas não a guardavam: para
+    // elas vale a abertura do sinistro (`date` já vem em pt-BR).
+    const claimCreated = formatDateBR(claim.backCreatedAt || claim.createdAt) || claim.date || '';
+    const insertedOf = (t) => formatDateBR(t.createdAt) || claimCreated;
 
     const labelFor = useCallback((key) => {
         for (const t of tabs) { const hit = t.tasks.find(x => x.key === key); if (hit) return hit.label; }
@@ -217,7 +237,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
         setBusy(true);
         try {
             const raw = await remote();
-            if (raw) setState(board.normalizeBoard(raw));
+            if (raw) { boardLoadFailed.current = false; setState(board.normalizeBoard(raw)); }
             // Arquivo em deck cumpre a tarefa para o prazo: o servidor pode ter
             // acabado de iniciá-lo.
             markDeadlineStale(claim.id);
@@ -594,11 +614,14 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                         </div>
                         <div>
                             <p className="text-[9.5px] font-bold tracking-[0.14em] text-slate-400 uppercase">Atendidas em {activeTab?.title}</p>
-                            <p className="text-[19px] font-extrabold text-slate-900 leading-tight">{plural(progress.done, 'de ' + progress.total, 'de ' + progress.total)}</p>
-                            <div className="mt-1 h-[7px] w-[150px] overflow-hidden rounded-full bg-[#EDF1F7]">
-                                <div className="h-full rounded-full transition-[width] duration-300"
-                                    style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%`, background: 'linear-gradient(90deg,#17B39C,#2563EB)' }} />
+                            <p className="text-[19px] font-extrabold text-slate-900 leading-tight">{plural(progress.atendido, 'de ' + progress.total, 'de ' + progress.total)}</p>
+                            <div className="mt-1 flex h-[7px] w-[150px] overflow-hidden rounded-full bg-[#EDF1F7]" role="progressbar"
+                                aria-label={`Conclusão de ${activeTab?.title || 'pasta'}`} aria-valuenow={progress.atendidoPct} aria-valuemin={0} aria-valuemax={100} aria-valuetext={progressLabel(progress)}>
+                                <div className="h-full transition-[width] duration-300"
+                                    style={{ width: `${progress.atendidoPct}%`, background: 'linear-gradient(90deg,#17B39C,#2563EB)' }} />
+                                <div className="h-full bg-[#93B4F5] transition-[width] duration-300" style={{ width: `${progress.enviadoPct}%` }} />
                             </div>
+                            <p className="mt-1 text-[10.5px] font-bold text-slate-400" data-testid="board-progress">{progressLabel(progress)}</p>
                         </div>
                     </div>
                     )}
@@ -645,7 +668,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                     ))}
 
                     {looseTasks.map(t => (
-                        <TaskCard key={t.key} task={t} accent={grupoAccent(tabs, tab)} selected={!!sel[t.key]} devolucao={state.taskReturns[t.key]}
+                        <TaskCard key={t.key} task={t} inserted={insertedOf(t)} accent={grupoAccent(tabs, tab)} selected={!!sel[t.key]} devolucao={state.taskReturns[t.key]}
                             onToggle={() => toggleSel(t.key)} onClick={() => clickTask(t.key)}
                             onDragStart={(e) => startDragTask(e, t.key)} onDragEnd={endDrag} />
                     ))}
@@ -918,7 +941,7 @@ function Empty({ children }) {
 }
 
 // ── Task card ─────────────────────────────────────────────────────────────────
-function TaskCard({ task, accent, selected, devolucao, onToggle, onClick, onDragStart, onDragEnd }) {
+function TaskCard({ task, inserted, accent, selected, devolucao, onToggle, onClick, onDragStart, onDragEnd }) {
     return (
         <div draggable onDragStart={onDragStart} onDragEnd={onDragEnd} onClick={onClick} data-testid={`task-${task.key}`}
             className={`cursor-grab rounded-[14px] border-[1.5px] bg-white p-[12px_13px] shadow-[0_1px_2px_rgba(15,23,42,.04)] transition-all hover:-translate-y-px ${selected ? 'border-[#12A08B] shadow-[0_10px_22px_-16px_rgba(18,160,139,.9)]' : 'border-[#E9EEF5] hover:border-[#B9CDF3]'}`}>
@@ -938,7 +961,10 @@ function TaskCard({ task, accent, selected, devolucao, onToggle, onClick, onDrag
             {devolucao && (
                 <p className="mt-2 rounded-[9px] border border-[#FBE3BF] bg-[#FEF9F1] p-[7px_9px] text-[11px] leading-snug text-[#B45309]">{devolucao.motivo}</p>
             )}
-            <p className="mt-2 flex items-center gap-1 text-[10.5px] font-bold text-slate-400"><Upload size={11} /> Clique para enviar arquivo</p>
+            <div className="mt-2 flex items-center justify-between gap-2 text-[10.5px] font-bold text-slate-400">
+                <p className="flex items-center gap-1"><Upload size={11} /> Clique para enviar arquivo</p>
+                {inserted && <span data-testid="task-inserted">Inserida em {inserted}</span>}
+            </div>
         </div>
     );
 }
@@ -971,6 +997,9 @@ function DeckCard({ deck, accentOf, labelFor, taskReturns, role, hot, selCount =
                         {plural(deck.tarefaIds.length, 'tarefa', 'tarefas')} · {plural(deck.arquivos.length, 'arquivo', 'arquivos')}
                     </span>
                 </div>
+                {formatDateBR(deck.createdAt) && (
+                    <p className="mt-1 text-right text-[10px] font-bold text-slate-400" data-testid="deck-inserted">Inserido em {formatDateBR(deck.createdAt)}</p>
+                )}
 
                 {/* tasks */}
                 <p className="mt-3 text-[9.5px] font-extrabold tracking-[0.12em] text-slate-400 uppercase">Tarefas comprovadas</p>

@@ -39,8 +39,11 @@ test('cada cartão mostra número, título, seguradora, completude, status, praz
 
     await expect(card).toContainText('Incêndio galpão');
     await expect(card).toContainText('Allianz');
-    await expect(card.getByTestId('album-progress')).toHaveText('40%');
+    // Calculada do board no metadata: atendidas cheias, enviadas como parcial;
+    // a pasta Gerencial (privada) não conta.
+    await expect(card.getByTestId('album-progress')).toHaveText('40% atendido · 20% enviado');
     await expect(card.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
+    await expect(page.getByTestId('album-card').filter({ hasText: 'SD - 2026-0102' }).getByTestId('album-progress')).toHaveText('0% atendido · 0% enviado');
     await expect(card).toContainText('Aberto em');
     await expect(card).toContainText('01/09/2026');
 
@@ -74,7 +77,7 @@ test('busca, abas e atualizar continuam; o filtro de responsável sumiu', async 
     await expect(page.getByTestId('album-card')).toHaveCount(3);
 
     const before = state.requests.filter((r) => r.path.startsWith('/api/v1/processes?')).length;
-    state.processes.push({ ...state.processes[0], id: '55555555-5555-4555-8555-555555555555', title: 'Queda de marquise', metadata: { number: '2026-0104', insurer: 'Mapfre', progress: 0 } });
+    state.processes.push({ ...state.processes[0], id: '55555555-5555-4555-8555-555555555555', title: 'Queda de marquise', metadata: { number: '2026-0104', insurer: 'Mapfre' } });
     await page.getByRole('button', { name: 'Atualizar lista de sinistros' }).click();
     await expect(page.getByTestId('album-card')).toHaveCount(4);
     expect(state.requests.filter((r) => r.path.startsWith('/api/v1/processes?')).length).toBeGreaterThan(before);
