@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, X, Upload, ArrowRight, Loader2, Plus, Eye, Download, Link2, FolderInput } from 'lucide-react';
+import { Check, X, Upload, ArrowRight, Loader2, Plus, Eye, Download, Link2, FolderInput, MessageSquare } from 'lucide-react';
 import { uploadFile, listFiles, formatBytes, openDocument, downloadDocument, parseFolderFromFileName } from '../api/files';
 import { isMockEnabled, getToken } from '../api/client';
 import * as deckApi from '../api/decks';
@@ -9,6 +9,8 @@ import { useCan } from '../context/PermissionsContext';
 import { useConfirm } from '../components/ConfirmDialog';
 import { FileActions, ShareFileModal, extBadge } from './FileActions';
 import { markDeadlineStale } from '../services/claimSidebar';
+import { mockCommentStats, commentsProve } from '../api/deckComments';
+import DeckComments from './DeckComments';
 
 const { STATUS, persistKey, filesKey } = board;
 
@@ -61,6 +63,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     const [addingTask, setAddingTask] = useState(false);
     const [zipping, setZipping] = useState(null); // deckId whose archive is downloading
     const [sharing, setSharing] = useState(null); // arquivo do deck que está ganhando um link público
+    const [commentsId, setCommentsId] = useState(null); // deck com a fila de comentários aberta
 
     // Drag state (discriminated by kind, per the handoff).
     const drag = useRef({ kind: null, id: null });
@@ -105,7 +108,10 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
             } else {
                 let stored = null;
                 try { stored = JSON.parse(sessionStorage.getItem(persistKey(claim.id)) || 'null'); } catch { /* ignore */ }
-                if (!cancelled) setState(board.normalizeBoard(stored));
+                // A contagem de comentários sai dos comentários guardados, não do
+                // board salvo: é ela que decide se o deck pode ir sem arquivo.
+                const b = board.normalizeBoard(stored);
+                if (!cancelled) setState({ ...b, commentStats: mockCommentStats(claim.id, b.decks) });
             }
             if (!cancelled) setLoading(false);
         };
@@ -186,6 +192,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
 
     const selCount = Object.keys(sel).length;
     const reviewDeck = state.decks.find(d => d.id === reviewId) || null;
+    const commentsDeck = state.decks.find(d => d.id === commentsId) || null;
 
     // Per-tab progress = atendidas / total (scoped to the active tab).
     const progress = useMemo(() => {
@@ -221,6 +228,21 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
             setBusy(false);
         }
     }, [busy, state, online, claim.id]);
+
+    // Comentário novo ou apagado muda a comprovação do deck (e pode iniciar o
+    // prazo). Só a contagem é relida: o resto do quadro não mudou.
+    const refreshCommentStats = useCallback(async () => {
+        if (online) {
+            try {
+                const raw = await deckApi.listDecks(claim.id);
+                const fresh = board.normalizeBoard(raw);
+                setState(s => ({ ...s, commentStats: fresh.commentStats }));
+            } catch { /* fica a contagem anterior; o envio confere no servidor */ }
+        } else {
+            setState(s => ({ ...s, commentStats: mockCommentStats(claim.id, s.decks) }));
+        }
+        markDeadlineStale(claim.id);
+    }, [online, claim.id]);
 
     // Turn selected File objects into deck file refs (real upload, or mock stub).
     const toRefs = useCallback(async (files) => {
@@ -383,9 +405,11 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     // E dá para disparar arrastando, que é fácil de fazer sem querer.
     const submit = async (deckId) => {
         const deck = state.decks.find(d => d.id === deckId);
-        // Um deck vazio nem chega a ser uma pergunta: o board recusa, e é ele
-        // quem diz por quê.
-        if (deck && deck.arquivos.length === 0) {
+        const stats = state.commentStats?.[deckId];
+        // Um deck sem comprovação nem chega a ser uma pergunta: o board recusa,
+        // e é ele quem diz por quê. Comprovação é arquivo ou comentário (depois
+        // da última devolução, se houve).
+        if (deck && deck.arquivos.length === 0 && !commentsProve(deck, stats)) {
             run(
                 () => board.submitDeck(state, deckId),
                 () => deckApi.submitDeck(claim.id, deckId),
@@ -395,7 +419,8 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
         const ok = await ask({
             title: 'Enviar o deck para análise?',
             message: 'Depois de enviado o deck não aceita mais arquivos nem tarefas. Quem analisa decide o que atende e o que volta para pendente.',
-            detail: deck ? `${deck.codigo} · ${plural(deck.tarefaIds.length, 'tarefa', 'tarefas')} · ${plural(deck.arquivos.length, 'arquivo', 'arquivos')}` : undefined,
+            detail: deck ? [deck.codigo, plural(deck.tarefaIds.length, 'tarefa', 'tarefas'), plural(deck.arquivos.length, 'arquivo', 'arquivos'),
+                stats?.count ? plural(stats.count, 'comentário', 'comentários') : null].filter(Boolean).join(' · ') : undefined,
             confirmLabel: 'Enviar deck',
         });
         if (!ok) return;
@@ -615,7 +640,8 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                             onAddFile={() => openUploadForDeck(d.id)} onSubmit={() => submit(d.id)}
                             onDetach={(k) => detachTask(d.id, k)} onRemoveFile={(f) => removeFile(d.id, f)}
                             onJoinSelection={() => attachSelectionTo(d.id)}
-                            onDownloadAll={canDownloadArchive ? () => downloadArchive(d) : null} downloading={zipping === d.id} {...fileActions} />
+                            onDownloadAll={canDownloadArchive ? () => downloadArchive(d) : null} downloading={zipping === d.id} {...fileActions}
+                            commentCount={state.commentStats?.[d.id]?.count || 0} onComments={() => setCommentsId(d.id)} />
                     ))}
 
                     {looseTasks.map(t => (
@@ -655,7 +681,8 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                     {sentDecks.map(d => (
                         <DeckCard key={d.id} deck={d} accentOf={grupoAccent(tabs, d.grupo)} labelFor={labelFor} taskReturns={state.taskReturns}
                             role={canAnalyse ? 'analista' : 'perito'} onAnalyze={() => setReviewId(d.id)}
-                            onDownloadAll={canDownloadArchive ? () => downloadArchive(d) : null} downloading={zipping === d.id} {...fileActions} />
+                            onDownloadAll={canDownloadArchive ? () => downloadArchive(d) : null} downloading={zipping === d.id} {...fileActions}
+                            commentCount={state.commentStats?.[d.id]?.count || 0} onComments={() => setCommentsId(d.id)} />
                     ))}
                     {sentDecks.length === 0 && <Empty>Nenhum deck em análise.<br />Envie um deck da coluna pendente.</Empty>}
                 </Column>
@@ -665,7 +692,8 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                     onDragOver={(e) => { if (drag.current.kind) e.preventDefault(); }} onDrop={endDrag}>
                     {doneDecks.map(d => (
                         <DeckCard key={d.id} deck={d} accentOf={grupoAccent(tabs, d.grupo)} labelFor={labelFor} taskReturns={state.taskReturns} role="done"
-                            onDownloadAll={canDownloadArchive ? () => downloadArchive(d) : null} downloading={zipping === d.id} {...fileActions} />
+                            onDownloadAll={canDownloadArchive ? () => downloadArchive(d) : null} downloading={zipping === d.id} {...fileActions}
+                            commentCount={state.commentStats?.[d.id]?.count || 0} onComments={() => setCommentsId(d.id)} />
                     ))}
                     {doneDecks.length === 0 && <Empty>Decks aprovados pelo analista aparecem aqui.</Empty>}
                 </Column>
@@ -690,7 +718,12 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
                     <AnalysisModal deck={reviewDeck} labelFor={labelFor} accentOf={grupoAccent(tabs, reviewDeck.grupo)}
                         onView={viewFile} onDownload={fileActions.onDownloadFile} onShare={fileActions.onShareFile}
                         onClose={() => setReviewId(null)} onConfirm={(dev, motivo) => analyze(reviewDeck.id, dev, motivo)}
-                        onDownloadAll={canDownloadArchive ? () => downloadArchive(reviewDeck) : null} downloading={zipping === reviewDeck.id} />
+                        onDownloadAll={canDownloadArchive ? () => downloadArchive(reviewDeck) : null} downloading={zipping === reviewDeck.id}
+                        commentCount={state.commentStats?.[reviewDeck.id]?.count || 0} onComments={() => setCommentsId(reviewDeck.id)} />
+                )}
+                {commentsDeck && (
+                    <DeckComments key={commentsDeck.id} claimId={claim.id} deck={commentsDeck} decks={state.decks} online={online}
+                        currentUser={currentUser} onClose={() => setCommentsId(null)} onChanged={refreshCommentStats} />
                 )}
                 {linking && (
                     <LinkFileModal file={linking} decks={isLoose ? allPendingDecks : pendingDecks} tasks={isLoose ? allLooseTasks : looseTasks}
@@ -913,7 +946,7 @@ function TaskCard({ task, accent, selected, devolucao, onToggle, onClick, onDrag
 // ── Deck card ─────────────────────────────────────────────────────────────────
 function DeckCard({ deck, accentOf, labelFor, taskReturns, role, hot, selCount = 0,
     onDragStart, onDragEnd, onDragOver, onDrop, onAddFile, onSubmit, onDetach, onRemoveFile, onJoinSelection, onAnalyze,
-    onDownloadAll, downloading, onViewFile, onDownloadFile, onShareFile }) {
+    onDownloadAll, downloading, onViewFile, onDownloadFile, onShareFile, commentCount = 0, onComments }) {
     const done = deck.status === STATUS.ATENDIDO;
     const sent = deck.status === STATUS.ENVIADO;
     const draggable = deck.status === STATUS.PENDENTE;
@@ -986,6 +1019,16 @@ function DeckCard({ deck, accentOf, labelFor, taskReturns, role, hot, selCount =
                             ))}
                         </div>
                     </>
+                )}
+
+                {/* comments: valem como comprovação do deck */}
+                {onComments && (
+                    <button type="button" onClick={onComments} data-testid={`deck-comments-open-${deck.codigo}`}
+                        className="mt-3 flex w-full items-center gap-1.5 rounded-[10px] border border-[#E4EBF6] bg-white p-[7px_9px] text-[11px] font-extrabold text-slate-600 hover:border-[#2563EB] hover:text-[#2563EB]">
+                        <MessageSquare size={12} />
+                        Comentários
+                        {commentCount > 0 && <span data-testid="deck-comment-count" className="ml-auto rounded-full bg-[#EAF1FE] px-[7px] py-[1px] text-[10px] text-[#2563EB]">{commentCount}</span>}
+                    </button>
                 )}
 
                 {/* drop zone hint */}
@@ -1078,7 +1121,7 @@ function UploadModal({ title, note, busy, onClose, onConfirm }) {
 }
 
 // ── Analysis modal ──────────────────────────────────────────────────────────────
-function AnalysisModal({ deck, labelFor, accentOf, onView, onDownload, onShare, onClose, onConfirm, onDownloadAll, downloading }) {
+function AnalysisModal({ deck, labelFor, accentOf, onView, onDownload, onShare, onClose, onConfirm, onDownloadAll, downloading, commentCount = 0, onComments }) {
     const [returns, setReturns] = useState({}); // key -> true (devolver)
     const [note, setNote] = useState('');
     const devolvidas = Object.keys(returns).filter(k => returns[k]);
@@ -1103,6 +1146,12 @@ function AnalysisModal({ deck, labelFor, accentOf, onView, onDownload, onShare, 
                 <div className="flex items-center gap-2">
                     <p className="text-[10px] font-extrabold tracking-[0.14em] text-slate-400 uppercase">Análise do deck</p>
                     <span className="rounded-lg bg-[#2563EB] px-[9px] py-[5px] text-[10px] font-extrabold uppercase tracking-wider text-white">{deck.codigo}</span>
+                    {onComments && (
+                        <button type="button" onClick={onComments} data-testid="analysis-comments"
+                            className="ml-auto flex items-center gap-1 rounded-[9px] border border-[#C9DDFF] bg-[#EAF1FE] px-[10px] py-[5px] text-[11px] font-extrabold text-[#2563EB] hover:border-[#2563EB]">
+                            <MessageSquare size={12} /> {commentCount > 0 ? plural(commentCount, 'comentário', 'comentários') : 'Comentários'}
+                        </button>
+                    )}
                 </div>
                 <h3 className="mt-1 text-[19px] font-extrabold text-slate-900">Conferir documentos e decidir por tarefa</h3>
 

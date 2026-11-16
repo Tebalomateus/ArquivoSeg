@@ -3,6 +3,7 @@ import { getProcessStorage } from '../api/storage';
 import { listProcessAudit } from '../api/processAudit';
 import { filesKey, persistKey } from '../api/deckBoard';
 import { getDeadline, adjustDeadline } from '../api/deadline';
+import { mockCommentStats, commentsProve } from '../api/deckComments';
 
 // Dados do cartão lateral do sinistro que não vêm no próprio processo:
 // armazenamento, última atividade e prazo. Com API, cada um é uma rota; no modo mock
@@ -83,7 +84,8 @@ const writeMockDeadline = (claim, dl) => {
 // A regra do servidor (deadline.AutoStart) sobre o que o mock guarda: os
 // obrigatórios são os itens das pastas não gerenciais; cada um está cumprido
 // se foi marcado (received / checklistState) ou se o deck da tarefa tem ao
-// menos um arquivo. Lista vazia nunca inicia, e o início nunca é desfeito.
+// menos um arquivo ou um comentário que o comprove (depois da última
+// devolução). Lista vazia nunca inicia, e o início nunca é desfeito.
 function mockRequirementsMet(claim) {
     const required = (claim.folders || [])
         .filter(f => f.category !== 'gerencial')
@@ -91,8 +93,10 @@ function mockRequirementsMet(claim) {
     if (required.length === 0) return false;
     let board = null;
     try { board = JSON.parse(sessionStorage.getItem(persistKey(claim.id)) || 'null'); } catch { /* ignore */ }
-    const withFile = new Set((board?.decks || [])
-        .filter(d => (d.arquivos || []).length > 0)
+    const decks = board?.decks || [];
+    const stats = mockCommentStats(claim.id, decks);
+    const withFile = new Set(decks
+        .filter(d => (d.arquivos || []).length > 0 || commentsProve(d, stats[d.id]))
         .flatMap(d => d.tarefaIds || []));
     const checked = claim.checklistState || {};
     return required.every(r => r.received || checked[r.key] || withFile.has(r.key));
