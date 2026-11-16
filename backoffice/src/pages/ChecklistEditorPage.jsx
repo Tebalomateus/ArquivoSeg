@@ -5,7 +5,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { yaml } from '@codemirror/lang-yaml';
 import { oneDark } from '@codemirror/theme-one-dark';
 import jsYaml from 'js-yaml';
-import { getChecklistRaw, putChecklist } from '../api/backoffice';
+import { getChecklistRaw, listChecklists, putChecklist } from '../api/backoffice';
 import { NEW_TEMPLATE, TEMPLATES } from '../constants/templates';
 
 // O que o servidor recusa com 422 (domain/checklist/validate.go), conferido
@@ -51,7 +51,9 @@ export default function ChecklistEditorPage() {
     const [parseError, setParseError] = useState(null);
     const [preview, setPreview] = useState(null);
     const [showPreview, setShowPreview] = useState(true);
-    const [newTypeName, setNewTypeName] = useState(template?.type || '');
+    // Começa vazio mesmo vindo de um modelo: o PUT é upsert, e herdar o
+    // identificador do modelo (padrao) faria o tipo novo sobrescrevê-lo.
+    const [newTypeName, setNewTypeName] = useState('');
 
     useEffect(() => {
         if (isNew) return;
@@ -96,7 +98,16 @@ export default function ChecklistEditorPage() {
         setSaving(true);
         setError(null);
         try {
-            await putChecklist(tenantId, finalType, content);
+            if (isNew) {
+                const existing = await listChecklists(tenantId);
+                if ((existing?.data || []).includes(finalType)) {
+                    setError(`Já existe um tipo "${finalType}". Escolha outro identificador ou edite o existente.`);
+                    return;
+                }
+            }
+            // O YAML do modelo traz type: padrao; o tipo novo leva o próprio nome.
+            const body = isNew ? content.replace(/^type:.*$/m, `type: ${finalType}`) : content;
+            await putChecklist(tenantId, finalType, body);
             setSaveSuccess(true);
             if (isNew) {
                 navigate(`/tenants/${tenantId}/checklists/${encodeURIComponent(finalType)}`, { replace: true });
