@@ -135,8 +135,12 @@ export function describeEvent(event) {
             out.note = meta.motivo || meta.reason || null;
             break;
         }
+        // Comentário de deck traz o código do deck (deck_codigo); o trecho
+        // (excerpt) vale também para o removido, que já não tem texto.
         case 'comment.created':
         case 'comment.updated':
+        case 'comment.deleted':
+            out.subject = meta.deck_codigo || null;
             out.note = meta.body || meta.excerpt || null;
             break;
         case 'share.created':
