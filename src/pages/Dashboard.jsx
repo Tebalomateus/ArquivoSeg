@@ -95,26 +95,30 @@ export default function Dashboard() {
         }).slice(0, 6);
     }, [myClaims]);
 
-    // MEMOIZED: Completion by folder
+    // MEMOIZED: Completion by step. As etapas vêm do tipo de cada sinistro, então
+    // agrupam pelo nome (na ordem em que aparecem) e cada média conta só os
+    // sinistros que têm a etapa. Pastas privadas (Gerencial) não entram.
     const categoryStats = useMemo(() => {
-        const categories = [
-            { label: 'Causa', key: 'causa', color: 'bg-blue-600' },
-            { label: 'Prejuízo', key: 'prejuizo', color: 'bg-amber-500' },
-            { label: 'Liquidação', key: 'liquidacao', color: 'bg-indigo-500' },
-            // Gerencial é privada e não entra na conclusão.
-        ];
-
-        return categories.map(cat => {
-            const mean = (field) => (portfolioStats.total > 0
-                ? Math.round(myClaims.reduce((acc, c) => {
-                    const folder = (c.folders || []).find(f => f.category === cat.key);
-                    return acc + ((folder && progressById[c.id]?.folders[folder.id]?.[field]) || 0);
-                }, 0) / portfolioStats.total)
-                : 0);
-            const value = mean('atendidoPct');
-            return { ...cat, value, sent: Math.min(100 - value, mean('enviadoPct')) };
+        const colors = ['bg-blue-600', 'bg-amber-500', 'bg-indigo-500', 'bg-emerald-500', 'bg-rose-500', 'bg-cyan-600'];
+        const steps = new Map();
+        for (const c of myClaims) {
+            for (const folder of c.folders || []) {
+                if (folder.private || folder.category === 'gerencial') continue;
+                const pf = progressById[c.id]?.folders[folder.id];
+                if (!pf) continue;
+                const key = (folder.name || '').trim().toLowerCase();
+                const acc = steps.get(key) || { label: folder.name, key, n: 0, atendido: 0, enviado: 0 };
+                acc.n += 1;
+                acc.atendido += pf.atendidoPct || 0;
+                acc.enviado += pf.enviadoPct || 0;
+                steps.set(key, acc);
+            }
+        }
+        return [...steps.values()].slice(0, colors.length).map((st, i) => {
+            const value = Math.round(st.atendido / st.n);
+            return { label: st.label, key: st.key, color: colors[i], value, sent: Math.min(100 - value, Math.round(st.enviado / st.n)) };
         });
-    }, [myClaims, portfolioStats.total, progressById]);
+    }, [myClaims, progressById]);
 
     const { total, inAnal, comp, crit, avg } = portfolioStats;
 
