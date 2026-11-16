@@ -5,6 +5,7 @@ import { logoutSession } from '../api/auth';
 import { zitadel } from '../api/zitadel';
 import { getToken, isMockEnabled, setToken } from '../api/client';
 import { parseFolderFromFileName } from '../api/files';
+import { stepsToFolders } from '../constants/claimTypes';
 
 const ClaimsContext = createContext();
 
@@ -31,6 +32,9 @@ const randId = () => (typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID().slice(0, 9)
     : Math.random().toString(36).slice(2, 11));
 
+// Pastas de antes dos tipos de sinistro: Causa/Prejuízo/Liquidação fixas. Ficam
+// para o sinistro sem `metadata.folders` (anterior à migration 004); os novos
+// nascem das etapas do tipo escolhido (stepsToFolders).
 const buildFolders = (initialChecklist) => [
     { id: 'f1-' + Date.now(), name: 'Causa', category: 'causa', completion: 0, documents: [], checklist: (initialChecklist || []).filter(i => i.folder === 'Causa').map(i => ({ ...i, id: randId(), received: false })) },
     { id: 'f2-' + Date.now(), name: 'Prejuízo', category: 'prejuizo', completion: 0, documents: [], checklist: (initialChecklist || []).filter(i => i.folder === 'Prejuízo').map(i => ({ ...i, id: randId(), received: false })) },
@@ -44,7 +48,7 @@ const buildFolders = (initialChecklist) => [
 const METADATA_KEYS = [
     'number', 'insurer', 'insuredName', 'policyNumber', 'policyStartDate', 'policyEndDate',
     'retroactiveDate', 'modality', 'brokerName', 'brokerClaimId', 'adjusterName', 'adjusterClaimId',
-    'occurrenceDate', 'occurrenceLocation', 'observations', 'progress',
+    'occurrenceDate', 'occurrenceLocation', 'observations', 'disclaimer', 'progress',
     'shareToken', 'activities', 'reviewedFiles',
 ];
 
@@ -111,6 +115,7 @@ const adaptProcessToClaim = (proc, cached) => {
         occurrenceDate: meta.occurrenceDate || '',
         occurrenceLocation: meta.occurrenceLocation || '',
         observations: meta.observations || '',
+        disclaimer: meta.disclaimer || '',
         progress: meta.progress ?? 0,
         activities: Array.isArray(meta.activities) ? meta.activities : [],
         reviewedFiles: meta.reviewedFiles || {},
@@ -285,8 +290,11 @@ export const ClaimsProvider = ({ children }) => {
         const description = newClaim.description || '';
 
         // Build the local claim shape first so we can derive the metadata payload.
+        // As etapas do tipo viram as pastas; `steps`/`initialChecklist` são só
+        // entrada e não vão para o sinistro.
+        const { steps, initialChecklist, claimType, ...fields } = newClaim;
         const draftClaim = {
-            ...newClaim,
+            ...fields,
             title,
             description,
             progress: 0,
@@ -299,7 +307,8 @@ export const ClaimsProvider = ({ children }) => {
                 date: now.toLocaleString('pt-BR'),
                 type: 'CREATE',
             }],
-            folders: buildFolders(newClaim.initialChecklist),
+            folders: Array.isArray(steps) ? stepsToFolders(steps, now) : buildFolders(initialChecklist),
+            claimType: claimType || null,
             shareToken: randId(),
         };
 
@@ -312,7 +321,7 @@ export const ClaimsProvider = ({ children }) => {
                 title,
                 description,
                 metadata: extractMetadata(draftClaim),
-                claim_type: newClaim.claimType || null,
+                claim_type: claimType || null,
             });
             processId = proc.id;
             backCreatedAt = proc.created_at || backCreatedAt;
@@ -442,11 +451,14 @@ export const ClaimsProvider = ({ children }) => {
     };
 
     // Group backend files into the local folder structure by file_name prefix (causa__, prejuizo__, ...).
-    // Files without a recognized prefix fall into "gerencial" (private folder).
+    // As categorias são as das pastas do sinistro (as etapas do tipo), não uma
+    // lista fixa. Files without a recognized prefix fall into "gerencial" (private folder).
     const groupFilesIntoFolders = (folders, files, commentByFileVerId = {}) => {
-        const byCategory = { causa: [], prejuizo: [], liquidacao: [], gerencial: [] };
+        const byCategory = { gerencial: [] };
+        for (const f of folders) if (f.category) byCategory[f.category] = [];
+        const known = Object.keys(byCategory);
         for (const fv of files) {
-            const { category } = parseFolderFromFileName(fv.file_name);
+            const { category } = parseFolderFromFileName(fv.file_name, known);
             const target = category && byCategory[category] !== undefined ? category : 'gerencial';
             byCategory[target].push(fileVerToDoc(fv, commentByFileVerId[fv.id]));
         }
@@ -677,6 +689,7 @@ export const ClaimsProvider = ({ children }) => {
     );
 
     const updateClaimObservations = (id, observations) => updateClaimLocal(id, c => ({ ...c, observations }));
+    const updateClaimDisclaimer = (id, disclaimer) => updateClaimLocal(id, c => ({ ...c, disclaimer }));
 
     const refreshUsers = useCallback(async () => {
         if (isMockEnabled() || !getToken()) return;
@@ -779,7 +792,7 @@ export const ClaimsProvider = ({ children }) => {
             currentUser, setCurrentUser, logout, tokenEpoch,
             claims, addClaim, updateChecklistStatus, markFileReviewed, addChecklistItem,
             transitionStatus, archiveClaim, updateClaimFields, fetchSingleClaim,
-            logView, updateClaimObservations, setClaimDeadline,
+            logView, updateClaimObservations, updateClaimDisclaimer, setClaimDeadline,
             uploadFileToClaim, addCommentToClaim, refreshClaimFiles, openDocument, downloadDocument,
             deleteDocument, listFileVersions,
             updateAnnotation, deleteAnnotation,

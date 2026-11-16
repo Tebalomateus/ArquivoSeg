@@ -8,15 +8,14 @@ import {
     Gauge,
     HardDrive,
     Info,
-    ListChecks,
     Lock,
+    Megaphone,
     MessageSquare,
     Pencil,
     Share2,
     Shield,
     X,
 } from 'lucide-react';
-import ChecklistPanel from '../components/ChecklistPanel';
 import KanbanBoard, { LOOSE_FOLDER_ID } from '../components/KanbanBoard';
 import GerencialTree from '../components/GerencialTree';
 import { useClaims } from '../context/ClaimsContext';
@@ -60,6 +59,64 @@ const STATUS_LABELS_PT = {
  * documentos avulsos, a visão gerencial e a auditoria. Abaixo de ~1024px as
  * duas colunas empilham.
  */
+/**
+ * Disclaimer do sinistro (metadata.disclaimer): faixa no topo de toda etapa.
+ * Quem pode editar o sinistro edita ali mesmo; sem texto, só essa pessoa vê o
+ * botão de adicionar.
+ */
+function DisclaimerBanner({ text, canEdit, onSave }) {
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(text || '');
+    useEffect(() => { if (!editing) setDraft(text || ''); }, [text, editing]);
+
+    if (!text && !canEdit) return null;
+
+    if (editing) {
+        const save = (e) => {
+            e.preventDefault();
+            onSave(draft.trim());
+            setEditing(false);
+        };
+        return (
+            <form onSubmit={save} className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2" data-testid="claim-disclaimer">
+                <label htmlFor="disclaimer-edit" className="text-[10px] font-black uppercase tracking-widest text-amber-800 flex items-center gap-1.5">
+                    <Megaphone size={12} /> Disclaimer
+                </label>
+                <textarea id="disclaimer-edit" value={draft} autoFocus rows={3}
+                    onChange={(e) => setDraft(e.target.value.slice(0, 2000))}
+                    className="w-full px-3 py-2 text-sm border border-amber-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-amber-400 resize-none" />
+                <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setEditing(false)} className="px-3 py-1.5 text-xs font-bold text-gray-600 rounded-lg hover:bg-amber-100">Cancelar</button>
+                    <button type="submit" className="px-3 py-1.5 text-xs font-bold text-white bg-amber-600 rounded-lg hover:bg-amber-700">Salvar disclaimer</button>
+                </div>
+            </form>
+        );
+    }
+
+    if (!text) {
+        return (
+            <button type="button" onClick={() => setEditing(true)}
+                className="text-[11px] font-bold text-amber-700 hover:underline flex items-center gap-1.5">
+                <Megaphone size={12} /> Adicionar disclaimer
+            </button>
+        );
+    }
+
+    return (
+        <div role="note" aria-label="Disclaimer" data-testid="claim-disclaimer"
+            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
+            <Megaphone size={16} className="text-amber-600 mt-0.5 shrink-0" />
+            <p className="flex-1 text-sm text-amber-900 whitespace-pre-line">{text}</p>
+            {canEdit && (
+                <button type="button" onClick={() => setEditing(true)} aria-label="Editar disclaimer" title="Editar disclaimer"
+                    className="p-1 text-amber-600 hover:text-amber-800 shrink-0">
+                    <Pencil size={14} />
+                </button>
+            )}
+        </div>
+    );
+}
+
 export default function ClaimDetails() {
     const { id } = useParams();
     const {
@@ -75,6 +132,7 @@ export default function ClaimDetails() {
         resolveActorLabel,
         addChecklistItem,
         updateClaimObservations,
+        updateClaimDisclaimer,
         setClaimDeadline,
     } = useClaims();
 
@@ -228,11 +286,12 @@ export default function ClaimDetails() {
     const canManageDocuments = can('arquivo.subir');
     const canSeeLoose = can('arquivo.listar');
 
-    // Abas do sinistro: uma por pasta de trabalho, depois os avulsos, a visão
-    // gerencial e a auditoria. A pasta "gerencial" do metadata não vira aba de
-    // pasta — a aba Gerencial é a árvore consolidada de todas, e quem a vê é
-    // quem tem processo.verGerencial (o servidor recusa a rota sem ela).
-    const folderTabs = claim.folders.filter(f => f.category !== 'gerencial');
+    // Abas do sinistro: as etapas (as pastas, na ordem do tipo de sinistro),
+    // depois os avulsos, a visão gerencial e a auditoria. A pasta privada
+    // ("gerencial") não é etapa — a aba Gerencial é a árvore consolidada de
+    // todas, e quem a vê é quem tem processo.verGerencial (o servidor recusa a
+    // rota sem ela).
+    const folderTabs = claim.folders.filter(f => !f.private && f.category !== 'gerencial');
     const tabIds = [
         ...folderTabs.map(f => f.id),
         ...(canSeeLoose ? [LOOSE_FOLDER_ID] : []),
@@ -262,14 +321,13 @@ export default function ClaimDetails() {
     const segClass = (on) => `px-3.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${on ? 'bg-white shadow-sm text-primary' : 'text-gray-500 hover:text-gray-700'}`;
 
     const renderFolderContent = () => {
-        if (viewMode === 'decks') {
+        if (viewMode === 'decks' || !canManageDocuments) {
             return (
                 <KanbanBoard claim={claim} currentUser={currentUser} folderId={currentFolder.id}
                     onLooseCount={setLooseCount}
                     onCreateTask={canEditClaimMeta ? (fid, name) => addChecklistItem(claim.id, fid, name) : null} />
             );
         }
-        if (viewMode === 'checklist' || !canManageDocuments) return <ChecklistPanel claim={claim} />;
         return (
             <div className="space-y-6">
                 {/* Management View: Fluxo / Status */}
@@ -519,12 +577,27 @@ export default function ClaimDetails() {
 
                 <div className="flex-1 min-w-0">
                     <div role="tablist" aria-label="Seções do sinistro" className="flex items-center gap-1 border-b border-gray-200/80 overflow-x-auto">
-                        {folderTabs.map(folder => (
-                            <button key={folder.id} type="button" role="tab" aria-selected={activeTab === folder.id}
-                                onClick={() => setTab(folder.id)} className={tabClass(activeTab === folder.id)}>
-                                {folder.name} <span className="text-gray-400 font-semibold">({folder.completion}%)</span>
-                            </button>
-                        ))}
+                        {/* Seletor de etapas: as etapas do tipo, em ordem, como um
+                            stepper. O número vem do CSS (data-step), fora do
+                            texto e do nome acessível, que continua "Etapa (N%)". */}
+                        <div className="flex items-center" data-testid="step-selector">
+                            {folderTabs.map((folder, i) => {
+                                const on = activeTab === folder.id;
+                                return (
+                                    <div key={folder.id} className="flex items-center">
+                                        {i > 0 && <span aria-hidden="true" className="w-4 h-px bg-gray-300 shrink-0" />}
+                                        <button type="button" role="tab" aria-selected={on}
+                                            onClick={() => setTab(folder.id)} className={tabClass(on)}>
+                                            <span aria-hidden="true" data-step={i + 1} className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 before:content-[attr(data-step)] ${on ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-500'}`} />
+                                            {folder.name} <span className="text-gray-400 font-semibold">({folder.completion}%)</span>
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {folderTabs.length > 0 && (canSeeLoose || canSeeGerencial || canSeeAudit) && (
+                            <span aria-hidden="true" className="mx-2 h-5 w-px bg-gray-200 shrink-0" />
+                        )}
                         {canSeeLoose && (
                             <button type="button" role="tab" data-testid="folder-avulsos" aria-selected={activeTab === LOOSE_FOLDER_ID}
                                 onClick={() => setTab(LOOSE_FOLDER_ID)} className={tabClass(activeTab === LOOSE_FOLDER_ID)}>
@@ -554,20 +627,21 @@ export default function ClaimDetails() {
                     <div className="mt-4 space-y-4" role="tabpanel">
                         {currentFolder ? (
                             <>
-                                <div className="flex p-1 bg-gray-100 rounded-xl border border-gray-200 w-fit max-w-full overflow-x-auto" role="group" aria-label="Modo de visualização">
-                                    <button type="button" onClick={() => setViewMode('checklist')} aria-pressed={viewMode === 'checklist'} className={segClass(viewMode === 'checklist')}>
-                                        <ListChecks size={13} />
-                                        Checklist
-                                    </button>
-                                    <button type="button" onClick={() => setViewMode('decks')} aria-pressed={viewMode === 'decks'} className={segClass(viewMode === 'decks')}>
-                                        Decks
-                                    </button>
-                                    {canManageDocuments && (
+                                <DisclaimerBanner
+                                    text={claim.disclaimer}
+                                    canEdit={canEditClaimMeta}
+                                    onSave={(text) => updateClaimDisclaimer(claim.id, text)}
+                                />
+                                {canManageDocuments && (
+                                    <div className="flex p-1 bg-gray-100 rounded-xl border border-gray-200 w-fit max-w-full overflow-x-auto" role="group" aria-label="Modo de visualização">
+                                        <button type="button" onClick={() => setViewMode('decks')} aria-pressed={viewMode === 'decks'} className={segClass(viewMode === 'decks')}>
+                                            Decks
+                                        </button>
                                         <button type="button" onClick={() => setViewMode('management')} aria-pressed={viewMode === 'management'} className={segClass(viewMode === 'management')}>
                                             Gerenciamento
                                         </button>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
                                 {renderFolderContent()}
                             </>
                         ) : activeTab === LOOSE_FOLDER_ID ? (

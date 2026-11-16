@@ -169,7 +169,7 @@ test('a pasta gerencial abre a árvore em qualquer modo, e recolher esconde as t
         },
     });
 
-    await page.getByRole('button', { name: 'Checklist' }).click();
+    await page.getByRole('button', { name: 'Gerenciamento' }).click();
     const tree = await abrirGerencial(page);
 
     const bo = tree.getByTestId(`gerencial-task-${TASK.bo}`);

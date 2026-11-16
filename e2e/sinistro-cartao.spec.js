@@ -55,7 +55,7 @@ test('uma aba por pasta, com o seletor de modo só dentro das pastas', async ({ 
     await expect(page.getByRole('tab', { name: /^Causa/ })).toHaveAttribute('aria-selected', 'true');
 
     const modes = page.getByRole('group', { name: 'Modo de visualização' });
-    await expect(modes.getByRole('button')).toHaveText(['Checklist', 'Decks', 'Gerenciamento']);
+    await expect(modes.getByRole('button')).toHaveText(['Decks', 'Gerenciamento']);
 
     await page.getByRole('tab', { name: /^Prejuízo/ }).click();
     await expect(page.getByRole('tab', { name: /^Prejuízo/ })).toHaveAttribute('aria-selected', 'true');
