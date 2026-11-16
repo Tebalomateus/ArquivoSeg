@@ -1,111 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Save, X, Plus, Trash2, Shield, Info, Link as LinkIcon, Building2, User, FileText, Calendar, MapPin, Briefcase, ArrowLeft, ListChecks, AlertCircle } from 'lucide-react';
+import { Save, X, Plus, Trash2, Info, Building2, User, FileText, Briefcase, ArrowLeft, ListChecks, AlertCircle, Loader2 } from 'lucide-react';
 import { useClaims } from '../context/ClaimsContext';
-import { GENERAL_CHECKLIST } from '../constants/config';
-import { listChecklistTypes } from '../api/checklist';
-import { isMockEnabled } from '../api/client';
+import { INSURERS_CONFIG } from '../constants/config';
+import { DEFAULT_CLAIM_TYPE, defToSteps, draftKey } from '../constants/claimTypes';
+import { loadClaimTypes, loadClaimTypeDef } from '../api/checklist';
 import { useConfirm, useUnsavedGuard } from '../components/ConfirmDialog';
-
-// Configuração de Seguradoras e Modalidades com suas listas de documentos padrão
-const INSURERS_CONFIG = {
-    'Porto Seguro': {
-        id: 'porto',
-        modalities: {
-            'Incêndio': [
-                { name: 'Laudo do Corpo de Bombeiros', folder: 'Causa', required: true },
-                { name: 'Boletim de Ocorrência', folder: 'Causa', required: true },
-                { name: 'Fotos do Local', folder: 'Causa', required: true },
-                { name: 'Planilha de Bens Danificados', folder: 'Prejuízo', required: true },
-                { name: 'Notas Fiscais dos Bens', folder: 'Prejuízo', required: true },
-                { name: 'Orçamentos de Reparo (3x)', folder: 'Prejuízo', required: true },
-            ],
-            'Roubo/Furto': [
-                { name: 'Boletim de Ocorrência', folder: 'Causa', required: true },
-                { name: 'Manifesto de Carga', folder: 'Causa', required: true },
-                { name: 'CNH do Motorista', folder: 'Causa', required: true },
-                { name: 'Notas Fiscais da Carga', folder: 'Prejuízo', required: true },
-                { name: 'Relatório de Rastreamento', folder: 'Causa', required: false },
-            ],
-            'Colisão Veicular': [
-                { name: 'B.O do Acidente', folder: 'Causa', required: true },
-                { name: 'CNH do Condutor', folder: 'Causa', required: true },
-                { name: 'Fotos do Veículo', folder: 'Causa', required: true },
-                { name: 'Orçamentos (3x)', folder: 'Prejuízo', required: true },
-            ],
-        }
-    },
-    'Allianz': {
-        id: 'allianz',
-        modalities: {
-            'Alagamento': [
-                { name: 'Laudo Técnico Municipal', folder: 'Causa', required: true },
-                { name: 'Documentos do Imóvel', folder: 'Causa', required: true },
-                { name: 'Fotos do Alagamento', folder: 'Causa', required: true },
-                { name: 'Relatório de Máquinas Danificadas', folder: 'Prejuízo', required: true },
-                { name: 'Inventário de Estoque', folder: 'Prejuízo', required: true },
-            ],
-            'Vendaval': [
-                { name: 'Laudo Meteorológico', folder: 'Causa', required: true },
-                { name: 'Fotos dos Danos', folder: 'Causa', required: true },
-                { name: 'Orçamentos de Reparo', folder: 'Prejuízo', required: true },
-            ],
-        }
-    },
-    'Tokio Marine': {
-        id: 'tokio',
-        modalities: {
-            'Responsabilidade Civil': [
-                { name: 'Documentação do Reclamante', folder: 'Causa', required: true },
-                { name: 'Laudo Pericial', folder: 'Causa', required: true },
-                { name: 'Comprovantes de Danos', folder: 'Prejuízo', required: true },
-            ],
-            'Riscos Ambientais': [
-                { name: 'Laudo Ambiental', folder: 'Causa', required: true },
-                { name: 'Relatório de Impacto', folder: 'Causa', required: true },
-                { name: 'Licenças Ambientais', folder: 'Causa', required: true },
-                { name: 'Custos de Remediação', folder: 'Prejuízo', required: true },
-                { name: 'Plano de Ação Corretiva', folder: 'Prejuízo', required: true },
-            ],
-            'D&O': [
-                { name: 'Notificação/Citação', folder: 'Causa', required: true },
-                { name: 'Procuração', folder: 'Causa', required: true },
-                { name: 'Custos de Defesa', folder: 'Prejuízo', required: true },
-            ],
-        }
-    },
-    'Bradesco Seguros': {
-        id: 'bradesco',
-        modalities: {
-            'Frota': [
-                { name: 'B.O do Acidente', folder: 'Causa', required: true },
-                { name: 'CNH do Condutor', folder: 'Causa', required: true },
-                { name: 'CRLV do Veículo', folder: 'Causa', required: true },
-                { name: 'Orçamentos (3x)', folder: 'Prejuízo', required: true },
-            ],
-            'Empresarial': [
-                { name: 'Contrato Social', folder: 'Causa', required: true },
-                { name: 'Laudo Pericial', folder: 'Causa', required: true },
-                { name: 'Inventário de Bens', folder: 'Prejuízo', required: true },
-            ],
-        }
-    },
-    'SulAmérica': {
-        id: 'sulamerica',
-        modalities: {
-            'Incêndio': [
-                { name: 'Laudo do Corpo de Bombeiros', folder: 'Causa', required: true },
-                { name: 'Boletim de Ocorrência', folder: 'Causa', required: true },
-                { name: 'Planilha de Bens', folder: 'Prejuízo', required: true },
-            ],
-            'Equipamentos': [
-                { name: 'Termo de Vistoria', folder: 'Causa', required: true },
-                { name: 'Nota Fiscal do Equipamento', folder: 'Prejuízo', required: true },
-                { name: 'Orçamento de Reparo/Substituição', folder: 'Prejuízo', required: true },
-            ],
-        }
-    },
-};
 
 const br = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
 
@@ -122,8 +22,9 @@ export default function NewClaim() {
     const ask = useConfirm();
     const { addClaim, claims, clients } = useClaims();
 
-    // Combine hardcoded config (which provides modality templates) with the
-    // tenant's registered insurers/brokers from the backend clients API.
+    // Seguradoras do config (com as modalidades sugeridas) mais as cadastradas
+    // em clientes. Seguradora e modalidade são só dados do sinistro: as etapas
+    // e os documentos vêm do tipo de sinistro.
     const apiInsurerNames = (clients || [])
         .filter(c => c.type === 'SEGURADORA')
         .map(c => c.name);
@@ -135,16 +36,67 @@ export default function NewClaim() {
         ...apiInsurerNames,
     ])).sort((a, b) => a.localeCompare(b));
 
-    // Tipo de sinistro (checklist dinâmica do S3)
+    // Tipo de sinistro → etapas. A definição do tipo (backoffice) vira um
+    // rascunho editável aqui; o que se muda vale só para este sinistro.
+    const [claimTypes, setClaimTypes] = useState([]);
     const [claimType, setClaimType] = useState('');
-    const [availableClaimTypes, setAvailableClaimTypes] = useState([]);
+    const [steps, setSteps] = useState([]);
+    const [stepsEdited, setStepsEdited] = useState(false);
+    const [loadingDef, setLoadingDef] = useState(false);
+    const [defError, setDefError] = useState(null);
+
+    const applyType = async (type) => {
+        setClaimType(type);
+        setStepsEdited(false);
+        setDefError(null);
+        if (!type) { setSteps([]); return; }
+        setLoadingDef(true);
+        try {
+            const def = await loadClaimTypeDef(type);
+            setSteps(defToSteps(def));
+        } catch (e) {
+            setSteps([]);
+            setDefError(e?.message || 'Não foi possível carregar as etapas deste tipo.');
+        } finally {
+            setLoadingDef(false);
+        }
+    };
 
     useEffect(() => {
-        if (isMockEnabled()) return;
-        listChecklistTypes()
-            .then(res => setAvailableClaimTypes(res?.data || []))
-            .catch(() => {});
+        let off = false;
+        loadClaimTypes().then(types => {
+            if (off) return;
+            setClaimTypes(types);
+            // O padrão já vem escolhido quando existe; com um tipo só, é ele.
+            const initial = types.find(t => t.type === DEFAULT_CLAIM_TYPE.type) || (types.length === 1 ? types[0] : null);
+            if (initial) applyType(initial.type);
+        });
+        return () => { off = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    const handleTypeChange = async (type) => {
+        if (type === claimType) return;
+        if (stepsEdited && !await ask({
+            title: 'Trocar o tipo de sinistro?',
+            message: 'As etapas são recarregadas do novo tipo e as alterações feitas nos itens se perdem.',
+            confirmLabel: 'Trocar o tipo',
+            cancelLabel: 'Manter',
+            tone: 'warning',
+        })) return;
+        applyType(type);
+    };
+
+    const editSteps = (fn) => { setSteps(prev => fn(prev)); setStepsEdited(true); };
+    const updateItem = (stepKey, itemKey, patch) => editSteps(prev => prev.map(st => st.key !== stepKey ? st : {
+        ...st, items: st.items.map(it => it.key === itemKey ? { ...it, ...patch } : it),
+    }));
+    const removeItem = (stepKey, itemKey) => editSteps(prev => prev.map(st => st.key !== stepKey ? st : {
+        ...st, items: st.items.filter(it => it.key !== itemKey),
+    }));
+    const addItem = (stepKey) => editSteps(prev => prev.map(st => st.key !== stepKey ? st : {
+        ...st, items: [...st.items, { key: draftKey(), id: '', label: '', required: true }],
+    }));
 
     // Informações da Apólice
     const [claimNumber, setClaimNumber] = useState('');
@@ -172,18 +124,15 @@ export default function NewClaim() {
     const [occurrenceLocation, setOccurrenceLocation] = useState('');
     const [description, setDescription] = useState('');
 
-    // Checklist dinâmico
-    const [checklist, setChecklist] = useState([]);
-
     // Sair daqui joga fora tudo: o formulário não tem rascunho, e nada do que foi
     // digitado existe em outro lugar até o Criar Sinistro. Vale para as três
     // saídas — o X, o Cancelar e o voltar do navegador.
     const dirty = [
-        claimType, claimNumber, insurer, customInsurer, policyNumber, policyStartDate,
+        claimNumber, insurer, customInsurer, policyNumber, policyStartDate,
         policyEndDate, retroactiveDate, modality, customModality, insuredName, brokerName,
         brokerClaimId, adjusterName, adjusterClaimId, title, occurrenceDate,
         occurrenceLocation, description,
-    ].some(v => (v || '').trim() !== '');
+    ].some(v => (v || '').trim() !== '') || stepsEdited;
 
     useUnsavedGuard(dirty);
 
@@ -265,12 +214,14 @@ export default function NewClaim() {
             }
         }
 
-        if (checklist.some(item => !item.name.trim())) {
-            e.checklist = 'Há documento sem nome na lista. Dê um nome ou remova a linha.';
+        if (!claimType) { e.claimType = 'Selecione o tipo de sinistro.'; f.add('claimType'); }
+        else if (!loadingDef && steps.length === 0) { e.claimType = 'Este tipo não tem etapas. Escolha outro tipo.'; }
+        if (steps.some(st => st.items.some(it => !it.label.trim()))) {
+            e.checklist = 'Há item sem nome nas etapas. Dê um nome ou remova a linha.';
         }
         return { erros: e, faltando: f };
     }, [claimNumber, claims, effectiveInsurer, insuredName, policyStartDate, policyEndDate,
-        retroactiveDate, occurrenceDate, checklist, hoje]);
+        retroactiveDate, occurrenceDate, claimType, loadingDef, steps, hoje]);
 
     const avisos = useMemo(() => {
         const a = {};
@@ -292,44 +243,23 @@ export default function NewClaim() {
     // gravar é que não foi.
     const [erroAoSalvar, setErroAoSalvar] = useState(null);
     const [salvando, setSalvando] = useState(false);
-    const primeiroSemNome = checklist.findIndex(item => !item.name.trim());
+    const primeiroSemNome = steps.flatMap(st => st.items).find(it => !it.label.trim())?.key;
     const erroDe = (campo) => (tentou || !faltando.has(campo) ? erros[campo] : undefined);
 
-    // Quando seguradora ou modalidade mudam, atualizar checklist
     const handleInsurerChange = (value) => {
         setInsurer(value);
         setCustomInsurer('');
         setModality('');
         setCustomModality('');
-        setChecklist([]);
-    };
-
-    const buildChecklist = (modalityDocs) => {
-        const allDocs = [...GENERAL_CHECKLIST, ...(modalityDocs || [])];
-        return allDocs.map((doc, idx) => ({ id: Date.now() + idx, ...doc, received: false }));
     };
 
     const handleModalityChange = (value) => {
         setModality(value);
         setCustomModality('');
-        if (value === '__other__') {
-            setChecklist(buildChecklist([]));
-        } else if (insurer && value && INSURERS_CONFIG[insurer]?.modalities[value]) {
-            setChecklist(buildChecklist(INSURERS_CONFIG[insurer].modalities[value]));
-        } else {
-            setChecklist([]);
-        }
-    };
-
-    const addDoc = () => {
-        setChecklist([...checklist, { id: Date.now(), name: '', folder: 'Causa', required: true, received: false }]);
-    };
-
-    const removeDoc = (id) => {
-        setChecklist(checklist.filter(item => item.id !== id));
     };
 
     const handleSave = async () => {
+        if (loadingDef) return; // as etapas ainda estão chegando
         setTentou(true);
         setErroAoSalvar(null);
         const primeiro = Object.keys(erros)[0];
@@ -364,7 +294,7 @@ export default function NewClaim() {
                 occurrenceDate,
                 occurrenceLocation,
                 description,
-                initialChecklist: checklist,
+                steps,
                 claimType: claimType || null,
             });
         } catch (e) {
@@ -406,25 +336,27 @@ export default function NewClaim() {
                         Informações da Apólice
                     </h3>
 
-                    {availableClaimTypes.length > 0 && (
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                                <ListChecks size={13} className="text-blue-600" />
-                                Tipo de Sinistro
-                            </label>
-                            <select
-                                value={claimType}
-                                onChange={(e) => setClaimType(e.target.value)}
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white"
-                            >
-                                <option value="">Selecione o tipo...</option>
-                                {availableClaimTypes.map(t => (
-                                    <option key={t} value={t}>{t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
-                                ))}
-                            </select>
-                            <p className="text-[10px] text-gray-400 mt-1">Define a checklist dinâmica de documentos</p>
-                        </div>
-                    )}
+                    <div>
+                        <label htmlFor="campo-claimType" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                            <ListChecks size={13} className="text-blue-600" />
+                            Tipo de Sinistro *
+                        </label>
+                        <select
+                            id="campo-claimType"
+                            value={claimType}
+                            onChange={(e) => handleTypeChange(e.target.value)}
+                            aria-invalid={!!erroDe('claimType')}
+                            className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 outline-none transition-all bg-white ${erroDe('claimType') ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500'}`}
+                        >
+                            <option value="">Selecione o tipo...</option>
+                            {claimTypes.map(t => (
+                                <option key={t.type} value={t.type}>{t.title}</option>
+                            ))}
+                        </select>
+                        {erroDe('claimType')
+                            ? <FieldNote error={erroDe('claimType')} />
+                            : <p className="text-[10px] text-gray-400 mt-1">Define as etapas e os documentos do sinistro</p>}
+                    </div>
 
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Nº do Sinistro *</label>
@@ -476,13 +408,14 @@ export default function NewClaim() {
                             <input
                                 type="text"
                                 value={customModality}
-                                onChange={(e) => { setModality('__other__'); setCustomModality(e.target.value); if (checklist.length === 0) setChecklist(buildChecklist([])); }}
+                                onChange={(e) => { setModality('__other__'); setCustomModality(e.target.value); }}
                                 placeholder="Digite a modalidade"
                                 className="w-full px-4 py-2.5 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-blue-50/30 placeholder:text-gray-300"
                             />
                         ) : (
                             <>
                                 <select
+                                    id="campo-modality"
                                     value={modality}
                                     onChange={(e) => handleModalityChange(e.target.value)}
                                     disabled={!insurer}
@@ -506,7 +439,6 @@ export default function NewClaim() {
                                 )}
                             </>
                         )}
-                        <p className="text-[10px] text-gray-400 mt-1">Define a lista de documentos padrão</p>
                     </div>
 
                     <div>
@@ -712,27 +644,21 @@ export default function NewClaim() {
                 </div>
             </div>
 
-            {/* Checklist de Documentos (Full Width) */}
-            <div className="card">
-                <div className="flex items-center justify-between mb-6">
+            {/* Etapas do sinistro (Full Width): o tipo escolhido, editável só para este sinistro. */}
+            <div className="card" data-testid="claim-steps">
+                <div className="flex items-start justify-between gap-4 mb-6">
                     <div>
                         <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                            <Shield size={18} className="text-blue-600" />
-                            Checklist de Documentos
+                            <ListChecks size={18} className="text-blue-600" />
+                            Etapas e Documentos
                         </h3>
-                        {effectiveInsurer && effectiveModality && (
-                            <p className="text-xs text-gray-500 mt-1">
-                                Template: <span className="font-bold">{effectiveInsurer}</span> → <span className="font-bold">{effectiveModality}</span>
-                            </p>
-                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                            {claimType
+                                ? <>Modelo: <span className="font-bold">{claimTypes.find(t => t.type === claimType)?.title || claimType}</span>. As alterações valem só para este sinistro.</>
+                                : 'Escolha o tipo de sinistro para carregar as etapas.'}
+                        </p>
                     </div>
-                    <button
-                        onClick={addDoc}
-                        className="px-4 py-2 border border-blue-100 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors flex items-center gap-2"
-                    >
-                        <Plus size={16} />
-                        Adicionar Documento
-                    </button>
+                    {loadingDef && <Loader2 size={18} className="text-gray-400 animate-spin shrink-0" aria-label="Carregando etapas" />}
                 </div>
 
                 {erroDe('checklist') && (
@@ -741,82 +667,81 @@ export default function NewClaim() {
                     </div>
                 )}
 
-                {checklist.length === 0 ? (
+                {defError ? (
+                    <div className="py-8 text-center border-2 border-dashed border-red-100 rounded-xl">
+                        <AlertCircle size={32} className="mx-auto text-red-300 mb-2" />
+                        <p className="text-sm text-red-600 font-medium">{defError}</p>
+                        <button type="button" onClick={() => applyType(claimType)} className="mt-3 text-xs font-bold text-blue-600 hover:underline">Tentar de novo</button>
+                    </div>
+                ) : steps.length === 0 ? (
                     <div className="py-12 text-center border-2 border-dashed border-gray-200 rounded-xl">
                         <FileText size={40} className="mx-auto text-gray-300 mb-3" />
-                        <p className="text-gray-400 font-medium">Selecione uma seguradora e modalidade para carregar a lista padrão</p>
-                        <p className="text-gray-300 text-sm">ou adicione documentos manualmente</p>
+                        <p className="text-gray-400 font-medium">{loadingDef ? 'Carregando etapas…' : 'Selecione o tipo de sinistro para carregar as etapas'}</p>
                     </div>
                 ) : (
-                    <div className="space-y-2">
-                        <div className="grid grid-cols-12 gap-4 px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                            <div className="col-span-1">#</div>
-                            <div className="col-span-6">Documento</div>
-                            <div className="col-span-3">Pasta</div>
-                            <div className="col-span-1">Obrig.</div>
-                            <div className="col-span-1"></div>
-                        </div>
-                        {checklist.map((item, idx) => (
-                            <div key={item.id} className="grid grid-cols-12 gap-4 items-center p-3 bg-gray-50 rounded-xl border border-gray-100 group hover:bg-white hover:shadow-sm transition-all">
-                                <div className="col-span-1">
-                                    <div className="w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-400">
-                                        {idx + 1}
+                    <ol className="space-y-4">
+                        {steps.map((st, si) => (
+                            <li key={st.key} className="rounded-xl border border-gray-100 overflow-hidden" aria-label={`Etapa ${si + 1}: ${st.title}`}>
+                                <div className="flex items-center justify-between gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <span className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-black shrink-0">{si + 1}</span>
+                                        <h4 className="font-bold text-gray-900 truncate">{st.title}</h4>
+                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider shrink-0">
+                                            {st.items.length} {st.items.length === 1 ? 'item' : 'itens'}
+                                        </span>
                                     </div>
-                                </div>
-                                <div className="col-span-6">
-                                    <input
-                                        id={idx === primeiroSemNome ? 'campo-checklist' : undefined}
-                                        type="text"
-                                        value={item.name}
-                                        onChange={(e) => {
-                                            const next = [...checklist];
-                                            next[idx].name = e.target.value;
-                                            setChecklist(next);
-                                        }}
-                                        placeholder="Nome do documento..."
-                                        aria-invalid={tentou && !item.name.trim()}
-                                        className={`w-full px-3 py-2 bg-white border rounded-lg outline-none focus:ring-1 text-sm ${tentou && !item.name.trim() ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500'}`}
-                                    />
-                                </div>
-                                <div className="col-span-3">
-                                    <select
-                                        value={item.folder}
-                                        onChange={(e) => {
-                                            const next = [...checklist];
-                                            next[idx].folder = e.target.value;
-                                            setChecklist(next);
-                                        }}
-                                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600"
-                                    >
-                                        <option value="Causa">Causa</option>
-                                        <option value="Prejuízo">Prejuízo</option>
-                                        <option value="Liquidação">Liquidação</option>
-                                    </select>
-                                </div>
-                                <div className="col-span-1 flex justify-center">
-                                    <input
-                                        type="checkbox"
-                                        checked={item.required}
-                                        onChange={(e) => {
-                                            const next = [...checklist];
-                                            next[idx].required = e.target.checked;
-                                            setChecklist(next);
-                                        }}
-                                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                </div>
-                                <div className="col-span-1 flex justify-end">
                                     <button
-                                        onClick={() => removeDoc(item.id)}
-                                        className="p-1.5 text-gray-300 hover:text-red-500 transition-colors"
+                                        type="button"
+                                        onClick={() => addItem(st.key)}
+                                        className="px-3 py-1.5 border border-blue-100 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-50 transition-colors flex items-center gap-1.5 shrink-0 bg-white"
                                     >
-                                        <Trash2 size={16} />
+                                        <Plus size={14} />
+                                        Adicionar item
                                     </button>
                                 </div>
-                            </div>
+                                {st.items.length === 0 ? (
+                                    <p className="px-4 py-4 text-xs text-gray-400">Nenhum item nesta etapa.</p>
+                                ) : (
+                                    <ul className="divide-y divide-gray-50">
+                                        {st.items.map((it) => (
+                                            <li key={it.key} className="flex items-center gap-3 px-4 py-2.5 group hover:bg-gray-50/60">
+                                                <input
+                                                    id={it.key === primeiroSemNome ? 'campo-checklist' : undefined}
+                                                    type="text"
+                                                    value={it.label}
+                                                    onChange={(e) => updateItem(st.key, it.key, { label: e.target.value })}
+                                                    placeholder="Nome do documento..."
+                                                    aria-label={`Item da etapa ${st.title}`}
+                                                    aria-invalid={tentou && !it.label.trim()}
+                                                    className={`flex-1 min-w-0 px-3 py-2 bg-white border rounded-lg outline-none focus:ring-1 text-sm ${tentou && !it.label.trim() ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500'}`}
+                                                />
+                                                <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 shrink-0 cursor-pointer select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={it.required}
+                                                        onChange={(e) => updateItem(st.key, it.key, { required: e.target.checked })}
+                                                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                    />
+                                                    Obrigatório
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeItem(st.key, it.key)}
+                                                    className="p-1.5 text-gray-300 hover:text-red-500 transition-colors shrink-0"
+                                                    title="Remover item"
+                                                    aria-label={`Remover ${it.label || 'item'}`}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </li>
                         ))}
-                    </div>
+                    </ol>
                 )}
+
             </div>
 
             {/* O botão continua clicável de propósito: desabilitado, ele não conta

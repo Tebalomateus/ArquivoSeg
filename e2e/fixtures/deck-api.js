@@ -113,6 +113,8 @@ export function initialState() {
         // Definição do checklist do tipo (GET /checklists/:type), quando o
         // processo tem claim_type.
         checklistDef: null,
+        // Tipos de sinistro de GET /checklists, como [{ type, title }].
+        claimTypes: null,
         requests: [],
         nextId: 1,
     };
@@ -438,12 +440,33 @@ function handle(state, method, seg, body) {
         return { status: 201, body: st };
     }
 
+    // Tipos de sinistro: `data` com os slugs (o formato antigo) e `items` com
+    // os títulos, como o servidor lista.
+    if (a === 'checklists' && !b && method === 'GET') {
+        const types = state.claimTypes || [];
+        return ok({ data: types.map((t) => t.type), items: types });
+    }
     if (a === 'checklists' && b && method === 'GET') {
         return state.checklistDef ? ok(state.checklistDef) : fail(404, 'NOT_FOUND', 'checklist not found');
     }
     if (a !== 'processes') return null;
 
     if (!b && method === 'GET') return ok({ data: [state.process], total: 1 });
+    // Abertura: o sinistro criado passa a ser o do estado, para a tela que abre
+    // em seguida ler o que acabou de ser gravado.
+    if (!b && method === 'POST') {
+        state.process = {
+            ...state.process,
+            id: '22222222-2222-4222-8222-222222222222',
+            title: body?.title || '',
+            description: body?.description || '',
+            claim_type: body?.claim_type ?? null,
+            metadata: body?.metadata || {},
+            created_at: now(),
+            updated_at: now(),
+        };
+        return { status: 201, body: state.process };
+    }
     if (b !== state.process.id) return null;
 
     if (!c && method === 'GET') return ok(state.process);
