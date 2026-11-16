@@ -17,8 +17,16 @@ const randId = () => (typeof crypto !== 'undefined' && crypto.randomUUID
 export const persistKey = (claimId) => `deckboard_${claimId}`;
 export const filesKey = (claimId) => `deckfiles_${claimId}`;
 
+// Um deck tem comprovação se tem arquivo ou comentário que prove (ver
+// api/deckComments). commentStats é { [deckId]: { count, lastAt } }, como o
+// servidor devolve no quadro.
+function commentsProve(d, s) {
+    if (!s || !s.count) return false;
+    return !d.devolvidoAt || Date.parse(s.lastAt) > Date.parse(d.devolvidoAt);
+}
+
 export function emptyBoard() {
-    return { decks: [], seq: 0, taskStatus: {}, taskReturns: {} };
+    return { decks: [], seq: 0, taskStatus: {}, taskReturns: {}, commentStats: {} };
 }
 
 // Normalize a server payload (or a stored board) into the working shape.
@@ -29,11 +37,24 @@ export function normalizeBoard(raw) {
         seq: raw.seq ?? raw.decks?.length ?? 0,
         taskStatus: raw.taskStatus || {},
         taskReturns: raw.taskReturns || {},
+        commentStats: raw.commentStats || {},
     };
 }
 
 const grupoFromKey = (itemKey) => (itemKey.includes('.') ? itemKey.slice(0, itemKey.indexOf('.')) : itemKey);
-const clone = (b) => ({ decks: b.decks.map(d => ({ ...d, arquivos: [...d.arquivos], tarefaIds: [...d.tarefaIds] })), seq: b.seq, taskStatus: { ...b.taskStatus }, taskReturns: { ...b.taskReturns } });
+const clone = (b) => ({ decks: b.decks.map(d => ({ ...d, arquivos: [...d.arquivos], tarefaIds: [...d.tarefaIds] })), seq: b.seq, taskStatus: { ...b.taskStatus }, taskReturns: { ...b.taskReturns }, commentStats: { ...(b.commentStats || {}) } });
+
+// A devolução mais recente entre as tarefas, lida antes de createDeck /
+// attachTasks apagarem as devoluções: o deck que as recebe lembra que os
+// comentários anteriores já foram recusados.
+function latestReturn(b, keys) {
+    let latest = null;
+    for (const k of keys) {
+        const at = b.taskReturns[k]?.devolvidaAt;
+        if (at && (!latest || Date.parse(at) > Date.parse(latest))) latest = at;
+    }
+    return latest;
+}
 
 // Remove itemKey from every deck; discard any deck left with no tasks.
 function detachFromAll(b, itemKey, now) {
@@ -48,6 +69,7 @@ export function createDeck(board, { tarefaIds, arquivos = [] }, actor) {
     const b = clone(board);
     const now = new Date().toISOString();
     if (!tarefaIds || tarefaIds.length === 0) throw new Error('Selecione ao menos uma tarefa.');
+    const returnedAt = latestReturn(b, tarefaIds);
     tarefaIds.forEach(k => detachFromAll(b, k, now));
     b.seq += 1;
     const deck = {
@@ -61,6 +83,7 @@ export function createDeck(board, { tarefaIds, arquivos = [] }, actor) {
         createdAt: now,
         updatedAt: now,
     };
+    if (returnedAt) deck.devolvidoAt = returnedAt;
     for (const k of deck.tarefaIds) { b.taskStatus[k] = STATUS.PENDENTE; delete b.taskReturns[k]; }
     b.decks.push(deck);
     return { board: b, deck };
@@ -90,6 +113,7 @@ export function attachTasks(board, deckId, tarefaIds) {
     const target = b.decks.find(x => x.id === deckId);
     if (!target) throw new Error('Deck não encontrado.');
     if (target.status !== STATUS.PENDENTE) throw new Error('Só é possível juntar tarefas a um deck pendente.');
+    const returnedAt = latestReturn(b, tarefaIds);
     tarefaIds.forEach(k => detachFromAll(b, k, now));
     const d = b.decks.find(x => x.id === deckId); // re-resolve after possible discards
     for (const k of [...new Set(tarefaIds)]) {
@@ -97,6 +121,7 @@ export function attachTasks(board, deckId, tarefaIds) {
         b.taskStatus[k] = STATUS.PENDENTE;
         delete b.taskReturns[k];
     }
+    if (returnedAt && (!d.devolvidoAt || Date.parse(returnedAt) > Date.parse(d.devolvidoAt))) d.devolvidoAt = returnedAt;
     d.updatedAt = now;
     return { board: b };
 }
@@ -120,7 +145,11 @@ export function submitDeck(board, deckId) {
     const d = b.decks.find(x => x.id === deckId);
     if (!d) throw new Error('Deck não encontrado.');
     if (d.status !== STATUS.PENDENTE) throw new Error('Deck não está pendente.');
-    if (d.arquivos.length === 0) throw new Error('Anexe ao menos um arquivo antes de enviar.');
+    if (d.arquivos.length === 0 && !commentsProve(d, b.commentStats[deckId])) {
+        throw new Error(d.devolvidoAt && b.commentStats[deckId]?.count
+            ? 'Depois da devolução, anexe um arquivo ou escreva um novo comentário antes de enviar.'
+            : 'Anexe ao menos um arquivo ou escreva um comentário antes de enviar.');
+    }
     d.status = STATUS.ENVIADO;
     d.updatedAt = new Date().toISOString();
     for (const k of d.tarefaIds) b.taskStatus[k] = STATUS.ENVIADO;
