@@ -66,6 +66,9 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     const [zipping, setZipping] = useState(null); // deckId whose archive is downloading
     const [sharing, setSharing] = useState(null); // arquivo do deck que está ganhando um link público
     const [commentsId, setCommentsId] = useState(null); // deck com a fila de comentários aberta
+    // Deck criado sem arquivo, para comprovar por comentário: a fila dele abre
+    // assim que o deck aparece no quadro (o id vem do servidor).
+    const [commentAfterCreate, setCommentAfterCreate] = useState(null); // chave da tarefa
 
     // Drag state (discriminated by kind, per the handoff).
     const drag = useRef({ kind: null, id: null });
@@ -209,6 +212,12 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
     const selCount = Object.keys(sel).length;
     const reviewDeck = state.decks.find(d => d.id === reviewId) || null;
     const commentsDeck = state.decks.find(d => d.id === commentsId) || null;
+    useEffect(() => {
+        if (!commentAfterCreate) return;
+        const created = state.decks.find(d => d.tarefaIds.includes(commentAfterCreate));
+        if (created) { setCommentsId(created.id); setCommentAfterCreate(null); }
+    }, [commentAfterCreate, state.decks]);
+    const canProveByComment = can('deck.criar') && can('comentario.criar');
 
     // Progresso da pasta aberta: tarefas obrigatórias atendidas e enviadas,
     // a mesma conta do cartão lateral (services/claimProgress.js).
@@ -286,12 +295,14 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
         // de um documento cada, quando o analista queria um. A dica é lançada
         // daqui — o momento em que a pessoa acabou de fazer exatamente isso.
         joinHint: looseTasks.length > 1,
+        allowEmpty: canProveByComment,
         onFiles: async (files) => {
             const arquivos = await toRefs(files);
             await run(
                 () => board.createDeck(state, { tarefaIds: [taskKey], arquivos }, actor),
                 () => deckApi.createDeck(claim.id, { tarefaIds: [taskKey], arquivos }),
             );
+            if (arquivos.length === 0) setCommentAfterCreate(taskKey);
         },
     });
 
@@ -299,12 +310,14 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
         const keys = Object.keys(sel);
         setUpload({
             title: plural(keys.length, 'tarefa selecionada', 'tarefas selecionadas'),
+            allowEmpty: canProveByComment,
             onFiles: async (files) => {
                 const arquivos = await toRefs(files);
                 await run(
                     () => board.createDeck(state, { tarefaIds: keys, arquivos }, actor),
                     () => deckApi.createDeck(claim.id, { tarefaIds: keys, arquivos }),
                 );
+                if (arquivos.length === 0) setCommentAfterCreate(keys[0]);
                 setSel({});
             },
         });
@@ -726,7 +739,7 @@ export default function KanbanBoard({ claim, currentUser, folderId, onCreateTask
             {/* Modals */}
             <AnimatePresence>
                 {upload && (
-                    <UploadModal title={upload.title} note={upload.note} busy={busy}
+                    <UploadModal title={upload.title} note={upload.note} busy={busy} allowEmpty={upload.allowEmpty}
                         onClose={() => setUpload(null)}
                         onConfirm={async (files) => {
                             // Quem já juntou tarefas alguma vez não precisa da
@@ -1098,15 +1111,15 @@ function DeckCard({ deck, accentOf, labelFor, taskReturns, role, hot, selCount =
 }
 
 // ── Upload modal ────────────────────────────────────────────────────────────────
-function UploadModal({ title, note, busy, onClose, onConfirm }) {
+function UploadModal({ title, note, busy, onClose, onConfirm, allowEmpty = false }) {
     const [files, setFiles] = useState([]);
     const inputRef = useRef(null);
     const [working, setWorking] = useState(false);
 
-    const confirm = async () => {
-        if (files.length === 0 || working) return;
+    const confirm = async (chosen = files) => {
+        if ((chosen.length === 0 && !allowEmpty) || working) return;
         setWorking(true);
-        try { await onConfirm(files); } finally { setWorking(false); }
+        try { await onConfirm(chosen); } finally { setWorking(false); }
     };
 
     return (
@@ -1136,9 +1149,17 @@ function UploadModal({ title, note, busy, onClose, onConfirm }) {
                     )}
                 </div>
 
-                <div className="mt-5 flex justify-end gap-2">
+                <div className="mt-5 flex items-center justify-end gap-2">
+                    {/* O comentário também comprova a tarefa: o deck nasce sem
+                        arquivo e a fila de comentários dele abre em seguida. */}
+                    {allowEmpty && files.length === 0 && (
+                        <button onClick={() => confirm([])} disabled={working || busy} data-testid="prove-by-comment"
+                            className="mr-auto flex items-center gap-1.5 rounded-lg border border-[#C9DDFF] bg-[#EAF1FE] px-3 py-2 text-xs font-extrabold text-[#2563EB] hover:border-[#2563EB]">
+                            <MessageSquare size={13} /> Comprovar com comentário
+                        </button>
+                    )}
                     <button onClick={onClose} className="rounded-lg px-4 py-2 text-xs font-extrabold text-slate-500 hover:bg-slate-100">Cancelar</button>
-                    <button onClick={confirm} disabled={files.length === 0 || working || busy}
+                    <button onClick={() => confirm()} disabled={files.length === 0 || working || busy}
                         style={{ background: files.length ? TEAL_GRAD : undefined }}
                         className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-extrabold ${files.length ? 'text-white' : 'bg-slate-100 text-slate-400'}`}>
                         {working && <Loader2 size={13} className="animate-spin" />} Confirmar

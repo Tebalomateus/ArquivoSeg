@@ -258,3 +258,28 @@ test('o analista abre os comentários pela análise', async ({ page }) => {
     const panel = page.getByTestId('deck-comments');
     await expect(panel).toContainText('vistoria por vídeo');
 });
+
+test('a tarefa vira deck sem arquivo pelo "Comprovar com comentário"', async ({ page }) => {
+    const state = await openBoard(page);
+    await page.getByTestId('column-pendente').getByTestId(`task-${TASK.bo}`).click();
+
+    const modal = page.getByTestId('upload-modal');
+    await expect(modal.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
+    await modal.getByTestId('prove-by-comment').click();
+
+    // O deck nasce vazio e a fila dele já abre, pronta para o comentário.
+    const panel = page.getByTestId('deck-comments');
+    await expect(panel).toBeVisible();
+    expect(state.board.decks).toHaveLength(1);
+    expect(state.board.decks[0].arquivos).toEqual([]);
+    expect(state.board.decks[0].tarefaIds).toEqual([TASK.bo]);
+
+    await panel.getByTestId('deck-comment-input').fill('Segurado informou que não registrou boletim.');
+    await panel.getByTestId('deck-comment-send').click();
+    await expect(panel.getByTestId('deck-comment-item')).toHaveCount(1);
+    await panel.getByRole('button', { name: 'Fechar' }).click();
+
+    await page.getByTestId('deck-DECK-01').getByRole('button', { name: 'Enviar deck' }).click();
+    await confirmar(page, 'Enviar deck');
+    expect(state.board.decks[0].status).toBe('enviado');
+});
