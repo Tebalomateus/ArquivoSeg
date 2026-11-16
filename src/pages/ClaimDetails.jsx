@@ -8,7 +8,6 @@ import {
     Gauge,
     HardDrive,
     Info,
-    ListChecks,
     Lock,
     MessageSquare,
     Pencil,
@@ -16,7 +15,6 @@ import {
     Shield,
     X,
 } from 'lucide-react';
-import ChecklistPanel from '../components/ChecklistPanel';
 import KanbanBoard, { LOOSE_FOLDER_ID } from '../components/KanbanBoard';
 import GerencialTree from '../components/GerencialTree';
 import { useClaims } from '../context/ClaimsContext';
@@ -228,11 +226,12 @@ export default function ClaimDetails() {
     const canManageDocuments = can('arquivo.subir');
     const canSeeLoose = can('arquivo.listar');
 
-    // Abas do sinistro: uma por pasta de trabalho, depois os avulsos, a visão
-    // gerencial e a auditoria. A pasta "gerencial" do metadata não vira aba de
-    // pasta — a aba Gerencial é a árvore consolidada de todas, e quem a vê é
-    // quem tem processo.verGerencial (o servidor recusa a rota sem ela).
-    const folderTabs = claim.folders.filter(f => f.category !== 'gerencial');
+    // Abas do sinistro: as etapas (as pastas, na ordem do tipo de sinistro),
+    // depois os avulsos, a visão gerencial e a auditoria. A pasta privada
+    // ("gerencial") não é etapa — a aba Gerencial é a árvore consolidada de
+    // todas, e quem a vê é quem tem processo.verGerencial (o servidor recusa a
+    // rota sem ela).
+    const folderTabs = claim.folders.filter(f => !f.private && f.category !== 'gerencial');
     const tabIds = [
         ...folderTabs.map(f => f.id),
         ...(canSeeLoose ? [LOOSE_FOLDER_ID] : []),
@@ -262,14 +261,13 @@ export default function ClaimDetails() {
     const segClass = (on) => `px-3.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${on ? 'bg-white shadow-sm text-primary' : 'text-gray-500 hover:text-gray-700'}`;
 
     const renderFolderContent = () => {
-        if (viewMode === 'decks') {
+        if (viewMode === 'decks' || !canManageDocuments) {
             return (
                 <KanbanBoard claim={claim} currentUser={currentUser} folderId={currentFolder.id}
                     onLooseCount={setLooseCount}
                     onCreateTask={canEditClaimMeta ? (fid, name) => addChecklistItem(claim.id, fid, name) : null} />
             );
         }
-        if (viewMode === 'checklist' || !canManageDocuments) return <ChecklistPanel claim={claim} />;
         return (
             <div className="space-y-6">
                 {/* Management View: Fluxo / Status */}
@@ -519,12 +517,27 @@ export default function ClaimDetails() {
 
                 <div className="flex-1 min-w-0">
                     <div role="tablist" aria-label="Seções do sinistro" className="flex items-center gap-1 border-b border-gray-200/80 overflow-x-auto">
-                        {folderTabs.map(folder => (
-                            <button key={folder.id} type="button" role="tab" aria-selected={activeTab === folder.id}
-                                onClick={() => setTab(folder.id)} className={tabClass(activeTab === folder.id)}>
-                                {folder.name} <span className="text-gray-400 font-semibold">({folder.completion}%)</span>
-                            </button>
-                        ))}
+                        {/* Seletor de etapas: as etapas do tipo, em ordem, como um
+                            stepper. O número vem do CSS (data-step), fora do
+                            texto e do nome acessível, que continua "Etapa (N%)". */}
+                        <div className="flex items-center" data-testid="step-selector">
+                            {folderTabs.map((folder, i) => {
+                                const on = activeTab === folder.id;
+                                return (
+                                    <div key={folder.id} className="flex items-center">
+                                        {i > 0 && <span aria-hidden="true" className="w-4 h-px bg-gray-300 shrink-0" />}
+                                        <button type="button" role="tab" aria-selected={on}
+                                            onClick={() => setTab(folder.id)} className={tabClass(on)}>
+                                            <span aria-hidden="true" data-step={i + 1} className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 before:content-[attr(data-step)] ${on ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-500'}`} />
+                                            {folder.name} <span className="text-gray-400 font-semibold">({folder.completion}%)</span>
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {folderTabs.length > 0 && (canSeeLoose || canSeeGerencial || canSeeAudit) && (
+                            <span aria-hidden="true" className="mx-2 h-5 w-px bg-gray-200 shrink-0" />
+                        )}
                         {canSeeLoose && (
                             <button type="button" role="tab" data-testid="folder-avulsos" aria-selected={activeTab === LOOSE_FOLDER_ID}
                                 onClick={() => setTab(LOOSE_FOLDER_ID)} className={tabClass(activeTab === LOOSE_FOLDER_ID)}>
@@ -554,20 +567,16 @@ export default function ClaimDetails() {
                     <div className="mt-4 space-y-4" role="tabpanel">
                         {currentFolder ? (
                             <>
-                                <div className="flex p-1 bg-gray-100 rounded-xl border border-gray-200 w-fit max-w-full overflow-x-auto" role="group" aria-label="Modo de visualização">
-                                    <button type="button" onClick={() => setViewMode('checklist')} aria-pressed={viewMode === 'checklist'} className={segClass(viewMode === 'checklist')}>
-                                        <ListChecks size={13} />
-                                        Checklist
-                                    </button>
-                                    <button type="button" onClick={() => setViewMode('decks')} aria-pressed={viewMode === 'decks'} className={segClass(viewMode === 'decks')}>
-                                        Decks
-                                    </button>
-                                    {canManageDocuments && (
+                                {canManageDocuments && (
+                                    <div className="flex p-1 bg-gray-100 rounded-xl border border-gray-200 w-fit max-w-full overflow-x-auto" role="group" aria-label="Modo de visualização">
+                                        <button type="button" onClick={() => setViewMode('decks')} aria-pressed={viewMode === 'decks'} className={segClass(viewMode === 'decks')}>
+                                            Decks
+                                        </button>
                                         <button type="button" onClick={() => setViewMode('management')} aria-pressed={viewMode === 'management'} className={segClass(viewMode === 'management')}>
                                             Gerenciamento
                                         </button>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
                                 {renderFolderContent()}
                             </>
                         ) : activeTab === LOOSE_FOLDER_ID ? (

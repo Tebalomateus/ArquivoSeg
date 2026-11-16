@@ -375,12 +375,13 @@ function autoStartDeadline(state) {
     if (state.deadline.start_at) return;
     const meta = state.process.metadata || {};
     // Com tipo de sinistro, os obrigatórios são os itens do checklist do tipo;
-    // sem ele, os itens das pastas (as chaves das tarefas do board).
+    // sem ele, os itens das pastas (as chaves das tarefas do board). Item com
+    // required:false não conta, nem pasta privada.
     const required = state.checklistDef
-        ? state.checklistDef.stages.flatMap((s) => s.items.map((i) => `${s.id}.${i.id}`))
+        ? state.checklistDef.stages.flatMap((s) => s.items.filter((i) => i.required !== false).map((i) => `${s.id}.${i.id}`))
         : (meta.folders || [])
-            .filter((f) => f.category !== 'gerencial')
-            .flatMap((f) => (f.checklist || []).map((i) => `${f.id}.${i.id}`));
+            .filter((f) => !f.private && f.category !== 'gerencial')
+            .flatMap((f) => (f.checklist || []).filter((i) => i.required !== false).map((i) => `${f.id}.${i.id}`));
     if (required.length === 0) return;
     const checked = meta.checklist_state || {};
     const withFile = new Set(state.board.decks.filter((d) => d.arquivos.length > 0).flatMap((d) => d.tarefaIds));
