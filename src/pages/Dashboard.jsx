@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import RelatorioGerencialCard from '../components/RelatorioGerencialCard';
 import { isCriticalClaim } from '../constants/deadline';
 import StorageUsageCard from '../components/StorageUsageCard';
+import { claimProgress } from '../services/claimProgress';
 
 /**
  * Individual Stat Card for the Dashboard.
@@ -69,16 +70,19 @@ export default function Dashboard() {
         return claims.filter(c => c.backCreatedBy === myDbId || c.assignedTo === myDbId);
     }, [claims, currentUser, isAdmin, myDbId]);
 
+    // Conclusão de cada sinistro, calculada do board de decks.
+    const progressById = useMemo(() => Object.fromEntries(myClaims.map(c => [c.id, claimProgress(c)])), [myClaims]);
+
     // MEMOIZED: Portfolio Calculations
     const portfolioStats = useMemo(() => {
         const total = myClaims.length;
         const inAnal = myClaims.filter(c => c.status === 'Em Análise').length;
         const comp = myClaims.filter(c => c.status === 'Concluído').length;
         const crit = myClaims.filter(c => isCriticalClaim(c)).length;
-        const avg = total > 0 ? Math.round(myClaims.reduce((acc, c) => acc + (c.progress || 0), 0) / total) : 0;
+        const avg = total > 0 ? Math.round(myClaims.reduce((acc, c) => acc + (progressById[c.id]?.atendidoPct || 0), 0) / total) : 0;
 
         return { total, inAnal, comp, crit, avg };
-    }, [myClaims]);
+    }, [myClaims, progressById]);
 
     // MEMOIZED: Activity Feed
     const allActivities = useMemo(() => {
@@ -97,16 +101,20 @@ export default function Dashboard() {
             { label: 'Causa', key: 'causa', color: 'bg-blue-600' },
             { label: 'Prejuízo', key: 'prejuizo', color: 'bg-amber-500' },
             { label: 'Liquidação', key: 'liquidacao', color: 'bg-indigo-500' },
-            { label: 'Gerencial', key: 'gerencial', color: 'bg-green-600' },
+            // Gerencial é privada e não entra na conclusão.
         ];
 
         return categories.map(cat => {
-            const avg = portfolioStats.total > 0
-                ? Math.round(myClaims.reduce((acc, c) => acc + ((c.folders || []).find(f => f.category === cat.key)?.completion || 0), 0) / portfolioStats.total)
-                : 0;
-            return { ...cat, value: avg };
+            const mean = (field) => (portfolioStats.total > 0
+                ? Math.round(myClaims.reduce((acc, c) => {
+                    const folder = (c.folders || []).find(f => f.category === cat.key);
+                    return acc + ((folder && progressById[c.id]?.folders[folder.id]?.[field]) || 0);
+                }, 0) / portfolioStats.total)
+                : 0);
+            const value = mean('atendidoPct');
+            return { ...cat, value, sent: Math.min(100 - value, mean('enviadoPct')) };
         });
-    }, [myClaims, portfolioStats.total]);
+    }, [myClaims, portfolioStats.total, progressById]);
 
     const { total, inAnal, comp, crit, avg } = portfolioStats;
 
@@ -259,12 +267,18 @@ export default function Dashboard() {
                             <div key={cat.label} className="group">
                                 <div className="flex justify-between items-end mb-3">
                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{cat.label}</span>
-                                    <span className="text-sm font-black text-slate-900">{cat.value}%</span>
+                                    <span className="text-sm font-black text-slate-900">
+                                        {cat.value}% <span className="text-[10px] font-bold text-slate-400">atendido · {cat.sent}% enviado</span>
+                                    </span>
                                 </div>
-                                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
+                                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner flex">
                                     <div
-                                        className={`${cat.color} h-full rounded-full transition-all duration-1000 shadow-md`}
+                                        className={`${cat.color} h-full transition-all duration-1000 shadow-md`}
                                         style={{ width: `${cat.value}%` }}
+                                    ></div>
+                                    <div
+                                        className={`${cat.color} opacity-40 h-full transition-all duration-1000`}
+                                        style={{ width: `${cat.sent}%` }}
                                     ></div>
                                 </div>
                             </div>

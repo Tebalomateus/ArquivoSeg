@@ -6,7 +6,6 @@ export const INITIAL_CLAIMS = [
         insurer: 'Porto Seguro',
         insuredName: 'XYZ Logística Ltda',
         status: 'Em Análise',
-        progress: 72,
         date: '02/01/2026',
         lastModified: '08/01/2026',
         backStatus: 'ongoing',

@@ -28,6 +28,8 @@ import { actorLabelFromDbId } from '../api/auth';
 import { formatBytes } from '../api/files';
 import { actionLabel } from '../constants/auditTrail';
 import { loadStorage, loadLastActivity } from '../services/claimSidebar';
+import { claimProgress, progressLabel } from '../services/claimProgress';
+import ProgressBar from '../components/ProgressBar';
 
 const GERENCIAL_TAB = 'gerencial';
 const AUDIT_TAB = 'auditoria';
@@ -233,6 +235,8 @@ export default function ClaimDetails() {
     // pasta — a aba Gerencial é a árvore consolidada de todas, e quem a vê é
     // quem tem processo.verGerencial (o servidor recusa a rota sem ela).
     const folderTabs = claim.folders.filter(f => f.category !== 'gerencial');
+    // Conclusão calculada do board de decks (o kanban a mantém atualizada).
+    const progress = claimProgress(claim);
     const tabIds = [
         ...folderTabs.map(f => f.id),
         ...(canSeeLoose ? [LOOSE_FOLDER_ID] : []),
@@ -462,11 +466,10 @@ export default function ClaimDetails() {
                             <div className="col-span-2 lg:col-span-1">
                                 <div className="flex items-center justify-between">
                                     <span className="lbl inline-flex items-center gap-1"><Gauge size={14} className="text-secondary" />Conclusão</span>
-                                    <span className="text-sm font-extrabold text-primary">{claim.progress}%</span>
+                                    <span className="text-sm font-extrabold text-primary" data-testid="claim-progress">{progress.atendidoPct}%</span>
                                 </div>
-                                <div className="mt-1.5 w-full h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                                    <div className="h-full bg-secondary rounded-full transition-all duration-700" style={{ width: `${claim.progress}%` }} />
-                                </div>
+                                <div className="mt-1.5"><ProgressBar progress={progress} /></div>
+                                <p className="mt-1 text-[11px] font-semibold text-gray-500" data-testid="claim-progress-label">{progressLabel(progress)}</p>
                             </div>
                             <div className="col-span-2 lg:col-span-1">
                                 <ClaimDeadline claim={claim} currentUser={currentUser} onChange={(d) => setClaimDeadline(claim.id, d)} />
@@ -522,7 +525,7 @@ export default function ClaimDetails() {
                         {folderTabs.map(folder => (
                             <button key={folder.id} type="button" role="tab" aria-selected={activeTab === folder.id}
                                 onClick={() => setTab(folder.id)} className={tabClass(activeTab === folder.id)}>
-                                {folder.name} <span className="text-gray-400 font-semibold">({folder.completion}%)</span>
+                                {folder.name} <span className="text-gray-400 font-semibold" data-testid={`folder-progress-${folder.id}`} title={progressLabel(progress.folders[folder.id])}>({progress.folders[folder.id]?.atendidoPct ?? 0}%)</span>
                             </button>
                         ))}
                         {canSeeLoose && (

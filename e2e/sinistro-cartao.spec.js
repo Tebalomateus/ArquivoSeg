@@ -8,8 +8,18 @@ import { signIn } from './fixtures/session.js';
 
 const CLAIM = '/app/sinistros/1';
 
+// O board do modo mock (sessionStorage): das três obrigatórias do sinistro de
+// demonstração, o B.O. atendido e o orçamento enviado.
+const plantBoard = (page) => page.addInitScript(() => {
+    sessionStorage.setItem('deckboard_1', JSON.stringify({
+        decks: [], seq: 0, taskReturns: {},
+        taskStatus: { 'f1-1.bo': 'atendido', 'f2-1.orcamento': 'enviado' },
+    }));
+});
+
 test('o cartão lateral mostra identidade, criador e os números do sinistro', async ({ page }) => {
     await signIn(page, 'manager');
+    await plantBoard(page);
     await page.goto(CLAIM);
 
     const card = page.getByTestId('claim-card');
@@ -19,7 +29,8 @@ test('o cartão lateral mostra identidade, criador e os números do sinistro', a
     await expect(page.getByTestId('claim-creator')).toContainText('Criado por Ricardo Silva');
     await expect(page.getByTestId('claim-creator')).toContainText('ricardo@corretora.com');
     await expect(card).toContainText('Conclusão');
-    await expect(card).toContainText('72%');
+    await expect(page.getByTestId('claim-progress')).toHaveText('33%');
+    await expect(page.getByTestId('claim-progress-label')).toHaveText('33% atendido · 33% enviado');
     await expect(card).toContainText('Data de abertura');
     await expect(page.getByTestId('claim-storage')).toContainText(/\d+(\.\d)? (B|KB|MB|GB)/);
 });
@@ -45,11 +56,12 @@ test('sem processo.verAuditoria não há aba de auditoria nem última atividade'
 
 test('uma aba por pasta, com o seletor de modo só dentro das pastas', async ({ page }) => {
     await signIn(page, 'manager');
+    await plantBoard(page);
     await page.goto(CLAIM);
 
     const tabs = page.getByRole('tablist', { name: 'Seções do sinistro' }).getByRole('tab');
     await expect(tabs).toHaveText([
-        /^Causa \(80%\)$/, /^Prejuízo \(60%\)$/, /^Liquidação \(0%\)$/,
+        /^Causa \(50%\)$/, /^Prejuízo \(0%\)$/, /^Liquidação \(0%\)$/,
         /Documentos avulsos/, /Gerencial/, /Auditoria/,
     ]);
     await expect(page.getByRole('tab', { name: /^Causa/ })).toHaveAttribute('aria-selected', 'true');

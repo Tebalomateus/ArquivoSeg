@@ -5,6 +5,7 @@ import { logoutSession } from '../api/auth';
 import { zitadel } from '../api/zitadel';
 import { getToken, isMockEnabled, setToken } from '../api/client';
 import { parseFolderFromFileName } from '../api/files';
+import { boardFromMetadata } from '../services/claimProgress';
 
 const ClaimsContext = createContext();
 
@@ -44,7 +45,9 @@ const buildFolders = (initialChecklist) => [
 const METADATA_KEYS = [
     'number', 'insurer', 'insuredName', 'policyNumber', 'policyStartDate', 'policyEndDate',
     'retroactiveDate', 'modality', 'brokerName', 'brokerClaimId', 'adjusterName', 'adjusterClaimId',
-    'occurrenceDate', 'occurrenceLocation', 'observations', 'progress',
+    // `progress` não vai mais: a conclusão é calculada do board de decks
+    // (services/claimProgress.js), e um número guardado só envelhece.
+    'occurrenceDate', 'occurrenceLocation', 'observations',
     'shareToken', 'activities', 'reviewedFiles',
 ];
 
@@ -111,7 +114,9 @@ const adaptProcessToClaim = (proc, cached) => {
         occurrenceDate: meta.occurrenceDate || '',
         occurrenceLocation: meta.occurrenceLocation || '',
         observations: meta.observations || '',
-        progress: meta.progress ?? 0,
+        // O board de decks vem no metadata (chaves do servidor); com ele as listas
+        // calculam a conclusão sem buscar /decks de cada sinistro.
+        board: boardFromMetadata(proc.metadata),
         activities: Array.isArray(meta.activities) ? meta.activities : [],
         reviewedFiles: meta.reviewedFiles || {},
         folders: baseFolders,
@@ -289,7 +294,6 @@ export const ClaimsProvider = ({ children }) => {
             ...newClaim,
             title,
             description,
-            progress: 0,
             deadlineStartAt: null,
             deadlineDueAt: null,
             activities: [{
@@ -611,19 +615,6 @@ export const ClaimsProvider = ({ children }) => {
         }
     }, []);
 
-    const updateChecklistStatus = (claimId, folderId, itemId, received) => {
-        updateClaimLocal(claimId, c => {
-            const folders = c.folders.map(f => {
-                if (f.id !== folderId) return f;
-                const checklist = f.checklist.map(i => i.id === itemId ? { ...i, received } : i);
-                const completion = checklist.length > 0 ? Math.round((checklist.filter(i => i.received).length / checklist.length) * 100) : 0;
-                return { ...f, checklist, completion };
-            });
-            const totalComp = folders.reduce((acc, f) => acc + f.completion, 0);
-            return { ...c, folders, progress: Math.round(totalComp / folders.length) };
-        });
-    };
-
     // "Marcar como conferido" — dá baixa/OK num documento já inserido, sem excluí-lo.
     // Persistido no mesmo `metadata` genérico do processo (PATCH /processes/:id já
     // existente), então não precisa de nenhuma rota nova no backend.
@@ -637,21 +628,32 @@ export const ClaimsProvider = ({ children }) => {
         }));
     };
 
-    // Item complementar de checklist adicionado depois da criação do sinistro —
-    // mesmo padrão de updateChecklistStatus, também persistido via metadata.folders.
+    // Item complementar de checklist adicionado depois da criação do sinistro,
+    // persistido via metadata.folders.
     const addChecklistItem = (claimId, folderId, name) => {
         if (!name?.trim()) return;
-        updateClaimLocal(claimId, c => {
-            const folders = c.folders.map(f => {
-                if (f.id !== folderId) return f;
-                const checklist = [...f.checklist, { id: randId(), name: name.trim(), received: false }];
-                const completion = checklist.length > 0 ? Math.round((checklist.filter(i => i.received).length / checklist.length) * 100) : 0;
-                return { ...f, checklist, completion };
-            });
-            const totalComp = folders.reduce((acc, f) => acc + f.completion, 0);
-            return { ...c, folders, progress: Math.round(totalComp / folders.length) };
-        });
+        updateClaimLocal(claimId, c => ({
+            ...c,
+            folders: c.folders.map(f => (f.id !== folderId ? f : {
+                ...f,
+                checklist: [...f.checklist, { id: randId(), name: name.trim(), received: false }],
+            })),
+        }));
     };
+
+    // O kanban avisa o board depois de cada mutação, para o cartão lateral, as
+    // abas e as listas recalcularem a conclusão na hora. O board é do servidor
+    // (chaves deck* do metadata): nada a sincronizar de volta.
+    const setClaimBoard = useCallback((claimId, board) => {
+        if (!claimId || !board) return;
+        const next = { decks: board.decks || [], seq: board.seq ?? 0, taskStatus: board.taskStatus || {}, taskReturns: board.taskReturns || {} };
+        const key = JSON.stringify(next);
+        setClaims(prev => {
+            const current = prev.find(c => c.id === claimId);
+            if (!current || JSON.stringify(current.board || null) === key) return prev;
+            return prev.map(c => (c.id === claimId ? { ...c, board: next } : c));
+        });
+    }, []);
 
     const logView = (claimId, docName) => {
         // Server-side audit (ActionFileDownloaded) já registra acesso real;
@@ -777,7 +779,7 @@ export const ClaimsProvider = ({ children }) => {
     return (
         <ClaimsContext.Provider value={{
             currentUser, setCurrentUser, logout, tokenEpoch,
-            claims, addClaim, updateChecklistStatus, markFileReviewed, addChecklistItem,
+            claims, addClaim, markFileReviewed, addChecklistItem, setClaimBoard,
             transitionStatus, archiveClaim, updateClaimFields, fetchSingleClaim,
             logView, updateClaimObservations, setClaimDeadline,
             uploadFileToClaim, addCommentToClaim, refreshClaimFiles, openDocument, downloadDocument,
