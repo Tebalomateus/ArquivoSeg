@@ -326,7 +326,7 @@ export default function ClaimDetails() {
 
     const statusPill = STATUS_PILL[claim.backStatus] || (claim.status === 'Concluído' ? STATUS_PILL.done : STATUS_PILL.ready);
 
-    const tabClass = (on) => `relative flex items-center gap-1.5 px-4 py-3 text-sm font-bold border-b-2 -mb-px whitespace-nowrap transition ${on ? 'border-secondary text-primary' : 'border-transparent text-gray-500 hover:text-primary'}`;
+    const tabClass = (on) => `relative flex items-center gap-1.5 px-4 py-3 text-sm font-bold border-b-2 whitespace-nowrap transition ${on ? 'border-secondary text-primary' : 'border-transparent text-gray-500 hover:text-primary'}`;
     const segClass = (on) => `px-3.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${on ? 'bg-white shadow-sm text-primary' : 'text-gray-500 hover:text-gray-700'}`;
 
     const renderFolderContent = () => {
@@ -584,7 +584,9 @@ export default function ClaimDetails() {
                 </aside>
 
                 <div className="flex-1 min-w-0">
-                    <div role="tablist" aria-label="Seções do sinistro" className="flex items-center gap-1 border-b border-gray-200/80 overflow-x-auto">
+                    {/* A linha de base é sombra interna, não borda: com overflow-x, o -mb-px
+                        que a aba usava para cobrir a borda criava rolagem vertical. */}
+                    <div role="tablist" aria-label="Seções do sinistro" className="flex items-center gap-1 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_rgb(229_231_235_/_0.8)]">
                         <StepSelect steps={folderTabs} activeId={currentFolder?.id ?? null} lastId={lastStepId}
                             onSelect={(sid) => { setLastStepId(sid); setTab(sid); }} tabClass={tabClass}
                             pctOf={(id) => progress.folders[id]?.atendidoPct ?? 0}
