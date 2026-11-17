@@ -14,7 +14,8 @@ import { signIn } from './session.js';
  *
  *   - a task belongs to at most one deck; attaching moves it
  *   - a deck with no tasks left is discarded
- *   - a deck cannot be sent empty, and only a pendente deck can be sent
+ *   - a deck cannot be sent without evidence — a file, or a comment written after
+ *     its last return (devolvidoAt) — and only a pendente deck can be sent
  *   - analysis splits the deck: what was returned goes back to pendente with a
  *     reason, what was kept turns atendido
  *
@@ -48,6 +49,10 @@ export const DEFAULT_PERMISSIONS = [
     'deck.baixarArquivos',
     'compartilhamento.criar',
     'processo.verGerencial',
+    'comentario.listar',
+    'comentario.criar',
+    'comentario.editarProprio',
+    'comentario.excluirProprio',
 ];
 
 const STATUS = { PENDENTE: 'pendente', ENVIADO: 'enviado', ATENDIDO: 'atendido' };
@@ -91,6 +96,9 @@ export function initialState() {
         files: [],
         // share_tokens, como POST /files/:id/shares devolve.
         shares: [],
+        // comments, como GET /processes/:id/comments devolve (sem deck_desfeito,
+        // que é calculado na leitura).
+        comments: [],
         board: { decks: [], seq: 0, taskStatus: {}, taskReturns: {} },
         // Injeções de falha: o caminho de erro do download só existe como
         // resposta do servidor, não há como provocá-lo pela interface.
@@ -101,6 +109,20 @@ export function initialState() {
         // board monta sem saber ainda o que o usuário pode. Sem poder forçar
         // essa ordem, o teste só pega o bug quando a corrida sai mal.
         slowPermissions: 0,
+        // Trilha do sinistro (GET /processes/:id/audit), mais recente primeiro.
+        audit: [],
+        // Prazo regulatório (GET/PUT /processes/:id/deadline). Nasce aguardando
+        // os obrigatórios; canAdjust diz se quem pede é criador ou admin.
+        deadline: {
+            start_at: null, start_source: null, total_days: 30,
+            due_at: null, due_source: null, history: [],
+        },
+        canAdjustDeadline: true,
+        // Definição do checklist do tipo (GET /checklists/:type), quando o
+        // processo tem claim_type.
+        checklistDef: null,
+        // Tipos de sinistro de GET /checklists, como [{ type, title }].
+        claimTypes: null,
         requests: [],
         nextId: 1,
     };
@@ -111,6 +133,38 @@ const fail = (status, code, message) => ({ status, body: { error: { code, messag
 
 const now = () => new Date().toISOString();
 const grupoFromKey = (key) => (key.includes('.') ? key.slice(0, key.indexOf('.')) : key);
+
+// O quadro como o servidor responde: com a contagem de comentários dos decks
+// que estão nele (handler/deck.go boardResponse).
+function commentStats(state) {
+    const onBoard = new Set(state.board.decks.map((d) => d.id));
+    const out = {};
+    for (const c of state.comments) {
+        if (!c.deck_id || !onBoard.has(c.deck_id)) continue;
+        const s = out[c.deck_id] || { count: 0, lastAt: c.created_at };
+        s.count += 1;
+        if (Date.parse(c.created_at) > Date.parse(s.lastAt)) s.lastAt = c.created_at;
+        out[c.deck_id] = s;
+    }
+    return out;
+}
+const okBoard = (state) => ok({ ...state.board, commentStats: commentStats(state) });
+
+// deck.CommentsProve: há comentário, e o último é posterior à devolução.
+function commentsProve(deck, s) {
+    if (!s || !s.count) return false;
+    return !deck.devolvidoAt || Date.parse(s.lastAt) > Date.parse(deck.devolvidoAt);
+}
+
+// A devolução mais recente entre as tarefas, lida antes de apagá-las.
+function latestReturn(board, keys) {
+    let latest = null;
+    for (const k of keys) {
+        const at = board.taskReturns[k]?.devolvidaAt;
+        if (at && (!latest || Date.parse(at) > Date.parse(latest))) latest = at;
+    }
+    return latest;
+}
 
 function findDeck(state, deckId) {
     return state.board.decks.find((d) => d.id === deckId) || null;
@@ -140,6 +194,7 @@ function createDeck(state, { tarefaIds, arquivos }) {
     const board = state.board;
     const keys = [...new Set(tarefaIds || [])];
     if (keys.length === 0) return fail(422, 'DECK_NO_TASKS', 'Selecione ao menos uma tarefa.');
+    const returnedAt = latestReturn(board, keys);
     for (const k of keys) detachFromAll(board, k);
     board.seq += 1;
     const deck = {
@@ -153,9 +208,10 @@ function createDeck(state, { tarefaIds, arquivos }) {
         createdAt: now(),
         updatedAt: now(),
     };
+    if (returnedAt) deck.devolvidoAt = returnedAt;
     for (const k of keys) { board.taskStatus[k] = STATUS.PENDENTE; delete board.taskReturns[k]; }
     board.decks.push(deck);
-    return ok(board);
+    return okBoard(state);
 }
 
 function analyze(state, deck, devolvidas, motivo) {
@@ -177,12 +233,12 @@ function analyze(state, deck, devolvidas, motivo) {
     // Devolveu tudo: não sobra deck nenhum, as tarefas voltam soltas para pendente.
     if (kept.length === 0) {
         board.decks = board.decks.filter((d) => d.id !== deck.id);
-        return ok(board);
+        return okBoard(state);
     }
     deck.tarefaIds = kept;
     deck.status = STATUS.ATENDIDO;
     deck.updatedAt = now();
-    return ok(board);
+    return okBoard(state);
 }
 
 /**
@@ -268,7 +324,7 @@ export function zipStore(entries) {
  *
  *   installDeckApi(page, (s) => seedDeck(s, { tarefaIds: ['causa.bo'], status: 'enviado' }))
  */
-export function seedDeck(state, { tarefaIds, arquivos = [{ nome: 'laudo.pdf', conteudo: 'conteúdo do laudo' }], status = STATUS.PENDENTE }) {
+export function seedDeck(state, { tarefaIds, arquivos = [{ nome: 'laudo.pdf', conteudo: 'conteúdo do laudo' }], status = STATUS.PENDENTE, devolvidoAt }) {
     const refs = arquivos.map((f) => {
         const content = Buffer.from(f.conteudo ?? f.nome);
         const fv = {
@@ -297,10 +353,37 @@ export function seedDeck(state, { tarefaIds, arquivos = [{ nome: 'laudo.pdf', co
         createdAt: now(),
         updatedAt: now(),
     };
+    if (devolvidoAt) deck.devolvidoAt = devolvidoAt;
     for (const k of deck.tarefaIds) state.board.taskStatus[k] = status;
     state.board.decks.push(deck);
     return deck;
 }
+
+/**
+ * Um comentário já gravado. Sem deck (deckId nulo) é comentário do sinistro;
+ * com deck, guarda o código como o servidor guarda, para sobreviver ao deck.
+ */
+export function seedComment(state, { deck, body, createdAt = now(), author = { id: 'u-outro', name: 'Bruno Lima', email: 'bruno@e2e.test' } }) {
+    const c = {
+        id: `cm-${state.nextId++}`,
+        tenant_id: 't-e2e',
+        process_id: state.process.id,
+        file_ver_id: null,
+        deck_id: deck?.id ?? null,
+        deck_codigo: deck?.codigo ?? null,
+        body,
+        author_id: author.id,
+        author_name: author.name,
+        author_email: author.email,
+        created_at: createdAt,
+        updated_at: createdAt,
+    };
+    state.comments.push(c);
+    return c;
+}
+
+// comment.Fold: minúsculas, sem acento.
+const fold = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 /** Os bytes que o servidor mandaria para este deck, para o spec comparar. */
 export function archiveFor(state, deckId) {
@@ -357,6 +440,39 @@ function gerencialTree(state) {
     return { processId: state.process.id, pastas };
 }
 
+// A regra do servidor para iniciar o prazo: todo item obrigatório cumprido —
+// marcado no checklist_state ou com arquivo (ou comentário que comprove) no deck da tarefa. Rodada na leitura: o efeito é o mesmo de ter rodado na escrita.
+function autoStartDeadline(state) {
+    if (state.deadline.start_at) return;
+    const meta = state.process.metadata || {};
+    // Com tipo de sinistro, os obrigatórios são os itens do checklist do tipo;
+    // sem ele, os itens das pastas (as chaves das tarefas do board). Item com
+    // required:false não conta, nem pasta privada.
+    const required = state.checklistDef
+        ? state.checklistDef.stages.flatMap((s) => s.items.filter((i) => i.required !== false).map((i) => `${s.id}.${i.id}`))
+        : (meta.folders || [])
+            .filter((f) => !f.private && f.category !== 'gerencial')
+            .flatMap((f) => (f.checklist || []).filter((i) => i.required !== false).map((i) => `${f.id}.${i.id}`));
+    if (required.length === 0) return;
+    const checked = meta.checklist_state || {};
+    const stats = commentStats(state);
+    const withFile = new Set(state.board.decks
+        .filter((d) => d.arquivos.length > 0 || commentsProve(d, stats[d.id]))
+        .flatMap((d) => d.tarefaIds));
+    if (!required.every((k) => checked[k] || withFile.has(k))) return;
+    const at = now();
+    const dl = state.deadline;
+    dl.start_at = at;
+    dl.start_source = 'auto';
+    if (dl.due_source !== 'manual') {
+        dl.due_at = new Date(Date.parse(at) + dl.total_days * 86_400_000).toISOString();
+        dl.due_source = 'auto';
+    }
+    dl.history.unshift({ at, by: null, by_name: null, by_email: null, field: 'start_at', from: null, to: at, justification: 'Todos os documentos obrigatórios entregues', source: 'auto' });
+}
+
+const urlParams = (state) => state.url?.searchParams || new URLSearchParams();
+
 function handle(state, method, seg, body) {
     const [a, b, c, d, e] = seg;
 
@@ -398,18 +514,87 @@ function handle(state, method, seg, body) {
         return { status: 201, body: st };
     }
 
+    // Tipos de sinistro: `data` com os slugs (o formato antigo) e `items` com
+    // os títulos, como o servidor lista.
+    if (a === 'checklists' && !b && method === 'GET') {
+        const types = state.claimTypes || [];
+        return ok({ data: types.map((t) => t.type), items: types });
+    }
+
+    if (a === 'comments' && b && (method === 'PATCH' || method === 'DELETE')) {
+        const cm = state.comments.find((x) => x.id === b);
+        if (!cm) return fail(404, 'COMMENT_NOT_FOUND', 'comment not found');
+        if (method === 'DELETE') {
+            state.comments = state.comments.filter((x) => x.id !== b);
+            return { status: 204, body: null };
+        }
+        cm.body = body?.body ?? cm.body;
+        cm.updated_at = now();
+        return ok(cm);
+    }
+
+    if (a === 'checklists' && b && method === 'GET') {
+        return state.checklistDef ? ok(state.checklistDef) : fail(404, 'NOT_FOUND', 'checklist not found');
+    }
     if (a !== 'processes') return null;
 
     if (!b && method === 'GET') return ok({ data: [state.process], total: 1 });
+    // Abertura: o sinistro criado passa a ser o do estado, para a tela que abre
+    // em seguida ler o que acabou de ser gravado.
+    if (!b && method === 'POST') {
+        state.process = {
+            ...state.process,
+            id: '22222222-2222-4222-8222-222222222222',
+            title: body?.title || '',
+            description: body?.description || '',
+            claim_type: body?.claim_type ?? null,
+            metadata: body?.metadata || {},
+            created_at: now(),
+            updated_at: now(),
+        };
+        return { status: 201, body: state.process };
+    }
     if (b !== state.process.id) return null;
 
     if (!c && method === 'GET') return ok(state.process);
+    // O checklist do tipo de sinistro guarda o estado no metadata, como o
+    // handler de checklist do servidor.
+    if (c === 'checklist' && !d && method === 'PATCH') {
+        state.process.metadata = { ...state.process.metadata, checklist_state: { ...(body || {}) } };
+        return ok({ data: state.process.metadata.checklist_state });
+    }
     if (!c && method === 'PATCH') {
         // O front sincroniza metadata em background; guardar é o bastante, e
         // devolver o processo inteiro é o que o servidor faz.
         if (body?.metadata) state.process.metadata = { ...state.process.metadata, ...body.metadata };
         state.process.updated_at = now();
         return ok(state.process);
+    }
+
+    // Comentários: deck_id filtra a fila de um deck, q busca sem acento nem
+    // caixa; deck_desfeito marca os de deck que saiu do quadro.
+    if (c === 'comments' && method === 'GET') {
+        const deckId = urlParams(state).get('deck_id');
+        const q = fold((urlParams(state).get('q') || '').trim());
+        const onBoard = new Set(state.board.decks.map((x) => x.id));
+        const data = state.comments
+            .filter((x) => !deckId || x.deck_id === deckId)
+            .filter((x) => !q || fold(x.body).includes(q))
+            .sort((x, y) => Date.parse(x.created_at) - Date.parse(y.created_at))
+            .map((x) => ({ ...x, ...(x.deck_id ? { deck_desfeito: !onBoard.has(x.deck_id) } : {}) }));
+        return ok({ data, total: data.length });
+    }
+    if (c === 'comments' && method === 'POST') {
+        const text = String(body?.body || '');
+        if (!text.trim()) return fail(400, 'VALIDATION_ERROR', 'body is required');
+        let deck = null;
+        if (body?.deck_id) {
+            deck = findDeck(state, body.deck_id);
+            if (!deck) return fail(422, 'DECK_NOT_FOUND', 'deck not found on this process');
+        }
+        const cm = seedComment(state, { deck, body: text, author: { id: ACCOUNT_ID, name: 'Ana Souza', email: 'ana.souza@allianz.com' } });
+        if (body?.file_ver_id) cm.file_ver_id = body.file_ver_id;
+        return { status: 201, body: cm };
     }
 
     if (c === 'files' && method === 'GET') {
@@ -434,6 +619,50 @@ function handle(state, method, seg, body) {
         return ok(view);
     }
 
+    // Armazenamento: soma das versões de arquivo do processo.
+    if (c === 'storage' && method === 'GET') {
+        return ok({ data: { bytes: state.files.reduce((n, fv) => n + (fv.size_bytes || 0), 0), file_count: state.files.length } });
+    }
+
+    if (c === 'deadline' && method === 'GET') {
+        state.deadlineReads = (state.deadlineReads || 0) + 1;
+        autoStartDeadline(state);
+        return ok({ data: { ...state.deadline, can_adjust: state.canAdjustDeadline } });
+    }
+    if (c === 'deadline' && method === 'PUT') {
+        if (!state.canAdjustDeadline) return fail(403, 'DEADLINE_FORBIDDEN', 'só o criador do processo ou um admin ajusta o prazo');
+        const justification = String(body?.justification || '').trim();
+        if (justification.length < 5) return fail(400, 'VALIDATION_ERROR', 'justification must have at least 5 characters');
+        if (!body.start_at && !body.due_at) return fail(400, 'VALIDATION_ERROR', 'start_at or due_at is required');
+        const dl = state.deadline;
+        const push = (field, to) => dl.history.unshift({
+            at: now(), by: ACCOUNT_ID, by_name: 'Perito E2E', by_email: 'perito@e2e.test',
+            field, from: dl[field], to, justification, source: 'manual',
+        });
+        if (body.start_at) {
+            push('start_at', body.start_at);
+            dl.start_at = body.start_at;
+            dl.start_source = 'manual';
+            if (dl.due_source !== 'manual' && !body.due_at) {
+                dl.due_at = new Date(Date.parse(body.start_at) + dl.total_days * 86_400_000).toISOString();
+                dl.due_source = 'auto';
+            }
+        }
+        if (body.due_at) {
+            push('due_at', body.due_at);
+            dl.due_at = body.due_at;
+            dl.due_source = 'manual';
+        }
+        return ok({ data: { ...dl, can_adjust: true } });
+    }
+
+    if (c === 'audit' && method === 'GET') {
+        if (!state.permissions.includes('processo.verAuditoria')) {
+            return { status: 403, body: { error: { code: 'INSUFFICIENT_PERMISSION', message: 'insufficient permission', required_action: 'processo.verAuditoria', request_id: 'e2e' } } };
+        }
+        return ok({ data: state.audit, total: state.audit.length });
+    }
+
     // A visão gerencial, montada como o servidor monta (handler/gerencial.go):
     // as pastas do metadata menos a gerencial, o checklist de cada uma como
     // tarefas, os arquivos do deck sob cada tarefa que ele carrega, e o que
@@ -446,7 +675,7 @@ function handle(state, method, seg, body) {
     }
 
     if (c !== 'decks') return null;
-    if (!d && method === 'GET') return ok(state.board);
+    if (!d && method === 'GET') return okBoard(state);
     if (!d && method === 'POST') return createDeck(state, body || {});
 
     const deck = findDeck(state, d);
@@ -473,12 +702,12 @@ function handle(state, method, seg, body) {
     if (e === 'arquivos' && method === 'POST') {
         deck.arquivos = dedupFiles([...deck.arquivos, ...(body?.arquivos || [])]);
         deck.updatedAt = now();
-        return ok(state.board);
+        return okBoard(state);
     }
     if (seg[4] === 'arquivos' && seg[5] && method === 'DELETE') {
         deck.arquivos = deck.arquivos.filter((f) => f.fileVerId !== decodeURIComponent(seg[5]));
         deck.updatedAt = now();
-        return ok(state.board);
+        return okBoard(state);
     }
 
     if (e === 'tarefas' && method === 'POST') {
@@ -486,13 +715,15 @@ function handle(state, method, seg, body) {
             return fail(422, 'DECK_NOT_PENDING', 'Só é possível juntar tarefas a um deck pendente.');
         }
         for (const k of [...new Set(body?.tarefaIds || [])]) {
+            const returnedAt = latestReturn(state.board, [k]);
+            if (returnedAt && (!deck.devolvidoAt || Date.parse(returnedAt) > Date.parse(deck.devolvidoAt))) deck.devolvidoAt = returnedAt;
             detachFromAll(state.board, k);
             if (!deck.tarefaIds.includes(k)) deck.tarefaIds.push(k);
             state.board.taskStatus[k] = STATUS.PENDENTE;
             delete state.board.taskReturns[k];
         }
         deck.updatedAt = now();
-        return ok(state.board);
+        return okBoard(state);
     }
     if (seg[4] === 'tarefas' && seg[5] && method === 'DELETE') {
         const key = decodeURIComponent(seg[5]);
@@ -501,16 +732,18 @@ function handle(state, method, seg, body) {
         if (deck.tarefaIds.length === 0) {
             state.board.decks = state.board.decks.filter((x) => x.id !== deck.id);
         }
-        return ok(state.board);
+        return okBoard(state);
     }
 
     if (e === 'enviar' && method === 'POST') {
         if (deck.status !== STATUS.PENDENTE) return fail(422, 'DECK_NOT_PENDING', 'Deck não está pendente.');
-        if (deck.arquivos.length === 0) return fail(422, 'DECK_NO_FILES', 'Anexe ao menos um arquivo antes de enviar.');
+        if (deck.arquivos.length === 0 && !commentsProve(deck, commentStats(state)[deck.id])) {
+            return fail(422, 'DECK_NO_FILES', 'cannot submit a deck without at least one file or comment');
+        }
         deck.status = STATUS.ENVIADO;
         deck.updatedAt = now();
         for (const k of deck.tarefaIds) state.board.taskStatus[k] = STATUS.ENVIADO;
-        return ok(state.board);
+        return okBoard(state);
     }
 
     if (e === 'analise' && method === 'POST') {
@@ -569,9 +802,10 @@ export async function installDeckApi(page, mutate) {
             await new Promise((resolve) => setTimeout(resolve, state.slowPermissions));
         }
 
-        // O que não está modelado (auditoria, comentários, compartilhamentos)
+        // O que não está modelado (o resto da auditoria, compartilhamentos)
         // responde vazio: um 404 aqui viraria banner de erro sem relação nenhuma
         // com o que está sob teste.
+        state.url = url;
         const res = handle(state, request.method(), seg, body) || ok({ data: [], total: 0 });
 
         if (res.binary) {

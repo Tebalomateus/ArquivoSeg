@@ -113,7 +113,9 @@ export const STATUS_COLORS = {
     'Em Análise': 'bg-amber-100 text-amber-700',
     'Documentação Completa': 'bg-purple-100 text-purple-700',
     'Em Prazo': 'bg-green-100 text-green-700',
+    'Em Revisão': 'bg-indigo-100 text-indigo-700',
     'Concluído': 'bg-gray-100 text-gray-700',
+    'Arquivado': 'bg-slate-200 text-slate-600',
 };
 
 export const CONFIDENTIAL_LEVELS = {

@@ -14,7 +14,7 @@ test.beforeEach(async ({ page }) => {
 
 test('marcar o curinga grava processo.* e avisa sobre permissões futuras', async ({ page }) => {
     const state = await installIamApi(page);
-    await page.goto('/admin/acessos/papeis');
+    await page.goto('/app/acessos/papeis');
 
     await page.getByRole('button', { name: 'Novo papel' }).click();
     const dialog = page.getByRole('dialog');
@@ -39,7 +39,7 @@ test('marcar o curinga grava processo.* e avisa sobre permissões futuras', asyn
 
 test('curinga e "marcar todas" são controles diferentes', async ({ page }) => {
     const state = await installIamApi(page);
-    await page.goto('/admin/acessos/papeis');
+    await page.goto('/app/acessos/papeis');
 
     await page.getByRole('button', { name: 'Novo papel' }).click();
     const dialog = page.getByRole('dialog');

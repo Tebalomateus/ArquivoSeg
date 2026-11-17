@@ -1,35 +1,43 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
     BarChart3,
     FileText,
-    Users,
-    Menu,
-    X,
-    PlusCircle,
-    Clock,
     LogOut,
     ShieldCheck,
     ChevronDown,
-    KeyRound
+    KeyRound,
+    Check,
+    Settings2,
+    ShieldHalf,
+    History,
+    HardDrive,
+    Building2,
+    Link as LinkIcon,
+    Database,
 } from 'lucide-react';
 import { useClaims } from '../../context/ClaimsContext';
+import { usePermissions } from '../../context/PermissionsContext';
 import NotificationBell from '../NotificationBell';
 
-const SidebarItem = ({ to, icon: Icon, label, isOpen, end = false }) => (
+// Uma aba do cabeçalho. Abaixo de `sm` o rótulo vira só o ícone: a 360px as
+// duas abas, a marca e o perfil não cabem lado a lado por extenso. O rótulo
+// continua como nome acessível pelo aria-label.
+const HeaderTab = ({ to, icon: Icon, label, end = false }) => (
     <NavLink
         to={to}
         end={end}
+        aria-label={label}
         className={({ isActive }) => `
-      flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 font-bold text-sm
+      relative h-full flex items-center gap-2 px-2 sm:px-3 text-sm transition-colors
       ${isActive
-                ? 'bg-secondary text-white shadow-xl shadow-secondary/20 translate-x-1'
-                : 'text-slate-400 hover:text-secondary hover:bg-white hover:translate-x-1 border border-transparent hover:border-secondary/10'}
+                ? 'font-bold text-primary after:absolute after:left-0 after:right-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-secondary'
+                : 'font-semibold text-slate-500 hover:text-primary'}
     `}
     >
-        <Icon size={20} />
-        {isOpen && <span>{label}</span>}
+        <Icon size={18} className="sm:hidden" />
+        <span className="hidden sm:inline">{label}</span>
     </NavLink>
 );
 
@@ -42,13 +50,16 @@ const SidebarItem = ({ to, icon: Icon, label, isOpen, end = false }) => (
 const MENU_WIDTH = 288; // w-72
 const MENU_MARGIN = 8; // keep the menu on-screen at narrow widths
 
-const ProfileMenu = ({ user, onLogout }) => {
+/**
+ * Um menu suspenso preso ao gatilho. O painel vai para o <body> por portal,
+ * como o do NotificationBell, porque o backdrop-filter do cabeçalho cria um
+ * contexto de empilhamento que fica abaixo dos blocos z-10 da página.
+ * `align` diz qual borda do gatilho o painel acompanha.
+ */
+function useAnchoredMenu(align = 'right') {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
     const panelRef = useRef(null);
-    // Menu position in viewport coords: the panel is portaled to <body>, like
-    // NotificationBell's, because the header's backdrop-filter stacking context
-    // sits under the page's own z-10 blocks and they would paint over it.
     const [pos, setPos] = useState({ top: 0, left: 0 });
 
     // close on outside click / Escape — "inside" is the trigger or the portaled panel
@@ -68,14 +79,15 @@ const ProfileMenu = ({ user, onLogout }) => {
         };
     }, [open]);
 
-    // anchor the fixed panel under the trigger's right edge; follow resize/scroll
+    // anchor the fixed panel under the trigger; follow resize/scroll
     useEffect(() => {
         if (!open) return;
         const place = () => {
             const rect = ref.current?.getBoundingClientRect();
             if (!rect) return;
             const width = Math.min(MENU_WIDTH, window.innerWidth - 2 * MENU_MARGIN);
-            const left = Math.min(Math.max(MENU_MARGIN, rect.right - width), window.innerWidth - MENU_MARGIN - width);
+            const wanted = align === 'left' ? rect.left : rect.right - width;
+            const left = Math.min(Math.max(MENU_MARGIN, wanted), window.innerWidth - MENU_MARGIN - width);
             setPos({ top: rect.bottom + 8, left, width });
         };
         place();
@@ -85,7 +97,13 @@ const ProfileMenu = ({ user, onLogout }) => {
             window.removeEventListener('resize', place);
             window.removeEventListener('scroll', place, true);
         };
-    }, [open]);
+    }, [open, align]);
+
+    return { open, setOpen, ref, panelRef, pos };
+}
+
+const ProfileMenu = ({ user, onLogout }) => {
+    const { open, setOpen, ref, panelRef, pos } = useAnchoredMenu('right');
 
     const initials = user?.name?.split(' ').map(n => n[0]).join('');
 
@@ -98,13 +116,13 @@ const ProfileMenu = ({ user, onLogout }) => {
                 aria-expanded={open}
                 aria-label="Meu perfil"
                 data-testid="profile-menu-trigger"
-                className="flex items-center gap-4 rounded-2xl p-1 -m-1 transition-all hover:bg-white/60"
+                className="flex items-center gap-2.5 rounded-xl pl-1 pr-2 py-1 transition-all hover:bg-white"
             >
-                <div className="text-right hidden sm:block">
-                    <p className="text-sm font-bold text-slate-900 leading-none">{user?.name}</p>
-                    <p className="text-[11px] font-bold text-secondary uppercase tracking-widest mt-1">{user?.role}</p>
+                <div className="text-right leading-tight hidden md:block">
+                    <p className="text-sm font-bold text-primary">{user?.name}</p>
+                    <p className="text-[9px] font-black tracking-widest text-slate-400 uppercase">{user?.role}</p>
                 </div>
-                <div className="w-10 h-10 bg-white border-2 border-white shadow-lg rounded-2xl flex items-center justify-center font-bold text-secondary text-sm">
+                <div className="w-9 h-9 bg-primary text-white rounded-xl flex items-center justify-center text-xs font-black">
                     {initials}
                 </div>
                 <ChevronDown size={16} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -150,9 +168,73 @@ const ProfileMenu = ({ user, onLogout }) => {
     );
 };
 
+// O que era o backoffice /admin: as telas de gestão do tenant, só para o admin.
+const GESTAO = [
+    { to: '/app/acessos', label: 'Usuários e Acessos', icon: ShieldHalf },
+    { to: '/app/audit', label: 'Auditoria', icon: History },
+    { to: '/app/armazenamento', label: 'Armazenamento', icon: HardDrive },
+    { to: '/app/clientes', label: 'Clientes', icon: Building2 },
+    { to: '/app/links', label: 'Links Públicos', icon: LinkIcon },
+    { to: '/app/compliance', label: 'Compliance', icon: Database },
+];
+
+const GestaoMenu = () => {
+    const { open, setOpen, ref, panelRef, pos } = useAnchoredMenu('left');
+    const { pathname } = useLocation();
+    const active = GESTAO.some(({ to }) => pathname.startsWith(to));
+
+    // Trocar de página fecha o menu.
+    useEffect(() => { setOpen(false); }, [pathname, setOpen]);
+
+    return (
+        <div className="relative h-full" ref={ref}>
+            <button
+                type="button"
+                onClick={() => setOpen(o => !o)}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                aria-label="Gestão"
+                data-testid="gestao-menu-trigger"
+                className={`relative h-full flex items-center gap-1.5 px-2 sm:px-3 text-sm transition-colors
+                    ${active
+                        ? 'font-bold text-primary after:absolute after:left-0 after:right-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-secondary'
+                        : 'font-semibold text-slate-500 hover:text-primary'}`}
+            >
+                <Settings2 size={18} className="sm:hidden" />
+                <span className="hidden sm:inline">Gestão</span>
+                <ChevronDown size={14} className={`hidden sm:block transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+
+            {open && createPortal(
+                <div
+                    ref={panelRef}
+                    role="menu"
+                    data-testid="gestao-menu"
+                    style={{ top: pos.top, left: pos.left, width: pos.width || MENU_WIDTH }}
+                    className="fixed w-72 max-w-[calc(100vw-16px)] bg-white rounded-2xl border border-slate-100 shadow-2xl z-50 overflow-hidden animate-fade-in py-2"
+                >
+                    {GESTAO.map(({ to, label, icon: Icon }) => (
+                        <NavLink
+                            key={to}
+                            to={to}
+                            role="menuitem"
+                            className={({ isActive }) => `flex items-center gap-3 px-5 py-2.5 text-sm transition-colors
+                                ${isActive ? 'font-bold text-primary bg-primary/5' : 'font-semibold text-slate-600 hover:text-primary hover:bg-slate-50'}`}
+                        >
+                            <Icon size={16} className="shrink-0" />
+                            {label}
+                        </NavLink>
+                    ))}
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+};
+
 export default function Layout() {
-    const [isSidebarOpen, setSidebarOpen] = useState(true);
     const { currentUser, logout } = useClaims();
+    const { isAdmin } = usePermissions();
     const navigate = useNavigate();
 
     const handleLogout = () => {
@@ -161,90 +243,44 @@ export default function Layout() {
     };
 
     return (
-        <div className="flex h-screen bg-[#F8FAFC] font-sans text-slate-900 overflow-hidden relative">
+        <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 relative overflow-x-hidden">
             {/* Decorative Blobs */}
             <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] pointer-events-none z-0"></div>
             <div className="fixed bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-secondary/10 rounded-full blur-[150px] pointer-events-none z-0"></div>
 
-            {/* Sidebar */}
-            <aside
-                className={`
-          ${isSidebarOpen ? 'w-72' : 'w-20'} 
-          bg-white/70 backdrop-blur-xl border-r border-white/40 transition-all duration-300 flex flex-col
-          z-20 shadow-2xl shadow-blue-900/5
-        `}
-            >
-                <div className="p-8 flex items-center justify-between">
-                    {isSidebarOpen && (
-                        <Link to="/" className="text-xl font-bold flex items-center gap-2">
-                            <div className="relative">
-                                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
-                                    <ShieldCheck size={24} />
-                                </div>
-                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-secondary-light rounded-full border-2 border-white flex items-center justify-center text-[8px] font-black text-white">
-                                    ✓
-                                </div>
-                            </div>
-                            <div className="flex flex-col leading-none">
-                                <span className="font-display font-bold tracking-tight text-primary">Arquivo<span className="text-secondary">Seg</span></span>
-                                <span className="text-[7px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Gestão de Documentos</span>
-                            </div>
-                        </Link>
-                    )}
-                    {!isSidebarOpen && (
-                        <div className="mx-auto relative">
-                            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
-                                <ShieldCheck size={24} />
-                            </div>
-                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-secondary-light rounded-full border-2 border-white flex items-center justify-center text-[8px] font-black text-white">
-                                ✓
-                            </div>
+            {/* Um cabeçalho só: as abas à esquerda, a marca no centro (que leva ao
+                dashboard) e sino + perfil à direita. O "Sair" mora no menu do perfil. */}
+            <header className="sticky top-0 z-40 h-16 bg-white/70 backdrop-blur-xl border-b border-white/40 shadow-[0_1px_0_rgba(26,43,83,.06)]">
+                <div className="max-w-7xl mx-auto h-full px-3 sm:px-8 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                    <nav className="flex items-center gap-1 h-full min-w-0" aria-label="Navegação principal">
+                        <HeaderTab to="/app" end icon={BarChart3} label="Dashboard" />
+                        <HeaderTab to="/app/sinistros" icon={FileText} label="Meus Sinistros" />
+                        {isAdmin && <GestaoMenu />}
+                    </nav>
+
+                    <Link to="/app" className="flex items-center gap-2.5 justify-self-center" title="Ir para o dashboard" aria-label="ArquivoSeg — ir para o dashboard">
+                        <div className="relative w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/20">
+                            <ShieldCheck size={20} />
+                            <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-secondary-light border-2 border-white text-white flex items-center justify-center">
+                                <Check size={8} strokeWidth={4} />
+                            </span>
                         </div>
-                    )}
-                </div>
+                        <div className="leading-none hidden min-[400px]:block">
+                            <div className="font-display text-lg font-extrabold tracking-tight"><span className="text-primary">Arquivo</span><span className="text-secondary">Seg</span></div>
+                            <div className="text-[7px] font-black tracking-[.22em] text-slate-400 uppercase mt-0.5 hidden sm:block">Gestão de Documentos</div>
+                        </div>
+                    </Link>
 
-                <nav className="flex-1 px-4 py-4 space-y-2">
-                    <SidebarItem to="/app" end icon={BarChart3} label="Dashboard" isOpen={isSidebarOpen} />
-                    <SidebarItem to="/app/sinistros" icon={FileText} label="Meus Sinistros" isOpen={isSidebarOpen} />
-                </nav>
-
-                <div className="p-6 border-t border-white/40">
-                    <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all font-bold text-sm"
-                    >
-                        <LogOut size={20} />
-                        {isSidebarOpen && "Sair do Sistema"}
-                    </button>
-                    <button
-                        onClick={() => setSidebarOpen(!isSidebarOpen)}
-                        className="mt-4 w-full flex items-center justify-center p-2 text-slate-300 hover:text-secondary transition-all"
-                    >
-                        {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
-                    </button>
-                </div>
-            </aside>
-
-            {/* Main Content */}
-            <main className="flex-1 flex flex-col min-w-0 z-10 relative overflow-hidden">
-                {/* Header */}
-                <header className="h-20 bg-white/40 backdrop-blur-md border-b border-white/20 flex items-center justify-between px-10">
-                    <div className="flex items-center gap-4">
-                        <h2 className="text-lg font-bold text-slate-800 font-display">
-                            Bem-vindo, {currentUser?.name?.split(' ')[0]}!
-                        </h2>
-                    </div>
-
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0">
                         <NotificationBell basePath="/app" />
-                        <div className="h-8 w-[1px] bg-slate-200"></div>
+                        <div className="w-px h-7 bg-slate-200 hidden sm:block"></div>
                         <ProfileMenu user={currentUser} onLogout={handleLogout} />
                     </div>
-                </header>
-
-                <div className="flex-1 overflow-y-auto p-10">
-                    <Outlet />
                 </div>
+            </header>
+
+            <main className="relative z-10 max-w-7xl mx-auto px-4 py-6 sm:p-8">
+                <Outlet />
             </main>
         </div>
     );

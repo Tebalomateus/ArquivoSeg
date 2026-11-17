@@ -10,7 +10,7 @@ const TABS = [
 /**
  * AccessLayout frames the tenant's access administration.
  *
- * It sits inside the /admin block, which is already gated on isAdmin — the
+ * It sits inside the /app management block, which is gated on isAdmin — the
  * Zitadel role, not a permission. That is deliberate: this is the screen where a
  * broken IAM configuration gets fixed, so gating it on the data it edits is how
  * a tenant locks itself out of its own tenant.
@@ -18,7 +18,7 @@ const TABS = [
 export default function AccessLayout() {
     const { pathname } = useLocation();
 
-    // /admin/acessos on its own has nothing to show; the users tab is the entry
+    // /app/acessos on its own has nothing to show; the users tab is the entry
     // point the admin actually wants.
     if (pathname.replace(/\/$/, '').endsWith('/acessos')) {
         return <Navigate to="usuarios" replace />;

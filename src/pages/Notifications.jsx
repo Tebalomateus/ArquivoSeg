@@ -23,7 +23,7 @@ const RELEVANT_ACTIONS = new Set([
 
 export default function Notifications() {
     const { currentUser, claims, backendUsers } = useClaims();
-    const { isAdmin, can } = usePermissions();
+    const { can } = usePermissions();
     const navigate = useNavigate();
 
     const [entries, setEntries] = useState([]);
@@ -33,8 +33,6 @@ export default function Notifications() {
     const [lastSeen, setLastSeen] = useState(() => {
         try { return localStorage.getItem(LAST_SEEN_KEY) || null; } catch { return null; }
     });
-
-    const basePath = isAdmin ? '/admin' : '/app';
 
     const load = useCallback(async () => {
         if (!currentUser) return;
@@ -116,14 +114,14 @@ export default function Notifications() {
 
     const goTo = (n) => {
         markAllRead();
-        if (n.claim) navigate(`${basePath}/sinistros/${n.claim.id}`);
+        if (n.claim) navigate(`/app/sinistros/${n.claim.id}`);
     };
 
     return (
         <div className="space-y-8 animate-fade-in relative z-10">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
-                    <Link to={basePath} className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-blue-500 mb-2 tracking-widest">
+                    <Link to="/app" className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-blue-500 mb-2 tracking-widest">
                         <ArrowLeft size={16} />
                         Voltar
                     </Link>

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
+import { abrirEtapa } from './fixtures/etapas.js';
 import { openBoard, seedDeck, PROCESS_ID, TASK } from './fixtures/deck-api.js';
 
 /**
@@ -18,7 +19,7 @@ const comGerencial = (s) => {
 };
 
 async function abrirGerencial(page) {
-    await page.getByRole('button', { name: 'Gerencial' }).click();
+    await page.getByRole('tab', { name: 'Gerencial' }).click();
     const tree = page.getByTestId('gerencial-tree');
     await expect(tree).toBeVisible();
     await expect(tree.getByRole('heading', { name: 'Visão gerencial' })).toBeVisible();
@@ -39,14 +40,13 @@ test('a árvore mostra pasta, tarefa com estado e deck, e os arquivos do deck', 
 
     const tree = await abrirGerencial(page);
 
-    // O kanban ficou para trás: nem colunas, nem o cartão de progresso, nem os avulsos da lateral.
+    // O kanban ficou para trás: nem colunas, nem o cartão de progresso, nem o seletor de modo.
     await expect(page.getByTestId('column-pendente')).toHaveCount(0);
     await expect(page.getByText(/Atendidas em/)).toHaveCount(0);
-    await expect(page.getByTestId('folder-avulsos')).toHaveCount(0);
-    // E não se sobe nada para cá: a visão é só leitura.
-    await expect(page.getByRole('button', { name: 'Upload Seguro' })).toHaveCount(0);
-    await page.getByRole('button', { name: /^Causa \d+%$/ }).click();
-    await expect(page.getByRole('button', { name: 'Upload Seguro' })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Modo de visualização' })).toHaveCount(0);
+    // Voltar a uma pasta devolve o board; a visão gerencial reabre igual.
+    await abrirEtapa(page, /^Causa \(\d+%\)$/);
+    await expect(page.getByRole('heading', { name: 'Relação de documentos' })).toBeVisible();
     await abrirGerencial(page);
 
     const causa = tree.getByTestId('gerencial-folder-causa');
@@ -156,8 +156,8 @@ test('sem processo.verGerencial a pasta não existe na lateral — e a rota nem 
         },
     });
 
-    await expect(page.getByRole('button', { name: /^Causa \d+%$/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Gerencial' })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: /^Causa \(\d+%\)$/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Gerencial' })).toHaveCount(0);
     await expect(page.getByTestId('gerencial-tree')).toHaveCount(0);
     expect(state.requests.some((r) => r.path.endsWith('/gerencial'))).toBe(false);
 });
@@ -170,7 +170,7 @@ test('a pasta gerencial abre a árvore em qualquer modo, e recolher esconde as t
         },
     });
 
-    await page.getByRole('button', { name: 'Checklist' }).click();
+    await page.getByRole('button', { name: 'Gerenciamento' }).click();
     const tree = await abrirGerencial(page);
 
     const bo = tree.getByTestId(`gerencial-task-${TASK.bo}`);

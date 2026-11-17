@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { abrirEtapa } from './fixtures/etapas.js';
 import { confirmar, openBoard, seedDeck, TASK } from './fixtures/deck-api.js';
 
 /**
@@ -21,6 +22,8 @@ test('uma tarefa solta vira deck com o arquivo enviado', async ({ page }) => {
 
     const modal = page.getByTestId('upload-modal');
     await expect(modal).toContainText('Boletim de ocorrência');
+    // Sem o sobretítulo "Upload seguro": o título da tarefa abre o modal.
+    await expect(modal).not.toContainText('Upload seguro');
     await modal.locator('input[type=file]').setInputFiles(pdf('bo.pdf', 'boletim de ocorrencia'));
     await modal.getByRole('button', { name: 'Confirmar' }).click();
 
@@ -164,7 +167,7 @@ test('o board é por pasta: um deck da Causa não aparece no Prejuízo', async (
 
     await expect(page.getByTestId('column-pendente').getByTestId('deck-DECK-01')).toBeVisible();
 
-    await page.getByRole('button', { name: /Prejuízo/ }).click();
+    await abrirEtapa(page, /Prejuízo/);
     await expect(page.getByTestId('column-pendente').getByTestId('deck-DECK-01')).toHaveCount(0);
     await expect(page.getByTestId(`task-${TASK.orcamento}`)).toBeVisible();
 });

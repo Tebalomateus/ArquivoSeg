@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 
 test('convidar alguém já com papel, sem sair da tela de acessos', async ({ page }) => {
     const state = await installIamApi(page);
-    await page.goto('/admin/acessos/usuarios');
+    await page.goto('/app/acessos/usuarios');
 
     await page.getByRole('button', { name: 'Convidar' }).click();
     const dialog = page.getByRole('dialog', { name: 'Convidar usuário' });
@@ -38,10 +38,10 @@ test('convidar alguém já com papel, sem sair da tela de acessos', async ({ pag
 test('quem foi convidado recebe reenvio; quem já entrou, recuperação de acesso', async ({ page }) => {
     await installIamApi(page);
 
-    await page.goto('/admin/acessos/usuarios/u-maria'); // status: invited
+    await page.goto('/app/acessos/usuarios/u-maria'); // status: invited
     await expect(page.getByRole('button', { name: 'Reenviar convite' })).toBeVisible();
 
-    await page.goto('/admin/acessos/usuarios/u-ana'); // status: active
+    await page.goto('/app/acessos/usuarios/u-ana'); // status: active
     await expect(page.getByRole('button', { name: 'Recuperar acesso' })).toBeVisible();
 });
 
@@ -49,7 +49,7 @@ test('desativar a conta confirma antes e não some com o acesso configurado', as
     const state = await installIamApi(page, (s) => {
         s.userRoles['u-ana'] = ['r-leitor'];
     });
-    await page.goto('/admin/acessos/usuarios/u-ana');
+    await page.goto('/app/acessos/usuarios/u-ana');
 
     await page.getByRole('button', { name: 'Desativar conta' }).click();
     const confirmar = page.getByRole('dialog', { name: 'Desativar esta conta' });
@@ -64,7 +64,7 @@ test('desativar a conta confirma antes e não some com o acesso configurado', as
 
 test('a própria conta não oferece o botão de desativar', async ({ page }) => {
     await installIamApi(page);
-    await page.goto('/admin/acessos/usuarios/u-admin');
+    await page.goto('/app/acessos/usuarios/u-admin');
 
     await expect(page.getByRole('button', { name: 'Recuperar acesso' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Desativar conta' })).toHaveCount(0);
@@ -74,5 +74,5 @@ test('a rota antiga de gestão de usuários leva para a aba de usuários', async
     await installIamApi(page);
     await page.goto('/admin/usuarios');
 
-    await expect(page).toHaveURL(/\/admin\/acessos\/usuarios$/);
+    await expect(page).toHaveURL(/\/app\/acessos\/usuarios$/);
 });

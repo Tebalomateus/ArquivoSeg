@@ -47,9 +47,6 @@ const realService = {
     listComments(processId) {
         return commentsApi.listComments(processId);
     },
-    listAudit(processId) {
-        return auditApi.listAudit({ resourceType: 'process', resourceId: processId, limit: 50 });
-    },
     listAuditByShareToken(tokenId) {
         return auditApi.listAudit({ resourceType: 'share_token', resourceId: tokenId, limit: 200 });
     },
@@ -141,9 +138,6 @@ const mockService = {
         console.log(`[MOCK] deleteComment ${commentId}`);
     },
     async listComments() {
-        return { data: [], total: 0 };
-    },
-    async listAudit() {
         return { data: [], total: 0 };
     },
     async listAuditByShareToken() {
