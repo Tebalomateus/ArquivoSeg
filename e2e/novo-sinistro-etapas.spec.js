@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { abrirEtapa, expectEtapas } from './fixtures/etapas.js';
 import { signIn } from './fixtures/session.js';
 
 /**
@@ -98,21 +99,22 @@ test('o sinistro nasce com as etapas editadas e o disclaimer no topo', async ({ 
     await page.getByRole('button', { name: 'Criar Sinistro' }).click();
     await expect(page).toHaveURL(/\/app\/sinistros\/[^/]+$/);
 
-    // Uma aba por etapa, em ordem; a pasta privada não é etapa.
-    const steps = page.getByTestId('step-selector').getByRole('tab');
-    await expect(steps).toHaveText([/^Aviso \(0%\)$/, /^Causa \(0%\)$/, /^Prejuízo \(0%\)$/, /^Liquidação \(0%\)$/]);
-    await expect(steps.first()).toHaveAttribute('aria-selected', 'true');
+    // As etapas, em ordem, no menu da aba de etapas; a pasta privada não é etapa.
+    // A aba abre na primeira.
+    await expect(page.getByTestId('step-select-trigger')).toHaveText(/^Aviso \(0%\)$/);
+    await expect(page.getByTestId('step-select-trigger')).toHaveAttribute('aria-selected', 'true');
+    await expectEtapas(page, [/^Aviso \(0%\)$/, /^Causa \(0%\)$/, /^Prejuízo \(0%\)$/, /^Liquidação \(0%\)$/]);
 
     const banner = page.getByRole('note', { name: 'Disclaimer' });
     await expect(banner).toHaveText('Segurado só atende pela manhã.');
-    await page.getByRole('tab', { name: /^Prejuízo/ }).click();
+    await abrirEtapa(page, /^Prejuízo/);
     await expect(banner).toBeVisible();
 
     // Os itens que ficaram viram as tarefas da etapa.
-    await page.getByRole('tab', { name: /^Aviso/ }).click();
+    await abrirEtapa(page, /^Aviso/);
     await expect(page.getByRole('paragraph').filter({ hasText: 'Aviso de Sinistro assinado' })).toBeVisible();
     await expect(page.getByRole('paragraph').filter({ hasText: 'Carta da corretora' })).toBeVisible();
-    await page.getByRole('tab', { name: /^Prejuízo/ }).click();
+    await abrirEtapa(page, /^Prejuízo/);
     await expect(page.getByRole('paragraph').filter({ hasText: 'Planilha de Bens Danificados' })).toBeVisible();
     await expect(page.getByRole('paragraph').filter({ hasText: 'Orçamentos de Reparo' })).toHaveCount(0);
 
@@ -129,7 +131,7 @@ test('sem disclaimer não há faixa, só o botão de adicionar', async ({ page }
     await page.getByRole('button', { name: 'Criar Sinistro' }).click();
     await expect(page).toHaveURL(/\/app\/sinistros\/[^/]+$/);
 
-    await expect(page.getByTestId('step-selector').getByRole('tab')).toHaveText([/^Causa/, /^Prejuízo/, /^Liquidação/]);
+    await expectEtapas(page, [/^Causa/, /^Prejuízo/, /^Liquidação/]);
     await expect(page.getByRole('note', { name: 'Disclaimer' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Adicionar disclaimer' }).click();
     await page.locator('#disclaimer-edit').fill('Prioridade alta.');

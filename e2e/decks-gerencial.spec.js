@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
+import { abrirEtapa } from './fixtures/etapas.js';
 import { openBoard, seedDeck, PROCESS_ID, TASK } from './fixtures/deck-api.js';
 
 /**
@@ -44,7 +45,7 @@ test('a árvore mostra pasta, tarefa com estado e deck, e os arquivos do deck', 
     await expect(page.getByText(/Atendidas em/)).toHaveCount(0);
     await expect(page.getByRole('group', { name: 'Modo de visualização' })).toHaveCount(0);
     // Voltar a uma pasta devolve o board; a visão gerencial reabre igual.
-    await page.getByRole('tab', { name: /^Causa \(\d+%\)$/ }).click();
+    await abrirEtapa(page, /^Causa \(\d+%\)$/);
     await expect(page.getByRole('heading', { name: 'Relação de documentos' })).toBeVisible();
     await abrirGerencial(page);
 

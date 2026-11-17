@@ -23,6 +23,7 @@ import { useCan } from '../context/PermissionsContext';
 import { useConfirm } from '../components/ConfirmDialog';
 import ClaimAuditTrail from '../components/ClaimAuditTrail';
 import ClaimDeadline from '../components/ClaimDeadline';
+import StepSelect from '../components/StepSelect';
 import { actorLabelFromDbId } from '../api/auth';
 import { formatBytes } from '../api/files';
 import { actionLabel } from '../constants/auditTrail';
@@ -139,6 +140,10 @@ export default function ClaimDetails() {
     } = useClaims();
 
     const [tab, setTab] = useState(null); // id da pasta, LOOSE_FOLDER_ID, GERENCIAL_TAB ou AUDIT_TAB
+
+    // Fora das etapas, o seletor continua mostrando a última escolhida.
+
+    const [lastStepId, setLastStepId] = useState(null);
     // Documentos sem tarefa, contados pelo board; null até ele contar.
     const [looseCount, setLooseCount] = useState(null);
     const [viewMode, setViewMode] = useState('decks');
@@ -580,24 +585,10 @@ export default function ClaimDetails() {
 
                 <div className="flex-1 min-w-0">
                     <div role="tablist" aria-label="Seções do sinistro" className="flex items-center gap-1 border-b border-gray-200/80 overflow-x-auto">
-                        {/* Seletor de etapas: as etapas do tipo, em ordem, como um
-                            stepper. O número vem do CSS (data-step), fora do
-                            texto e do nome acessível, que continua "Etapa (N%)". */}
-                        <div className="flex items-center" data-testid="step-selector">
-                            {folderTabs.map((folder, i) => {
-                                const on = activeTab === folder.id;
-                                return (
-                                    <div key={folder.id} className="flex items-center">
-                                        {i > 0 && <span aria-hidden="true" className="w-4 h-px bg-gray-300 shrink-0" />}
-                                        <button type="button" role="tab" aria-selected={on}
-                                            onClick={() => setTab(folder.id)} className={tabClass(on)}>
-                                            <span aria-hidden="true" data-step={i + 1} className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 before:content-[attr(data-step)] ${on ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-500'}`} />
-                                            {folder.name} <span className="text-gray-400 font-semibold" data-testid={`folder-progress-${folder.id}`} title={progressLabel(progress.folders[folder.id])}>({progress.folders[folder.id]?.atendidoPct ?? 0}%)</span>
-                                        </button>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                        <StepSelect steps={folderTabs} activeId={currentFolder?.id ?? null} lastId={lastStepId}
+                            onSelect={(sid) => { setLastStepId(sid); setTab(sid); }} tabClass={tabClass}
+                            pctOf={(id) => progress.folders[id]?.atendidoPct ?? 0}
+                            titleOf={(id) => progressLabel(progress.folders[id])} />
                         {folderTabs.length > 0 && (canSeeLoose || canSeeGerencial || canSeeAudit) && (
                             <span aria-hidden="true" className="mx-2 h-5 w-px bg-gray-200 shrink-0" />
                         )}

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { abrirEtapa } from './fixtures/etapas.js';
 import { signIn } from './fixtures/session.js';
 
 /**
@@ -135,13 +136,13 @@ test('no mock o prazo começa quando o último obrigatório recebe arquivo', asy
         await expect(modal).toHaveCount(0);
     };
 
-    await page.getByRole('tab', { name: /^Causa/ }).click();
+    await abrirEtapa(page, /^Causa/);
     await enviar('f1-1.bo', 'bo.pdf');
     await enviar('f1-1.laudo', 'laudo.pdf');
     // Ainda falta o orçamento, na pasta Prejuízo.
     await expect(status).toHaveText('Aguardando documentos obrigatórios');
 
-    await page.getByRole('tab', { name: /^Prejuízo/ }).click();
+    await abrirEtapa(page, /^Prejuízo/);
     await enviar('f2-1.orcamento', 'orcamento.pdf');
     await expect(status).toHaveText('30 dias restantes');
     await expect(page.getByTestId('deadline-start')).toContainText('automático');

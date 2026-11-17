@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { abrirEtapa, expectEtapas } from './fixtures/etapas.js';
 import { signIn } from './fixtures/session.js';
 
 /**
@@ -54,28 +55,33 @@ test('sem processo.verAuditoria não há aba de auditoria nem última atividade'
     await expect(page.getByTestId('claim-last-activity')).toHaveCount(0);
 });
 
-test('uma aba por pasta, com o seletor de modo só dentro das pastas', async ({ page }) => {
+test('as etapas num menu dentro de uma aba, com o seletor de modo só dentro das pastas', async ({ page }) => {
     await signIn(page, 'manager');
     await plantBoard(page);
     await page.goto(CLAIM);
 
     const tabs = page.getByRole('tablist', { name: 'Seções do sinistro' }).getByRole('tab');
-    await expect(tabs).toHaveText([
-        /^Causa \(50%\)$/, /^Prejuízo \(0%\)$/, /^Liquidação \(0%\)$/,
-        /Documentos avulsos/, /Gerencial/, /Auditoria/,
-    ]);
+    // Uma aba só para as etapas, por mais que o tipo tenha: ela mostra a atual.
+    await expect(tabs).toHaveText([/^Causa \(50%\)$/, /Documentos avulsos/, /Gerencial/, /Auditoria/]);
     await expect(page.getByRole('tab', { name: /^Causa/ })).toHaveAttribute('aria-selected', 'true');
+    await expectEtapas(page, [/^Causa \(50%\)$/, /^Prejuízo \(0%\)$/, /^Liquidação \(0%\)$/]);
 
     const modes = page.getByRole('group', { name: 'Modo de visualização' });
     await expect(modes.getByRole('button')).toHaveText(['Decks', 'Gerenciamento']);
 
-    await page.getByRole('tab', { name: /^Prejuízo/ }).click();
+    await abrirEtapa(page, /^Prejuízo/);
     await expect(page.getByRole('tab', { name: /^Prejuízo/ })).toHaveAttribute('aria-selected', 'true');
     await expect(modes).toBeVisible();
 
     await page.getByRole('tab', { name: 'Gerencial' }).click();
     await expect(page.getByTestId('gerencial-tree')).toBeVisible();
     await expect(modes).toHaveCount(0);
+    // Fora das etapas, a aba guarda a última escolhida, sem ficar selecionada.
+    await expect(page.getByTestId('step-select-trigger')).toHaveText(/^Prejuízo/);
+    await expect(page.getByTestId('step-select-trigger')).toHaveAttribute('aria-selected', 'false');
+    await abrirEtapa(page, /^Liquidação/);
+    await expect(page.getByRole('tab', { name: /^Liquidação/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(modes).toBeVisible();
 });
 
 test('abaixo de 1024px as colunas empilham, sem rolagem horizontal', async ({ page }) => {

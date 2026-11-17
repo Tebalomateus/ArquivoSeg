@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { abrirEtapa } from './fixtures/etapas.js';
 import { confirmar, openBoard, seedDeck, TASK } from './fixtures/deck-api.js';
 
 /**
@@ -44,7 +45,10 @@ test('aprovar o deck passa a conclusão de enviada para atendida', async ({ page
     await expect(page.getByTestId('claim-progress-label')).toHaveText('67% atendido · 0% enviado');
     await expect(page.getByTestId('claim-progress')).toHaveText('67%');
     await expect(page.getByTestId('folder-progress-causa')).toHaveText('(100%)');
-    await expect(page.getByTestId('folder-progress-prejuizo')).toHaveText('(0%)');
+    // As outras etapas mostram o % no menu de etapas.
+    await page.getByTestId('step-select-trigger').click();
+    await expect(page.getByTestId('step-menu').getByRole('menuitemradio', { name: /^Prejuízo/ })).toHaveText(/\(0%\)$/);
+    await page.keyboard.press('Escape');
     await expect(page.getByTestId('board-progress')).toHaveText('100% atendido · 0% enviado');
     await expect(page.getByText('2 de 2')).toBeVisible();
 });
@@ -80,6 +84,6 @@ test('cartões mostram a data de inserção da tarefa e do deck', async ({ page 
     await expect(pendente.getByTestId(`task-${TASK.laudo}`).getByTestId('task-inserted')).toHaveText('Inserida em 05/10/2026');
     await expect(pendente.getByTestId('deck-DECK-01').getByTestId('deck-inserted')).toHaveText('Inserido em 03/10/2026');
 
-    await page.getByRole('tab', { name: /Liquidação/ }).click();
+    await abrirEtapa(page, /Liquidação/);
     await expect(pendente.getByTestId('task-liquidacao.recibo').getByTestId('task-inserted')).toHaveText('Inserida em 01/08/2026');
 });

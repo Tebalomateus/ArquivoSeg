@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { abrirEtapa } from './fixtures/etapas.js';
 import { signIn } from './fixtures/session.js';
 
 /**
@@ -12,7 +13,7 @@ const hoje = () => new Date().toLocaleDateString('pt-BR');
 test('enviar arquivo por uma tarefa conta como pendente; a conclusão só anda com o envio do deck', async ({ page }) => {
     await signIn(page, 'manager');
     await page.goto(CLAIM);
-    await page.getByRole('tab', { name: /^Causa/ }).click();
+    await abrirEtapa(page, /^Causa/);
 
     const label = page.getByTestId('claim-progress-label');
     await expect(label).toHaveText('0% atendido · 0% enviado');
@@ -39,7 +40,7 @@ test('enviar arquivo por uma tarefa conta como pendente; a conclusão só anda c
 test('tarefa pedida depois mostra a data de inserção; as antigas, a do sinistro', async ({ page }) => {
     await signIn(page, 'manager');
     await page.goto(CLAIM);
-    await page.getByRole('tab', { name: /^Causa/ }).click();
+    await abrirEtapa(page, /^Causa/);
 
     const pendente = page.getByTestId('column-pendente');
     await pendente.getByLabel('Nova tarefa').fill('Fotos do local');

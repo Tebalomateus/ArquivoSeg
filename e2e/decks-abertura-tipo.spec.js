@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectEtapas } from './fixtures/etapas.js';
 import { signIn } from './fixtures/session.js';
 import { installDeckApi } from './fixtures/deck-api.js';
 
@@ -72,7 +73,7 @@ test('o tipo do servidor vira as pastas do sinistro criado', async ({ page }) =>
         { id: 'gerencial', name: 'Gerencial', category: 'gerencial', completion: 0, private: true, checklist: [] },
     ]);
 
-    await expect(page.getByTestId('step-selector').getByRole('tab')).toHaveText([/^Documentação/, /^Danos/]);
+    await expectEtapas(page, [/^Documentação/, /^Danos/]);
     await expect(page.getByRole('note', { name: 'Disclaimer' })).toHaveText('Obra embargada.');
 });
 

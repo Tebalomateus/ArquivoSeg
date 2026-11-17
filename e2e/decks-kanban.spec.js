@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { abrirEtapa } from './fixtures/etapas.js';
 import { confirmar, openBoard, seedDeck, TASK } from './fixtures/deck-api.js';
 
 /**
@@ -166,7 +167,7 @@ test('o board é por pasta: um deck da Causa não aparece no Prejuízo', async (
 
     await expect(page.getByTestId('column-pendente').getByTestId('deck-DECK-01')).toBeVisible();
 
-    await page.getByRole('tab', { name: /Prejuízo/ }).click();
+    await abrirEtapa(page, /Prejuízo/);
     await expect(page.getByTestId('column-pendente').getByTestId('deck-DECK-01')).toHaveCount(0);
     await expect(page.getByTestId(`task-${TASK.orcamento}`)).toBeVisible();
 });
